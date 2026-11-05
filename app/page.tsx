@@ -2,481 +2,671 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import clsx from "clsx";
 import {
   ArrowLeft,
-  Brain,
+  BadgeCheck,
+  BellRing,
+  Building2,
   CalendarDays,
-  Car,
-  Check,
+  Compass,
+  CreditCard,
+  Globe2,
+  Headphones,
   Hotel,
+  MapPin,
   Menu,
   Plane,
+  Route,
+  Search,
+  ShieldCheck,
   Sparkles,
+  Star,
+  TrendingUp,
+  Users,
   Wallet,
   X,
-  Zap,
 } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/*  داده‌ها                                                            */
-/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ data */
 
-const navLinks = [
-  { label: "خانه", href: "#home" },
-  { label: "امکانات", href: "#features" },
-  { label: "چطور کار می‌کند؟", href: "#how-it-works" },
-  { label: "درباره سفرینو", href: "#about" },
+const NAV_LINKS = [
+  { label: "خدمات", href: "#services" },
+  { label: "مقاصد", href: "#destinations" },
+  { label: "چرا سفرینو", href: "#why" },
+  { label: "نظرات مسافران", href: "#reviews" },
 ];
 
-const modules = [
-  {
-    emoji: "🤖",
-    icon: Brain,
-    title: "مغز هوشمند سفرینو",
-    subtitle: "AI Travel Brain",
-    desc: "فقط بگو کجا می‌خواهی بروی و چقدر وقت داری؛ هوش مصنوعی سفرینو بهترین مسیر، شهرها، جاذبه‌ها و تجربه‌های سفر را با توجه به سلیقه‌ات طراحی می‌کند.",
-    tags: ["پیشنهاد شخصی‌سازی‌شده", "چت هوشمند", "مسیر بهینه"],
-    className: "md:col-span-4",
-    glow: "from-violet-500/25 via-fuchsia-500/10 to-transparent",
-  },
-  {
-    emoji: "🚗",
-    icon: Car,
-    title: "محاسبه دقیق هزینه حمل‌ونقل",
-    subtitle: "بنزین، استهلاک، قطار، پرواز",
-    desc: "هزینه بنزین، استهلاک خودرو، عوارض جاده‌ای، بلیط قطار و پرواز را تا ریال آخر مقایسه می‌کنیم تا ارزان‌ترین و راحت‌ترین گزینه را انتخاب کنی.",
-    tags: ["بنزین", "استهلاک", "قطار", "پرواز"],
-    className: "md:col-span-2",
-    glow: "from-sky-500/25 via-cyan-500/10 to-transparent",
-  },
-  {
-    emoji: "🏨",
-    icon: Hotel,
-    title: "پیشنهاد هوشمند اقامتگاه",
-    subtitle: "اقامتگاه متناسب با بودجه",
-    desc: "از هتل، اقامتگاه بومگردی و سوئیت تا خانه‌های اجاره‌ای؛ بهترین گزینه‌ها بر اساس بودجه، موقعیت مکانی و نظرات واقعی مسافران.",
-    tags: ["بودجه‌محور", "بومگردی", "نزدیک به مسیر"],
-    className: "md:col-span-2",
-    glow: "from-emerald-500/25 via-teal-500/10 to-transparent",
-  },
-  {
-    emoji: "💰",
-    icon: Wallet,
-    title: "مدیریت و بهینه‌سازی زنده بودجه",
-    subtitle: "Live Budget Optimizer",
-    desc: "بودجه‌ات را زنده رصد می‌کنیم و همزمان که برنامه را تغییر می‌دهی، پیشنهاد می‌دهیم کجا صرفه‌جویی کنی تا سفر در چارچوب بودجه بماند.",
-    tags: ["هشدار هزینه", "صرفه‌جویی", "گزارش شفاف"],
-    className: "md:col-span-2",
-    glow: "from-amber-500/25 via-orange-500/10 to-transparent",
-  },
-  {
-    emoji: "🗓️",
-    icon: CalendarDays,
-    title: "برنامه‌ریزی روزانه و زمان‌بندی هوشمند",
-    subtitle: "Smart Daily Itinerary",
-    desc: "ساعت‌به‌ساعت، روز‌به‌روز؛ با در نظر گرفتن زمان رانندگی، ساعات بازدید و استراحت. برنامه‌ات را در یک نگاه ببین، ویرایش کن و با همراهانت به اشتراک بگذار.",
-    tags: ["ساعت‌به‌ساعت", "قابل ویرایش", "اشتراک‌گذاری"],
-    className: "md:col-span-2",
-    glow: "from-rose-500/25 via-pink-500/10 to-transparent",
-  },
+const STATS = [
+  { value: "۱۲۰ هزار+", label: "مسافر راضی" },
+  { value: "۴۸۰+", label: "مقصد داخلی و خارجی" },
+  { value: "۹۸٪", label: "رضایت از پشتیبانی" },
+  { value: "۲۴/۷", label: "پاسخگویی آنلاین" },
 ];
 
-const steps = [
+const SEARCH_TABS = [
+  { id: "flight", label: "پرواز", icon: Plane, placeholder: "مثلاً تهران ← استانبول" },
+  { id: "hotel", label: "هتل", icon: Hotel, placeholder: "مثلاً هتل‌های کیش" },
+  { id: "tour", label: "تور", icon: Compass, placeholder: "مثلاً تور کاپادوکیه" },
+];
+
+const BENTO_CARDS = [
   {
-    number: "۱",
-    title: "مقصد و شرایطت را بگو",
-    desc: "مبدأ، مقصد، تاریخ‌ها، تعداد نفرات و بودجه‌ات را در چند کلیک وارد کن. سفرینو هر جزئیاتی که برای برنامه‌ریزی لازم است را از تو می‌پرسد.",
+    id: "ai",
+    title: "دستیار هوشمند سفر",
+    desc: "با چند کلیک، برنامه سفر شخصی‌سازی‌شده بر اساس بودجه و سلیقه شما ساخته می‌شود.",
     icon: Sparkles,
+    span: "md:col-span-4 md:row-span-2",
+    tone: "from-amber-400/20 via-orange-500/10 to-transparent",
+    bullets: ["پیشنهاد مقصد بر اساس بودجه", "بهینه‌سازی هزینه روزانه", "برنامه روز‌به‌روز سفر"],
   },
   {
-    number: "۲",
-    title: "هوش مصنوعی برنامه می‌سازد",
-    desc: "در چند ثانیه یک برنامه کامل سفری با مسیر بهینه، اقامتگاه پیشنهادی، هزینه دقیق حمل‌ونقل و بودجه‌بندی زنده تحویل می‌گیری.",
-    icon: Brain,
+    id: "price",
+    title: "تضمین بهترین قیمت",
+    desc: "اگر ارزان‌تر پیدا کردید، مابه‌التفاوت برمی‌گردد.",
+    icon: Wallet,
+    span: "md:col-span-2",
+    tone: "from-emerald-400/20 via-teal-500/10 to-transparent",
   },
   {
-    number: "۳",
-    title: "سفر کن و لذت ببر",
-    desc: "برنامه را دانلود کن، با همراهانت به اشتراک بگذار و در طول سفر ویرایشش کن. سفرینو هزینه‌ها را زنده کنترل می‌کند تا خیالت راحت باشد.",
-    icon: Plane,
+    id: "support",
+    title: "پشتیبانی ۲۴ ساعته",
+    desc: "کارشناس فارسی‌زبان، همه‌جای دنیا کنار شماست.",
+    icon: Headphones,
+    span: "md:col-span-2",
+    tone: "from-sky-400/20 via-blue-500/10 to-transparent",
+  },
+  {
+    id: "safe",
+    title: "پرداخت امن و بیمه سفر",
+    desc: "درگاه بانکی معتبر، بیمه مسافرتی و استرداد وجه تا ۷۲ ساعت.",
+    icon: ShieldCheck,
+    span: "md:col-span-2",
+    tone: "from-violet-400/20 via-purple-500/10 to-transparent",
+  },
+  {
+    id: "trips",
+    title: "بیش از ۴۸۰ مقصد فعال",
+    desc: "از کیش و مشهد تا استانبول، دبی و آنتالیا.",
+    icon: Globe2,
+    span: "md:col-span-3",
+    tone: "from-rose-400/20 via-pink-500/10 to-transparent",
+  },
+  {
+    id: "alert",
+    title: "هشدار افت قیمت",
+    desc: "قیمت بلیت که کاهش پیدا کرد، فوراً خبرتان می‌کنیم.",
+    icon: BellRing,
+    span: "md:col-span-3",
+    tone: "from-cyan-400/20 via-sky-500/10 to-transparent",
   },
 ];
 
-const stats = [
-  { value: "۵۰+", label: "شهر و مقصد ایران" },
-  { value: "۹۸٪", label: "دقت در برآورد بودجه" },
-  { value: "۳۰ ثانیه", label: "تا رسیدن به برنامه سفر" },
-  { value: "۲۴/۷", label: "همراهی هوش مصنوعی" },
+const DESTINATIONS = [
+  { city: "استانبول", country: "ترکیه", price: "۹٬۸۰۰٬۰۰۰", tag: "پرفروش", emoji: "🕌", gradient: "from-orange-500/30 to-rose-600/20" },
+  { city: "کیش", country: "ایران", price: "۳٬۲۰۰٬۰۰۰", tag: "داخلی", emoji: "🏝️", gradient: "from-cyan-500/30 to-blue-600/20" },
+  { city: "دبی", country: "امارات", price: "۱۲٬۴۰۰٬۰۰۰", tag: "لوکس", emoji: "🏙️", gradient: "from-amber-400/30 to-orange-600/20" },
+  { city: "آنتالیا", country: "ترکیه", price: "۱۱٬۱۰۰٬۰۰۰", tag: "خانوادگی", emoji: "🌊", gradient: "from-teal-400/30 to-emerald-600/20" },
 ];
 
-/* ------------------------------------------------------------------ */
-/*  کامپوننت‌های کوچک                                                  */
-/* ------------------------------------------------------------------ */
+const WHY_US = [
+  { title: "رزرو در ۶۰ ثانیه", desc: "بدون کاغذبازی، بدون تماس تلفنی.", icon: CreditCard },
+  { title: "استرداد شفاف", desc: "قوانین لغو، پیش از پرداخت مشخص است.", icon: BadgeCheck },
+  { title: "قیمت لحظه‌ای", desc: "اتصال مستقیم به سیستم‌های ایرلاین.", icon: TrendingUp },
+  { title: "مسیرهای ترکیبی", desc: "پرواز + هتل + transfer با یک پرداخت.", icon: Route },
+];
 
-function Logo({ className }: { className?: string }) {
-  return (
-    <a href="#home" className={clsx("group flex items-center gap-2.5", className)}>
-      <span className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-sky-500 shadow-glow">
-        <Plane className="h-5 w-5 -rotate-45 text-white" strokeWidth={2.4} />
-      </span>
-      <span className="flex flex-col leading-none">
-        <span className="text-xl font-extrabold tracking-tight text-white">سفرینو</span>
-        <span className="mt-1 text-[10px] font-medium tracking-widest text-slate-400">
-          SAFARINO AI
-        </span>
-      </span>
-    </a>
-  );
-}
+const REVIEWS = [
+  { name: "سارا محمدی", role: "مسافر استانبول", text: "اولین بار بود همه‌چیز را آنلاین رزرو می‌کردم؛ از پرداخت تا بلیط، بی‌نقص بود." },
+  { name: "امیر رضایی", role: "مسافر کیش", text: "هشدار افت قیمت سفرینو واقعاً کار کرد، نیم میلیون تومان ارزان‌تر خریدم." },
+  { name: "نگار کریمی", role: "مسافر آنتالیا", text: "پشتیبانی ساعت ۲ بامداد جواب داد و مشکل هتل را همان لحظه حل کرد." },
+];
 
-/* ------------------------------------------------------------------ */
-/*  صفحه اصلی                                                          */
-/* ------------------------------------------------------------------ */
+const FAQ = [
+  { q: "آیا می‌توانم بلیط را لغو کنم؟", a: "بله، تا ۷۲ ساعت پیش از پرواز با کسر کارمزد بانکی، مبلغ به کامل‌ترین شکل استرداد می‌شود." },
+  { q: "پرداخت چگونه انجام می‌شود؟", a: "از طریق درگاه امن بانکی با تمام کارت‌های شتاب و امکان پرداخت اقساطی برای تورها." },
+  { q: "بیمه سفر شامل چه مواردی است؟", a: "بیمه درمانی، تأخیر پرواز و بار مفقودشده برای تمام تورهای خارجی سفرینو رایگان است." },
+];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 26 },
+  show: { opacity: 1, y: 0 },
+};
+
+/* --------------------------------------------------------------- page */
 
 export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState("flight");
+  const [openFaq, setOpenFaq] = useState(0);
+
+  const activeTab = SEARCH_TABS.find((item) => item.id === tab) ?? SEARCH_TABS[0];
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {/* پس‌زمینه */}
+    <main className="relative overflow-hidden">
+      {/* ---------------------------------------------------- background */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[#070713]" />
-        <div className="absolute inset-0 bg-grid mask-radial opacity-70" />
-        <div className="absolute -top-40 right-1/4 h-[34rem] w-[34rem] animate-pulse-glow rounded-full bg-violet-600/25 blur-[130px]" />
-        <div className="absolute -top-24 left-1/4 h-[28rem] w-[28rem] animate-pulse-glow rounded-full bg-sky-500/20 blur-[130px]" />
-        <div className="absolute bottom-0 left-1/3 h-[26rem] w-[26rem] rounded-full bg-fuchsia-600/10 blur-[140px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#132038_0%,#05070f_55%)]" />
+        <div className="absolute inset-0 grid-lines opacity-70" />
+        <div className="aurora">
+          <span className="h-[26rem] w-[26rem] -top-24 right-0 bg-amber-500/40 animate-float" />
+          <span className="h-[22rem] w-[22rem] top-40 left-0 bg-turquoise-500/30 animate-float [animation-delay:1.5s]" />
+          <span className="h-[18rem] w-[18rem] top-[38rem] right-1/3 bg-rose-500/25 animate-float [animation-delay:3s]" />
+        </div>
       </div>
 
-      {/* ---------------- هدر ---------------- */}
-      <header className="sticky top-0 z-50 border-b border-white/5 bg-[#070713]/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
-          <Logo />
+      {/* -------------------------------------------------------- navbar */}
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-night-900/70 backdrop-blur-xl">
+        <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
+          <a href="#" className="flex items-center gap-2.5">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950 shadow-glow">
+              <Plane className="h-5 w-5 -rotate-45" strokeWidth={2.6} />
+            </span>
+            <span className="flex flex-col leading-none">
+              <b className="text-lg font-black text-white">سفرینو</b>
+              <small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small>
+            </span>
+          </a>
 
-          <nav className="hidden items-center gap-1 lg:flex">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="rounded-xl px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-2.5">
-            <a
-              href="#auth"
-              className="hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:text-white sm:block"
-            >
-              ورود
-            </a>
-            <a href="#auth" className="btn-primary !px-5 !py-2.5 text-sm">
-              <Sparkles className="h-4 w-4" />
-              ثبت‌نام رایگان
-            </a>
-            <button
-              type="button"
-              aria-label="منو"
-              onClick={() => setMenuOpen((open) => !open)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 lg:hidden"
-            >
-              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
-          </div>
-        </div>
-
-        {menuOpen && (
-          <div className="border-t border-white/5 bg-[#070713]/95 px-5 pb-5 pt-3 lg:hidden">
-            <nav className="flex flex-col gap-1">
-              {navLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
-                >
+          <ul className="hidden items-center gap-8 lg:flex">
+            {NAV_LINKS.map((link) => (
+              <li key={link.href}>
+                <a className="text-sm font-medium text-slate-300 transition hover:text-amber-300" href={link.href}>
                   {link.label}
                 </a>
-              ))}
-            </nav>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden items-center gap-3 lg:flex">
+            <button className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+              ورود
+            </button>
+            <button className="btn-primary !px-5 !py-2.5 text-xs">شروع برنامه‌ریزی</button>
           </div>
+
+          <button
+            aria-label="منو"
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 lg:hidden"
+          >
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </nav>
+
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="border-t border-white/5 bg-night-800/90 px-5 py-4 lg:hidden"
+          >
+            <ul className="flex flex-col gap-3">
+              {NAV_LINKS.map((link) => (
+                <li key={link.href}>
+                  <a className="block text-sm text-slate-200" href={link.href} onClick={() => setMenuOpen(false)}>
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+              <li>
+                <button className="btn-primary w-full">شروع برنامه‌ریزی سفر</button>
+              </li>
+            </ul>
+          </motion.div>
         )}
       </header>
 
-      <main id="home">
-        {/* ---------------- هیرو ---------------- */}
-        <section className="relative mx-auto w-full max-w-7xl px-5 pb-16 pt-16 sm:px-8 sm:pt-24">
-          <motion.div
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className="mx-auto flex max-w-4xl flex-col items-center text-center"
+      {/* ---------------------------------------------------------- hero */}
+      <section className="relative mx-auto max-w-7xl px-5 pb-10 pt-16 sm:pt-24">
+        <div className="mx-auto max-w-3xl text-center">
+          <motion.span
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.5 }}
+            className="chip mx-auto border-amber-400/25 bg-amber-400/10 !text-amber-200"
           >
-            <span className="glass-soft inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-300">
-              <Zap className="h-3.5 w-3.5 text-amber-300" />
-              نسل جدید برنامه‌ریزی سفر در ایران
-              <span className="h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400" />
-            </span>
+            <Sparkles className="h-3.5 w-3.5" />
+            نسخهٔ آزمایشی سفرینو منتشر شد
+          </motion.span>
 
-            <h1 className="mt-7 text-balance text-4xl font-black leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.3]">
-              سفرت رو با{" "}
-              <span className="gradient-text">هوش مصنوعی</span>،
-              <br className="hidden sm:block" />{" "}
-              بی‌نقص برنامه‌ریزی کن!
-            </h1>
-
-            <p className="mt-6 max-w-2xl text-balance text-base leading-8 text-slate-400 sm:text-lg">
-              سفرینو همه‌چیز را برایت حساب می‌کند؛ از هزینه بنزین و استهلاک خودرو تا
-              بهترین اقامتگاه و برنامه ساعت‌به‌ساعت روزانه. تو فقط انتخاب کن و
-              سفر کن.
-            </p>
-
-            <div className="mt-9 flex w-full flex-col items-center justify-center gap-3 sm:w-auto sm:flex-row">
-              <a href="#auth" className="btn-primary w-full sm:w-auto">
-                شروع رایگان سفر
-                <ArrowLeft className="h-4 w-4" />
-              </a>
-              <a href="#how-it-works" className="btn-ghost w-full sm:w-auto">
-                چطور کار می‌کند؟
-              </a>
-            </div>
-
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                بدون نیاز به کارت بانکی
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                کاملاً فارسی و راست‌به‌چپ
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                آماده در ۳۰ ثانیه
-              </span>
-            </div>
-          </motion.div>
-
-          {/* آمار */}
-          <motion.div
-            initial={{ opacity: 0, y: 26 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.25, ease: "easeOut" }}
-            className="glass mx-auto mt-16 grid max-w-5xl grid-cols-2 gap-6 px-6 py-8 sm:grid-cols-4"
+          <motion.h1
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.6, delay: 0.08 }}
+            className="mt-6 text-4xl font-black leading-[1.25] text-white sm:text-6xl"
           >
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="gradient-text text-2xl font-extrabold sm:text-3xl">
-                  {stat.value}
-                </div>
-                <div className="mt-2 text-xs text-slate-400 sm:text-sm">{stat.label}</div>
-              </div>
-            ))}
-          </motion.div>
-        </section>
+            سفر بعدی‌ات را به <span className="gradient-text">سفرینو</span> بسپار
+          </motion.h1>
 
-        {/* ---------------- بنتوی ۵ کارتی ---------------- */}
-        <section id="features" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="mb-12 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end"
+          <motion.p
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.6, delay: 0.16 }}
+            className="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg"
           >
-            <div>
-              <span className="chip">
-                <Brain className="h-3.5 w-3.5 text-violet-300" />
-                ماژول‌های سفرینو
-              </span>
-              <h2 className="section-title mt-4 text-white">
-                هر چیزی که یک سفر <span className="gradient-text-warm">بی‌دردسر</span> لازم دارد
-              </h2>
-            </div>
-            <p className="max-w-md text-sm leading-7 text-slate-400">
-              پنج ماژول هوشمند که مثل یک تیم پشتیبان سفر، در تمام مراحل کنارت هستند —
-              از لحظه تصمیم‌گیری تا برگشت به خانه.
-            </p>
-          </motion.div>
+            پرواز، هتل و تور را در یک‌جا مقایسه کن، ارزان‌ترین قیمت را قفل کن و با خیال راحت سفر کن.
+            سفرینو با دستیار هوشمند، برنامهٔ سفر را در چند ثانیه می‌چیند.
+          </motion.p>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-6">
-            {modules.map((module, index) => {
-              const Icon = module.icon;
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.6, delay: 0.24 }}
+            className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          >
+            <a href="#search" className="btn-primary w-full sm:w-auto">
+              همین حالا جست‌وجو کن
+              <ArrowLeft className="h-4 w-4" />
+            </a>
+            <a href="#services" className="btn-ghost w-full sm:w-auto">
+              <Compass className="h-4 w-4" />
+              مشاهدهٔ خدمات
+            </a>
+          </motion.div>
+        </div>
+
+        {/* ------------------------------------------------ search box */}
+        <motion.div
+          id="search"
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.3 }}
+          className="glass mx-auto mt-14 max-w-5xl p-4 shadow-card sm:p-6"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {SEARCH_TABS.map((item) => {
+              const Icon = item.icon;
+              const isActive = item.id === tab;
               return (
-                <motion.article
-                  key={module.title}
-                  initial={{ opacity: 0, y: 26 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.55, delay: index * 0.07, ease: "easeOut" }}
-                  className={clsx(
-                    "glass glass-hover group relative overflow-hidden p-7",
-                    module.className
-                  )}
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={
+                    "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition " +
+                    (isActive
+                      ? "bg-gradient-to-l from-amber-400 to-orange-500 text-slate-950 shadow-glow"
+                      : "border border-white/10 bg-white/5 text-slate-300 hover:text-white")
+                  }
                 >
-                  <div
-                    className={clsx(
-                      "pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-gradient-to-br opacity-70 blur-3xl transition-opacity duration-500 group-hover:opacity-100",
-                      module.glow
-                    )}
-                  />
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
 
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-2xl">
-                        {module.emoji}
-                      </span>
-                      <div>
-                        <h3 className="text-base font-bold leading-6 text-white sm:text-lg">
-                          {module.title}
-                        </h3>
-                        <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
-                          {module.subtitle}
-                        </p>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
+            <label className="glass-soft flex items-center gap-3 px-4 py-3">
+              <MapPin className="h-4 w-4 shrink-0 text-amber-300" />
+              <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" placeholder={activeTab.placeholder} />
+            </label>
+
+            <label className="glass-soft flex items-center gap-3 px-4 py-3">
+              <CalendarDays className="h-4 w-4 shrink-0 text-turquoise-300" />
+              <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" placeholder="تاریخ رفت" />
+            </label>
+
+            <label className="glass-soft flex items-center gap-3 px-4 py-3">
+              <Users className="h-4 w-4 shrink-0 text-rose-300" />
+              <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" placeholder="۲ مسافر" />
+            </label>
+
+            <button className="btn-primary w-full lg:w-auto">
+              <Search className="h-4 w-4" />
+              جست‌وجو
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500">جست‌وجوهای پرطرفدار:</span>
+            {["تهران به استانبول", "هتل کیش", "تور کاپادوکیه", "بلیط مشهد"].map((tag) => (
+              <button key={tag} className="chip hover:border-amber-400/40 hover:text-amber-200">
+                {tag}
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* --------------------------------------------------- stats */}
+        <div className="mx-auto mt-12 grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-4">
+          {STATS.map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.45, delay: index * 0.08 }}
+              className="glass glass-hover p-5 text-center"
+            >
+              <b className="block text-2xl font-black text-white">{stat.value}</b>
+              <span className="mt-1 block text-xs text-slate-400">{stat.label}</span>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------- bento services */}
+      <section id="services" className="relative mx-auto max-w-7xl px-5 py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="chip">خدمات سفرینو</span>
+          <h2 className="section-title mt-4">همهٔ سفر، در یک پنل شیشه‌ای</h2>
+          <p className="mt-4 leading-8 text-slate-400">
+            از انتخاب مقصد تا هتل و بیمه؛ سفرینو تمام زنجیرهٔ سفر را یک‌جا و شفاف مدیریت می‌کند.
+          </p>
+        </div>
+
+        <div className="mt-12 grid auto-rows-[minmax(150px,auto)] grid-cols-1 gap-4 md:grid-cols-6">
+          {BENTO_CARDS.map((card, index) => {
+            const Icon = card.icon;
+            return (
+              <motion.article
+                key={card.id}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: index * 0.07 }}
+                className={"glass glass-hover group overflow-hidden p-6 " + card.span}
+              >
+                <div className={"pointer-events-none absolute inset-0 bg-gradient-to-bl " + card.tone + " opacity-0 transition duration-500 group-hover:opacity-100"} />
+                <div className="relative flex h-full flex-col">
+                  <span className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/10 text-amber-300 transition group-hover:scale-110">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-4 text-lg font-extrabold text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">{card.desc}</p>
+
+                  {card.bullets && (
+                    <ul className="mt-auto space-y-2 pt-5">
+                      {card.bullets.map((bullet) => (
+                        <li key={bullet} className="flex items-center gap-2 text-xs text-slate-300">
+                          <BadgeCheck className="h-4 w-4 text-emerald-400" />
+                          {bullet}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </motion.article>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* --------------------------------------------------- destinations */}
+      <section id="destinations" className="relative mx-auto max-w-7xl px-5 py-16">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <span className="chip">مقاصد محبوب</span>
+            <h2 className="section-title mt-4">پیشنهاد ویژهٔ این هفته</h2>
+          </div>
+          <a href="#" className="btn-ghost !px-5 !py-2.5 text-xs">
+            همهٔ مقاصد
+            <ArrowLeft className="h-4 w-4" />
+          </a>
+        </div>
+
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {DESTINATIONS.map((item, index) => (
+            <motion.article
+              key={item.city}
+              initial={{ opacity: 0, scale: 0.95 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.45, delay: index * 0.08 }}
+              className="glass glass-hover overflow-hidden p-0"
+            >
+              <div className={"relative grid h-40 place-items-center bg-gradient-to-br " + item.gradient}>
+                <span className="text-5xl drop-shadow-lg">{item.emoji}</span>
+                <span className="absolute right-3 top-3 rounded-full bg-slate-950/60 px-3 py-1 text-[11px] font-bold text-amber-200 backdrop-blur">
+                  {item.tag}
+                </span>
+              </div>
+              <div className="p-5">
+                <h3 className="text-base font-extrabold text-white">{item.city}</h3>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {item.country}
+                </p>
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <span className="block text-[11px] text-slate-500">شروع از</span>
+                    <b className="text-sm font-black text-amber-300">{item.price} تومان</b>
+                  </div>
+                  <button className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:border-amber-400/40 hover:text-amber-300">
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </motion.article>
+          ))}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ why */}
+      <section id="why" className="relative mx-auto max-w-7xl px-5 py-20">
+        <div className="glass overflow-hidden p-8 sm:p-12">
+          <div className="grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="chip">چرا سفرینو؟</span>
+              <h2 className="section-title mt-4">
+                تجربه‌ای که <span className="gradient-text">اعتماد</span> می‌سازد
+              </h2>
+              <p className="mt-4 leading-8 text-slate-400">
+                سفرینو با حذف واسطه‌ها و شفاف‌سازی کامل قیمت‌ها، سفر را از یک دغدغه به یک لذت تبدیل می‌کند.
+              </p>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                {WHY_US.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.title} className="glass-soft p-4">
+                      <Icon className="h-5 w-5 text-amber-300" />
+                      <b className="mt-3 block text-sm font-bold text-white">{item.title}</b>
+                      <p className="mt-1 text-xs leading-6 text-slate-400">{item.desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="glass p-6">
+                <div className="flex items-center justify-between">
+                  <b className="text-sm font-bold text-white">بودجهٔ سفر شما</b>
+                  <span className="chip">بهینه‌شده</span>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  {[
+                    { label: "پرواز", value: "۴۲٪", width: "w-[42%]", color: "from-amber-400 to-orange-500" },
+                    { label: "هتل", value: "۳۵٪", width: "w-[35%]", color: "from-turquoise-400 to-sky-500" },
+                    { label: "تفرج و غذا", value: "۲۳٪", width: "w-[23%]", color: "from-rose-400 to-pink-500" },
+                  ].map((row) => (
+                    <div key={row.label}>
+                      <div className="mb-2 flex items-center justify-between text-xs text-slate-300">
+                        <span>{row.label}</span>
+                        <b className="text-white">{row.value}</b>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                        <div className={"h-full rounded-full bg-gradient-to-l " + row.color + " " + row.width} />
                       </div>
                     </div>
-                    <Icon className="hidden h-5 w-5 shrink-0 text-slate-500 transition group-hover:text-violet-300 sm:block" />
+                  ))}
+                </div>
+
+                <div className="mt-7 flex items-center justify-between rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                  <div className="flex items-center gap-2 text-emerald-300">
+                    <Wallet className="h-4 w-4" />
+                    <span className="text-xs font-bold">صرفه‌جویی برآوردی</span>
                   </div>
-
-                  <p className="relative mt-5 text-sm leading-7 text-slate-400">
-                    {module.desc}
-                  </p>
-
-                  <div className="relative mt-5 flex flex-wrap gap-2">
-                    {module.tags.map((tag) => (
-                      <span key={tag} className="chip">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </motion.article>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ---------------- چطور کار می‌کند؟ ---------------- */}
-        <section id="how-it-works" className="relative mx-auto w-full max-w-7xl px-5 py-20 sm:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="mx-auto mb-14 max-w-2xl text-center"
-          >
-            <span className="chip">
-              <Plane className="h-3.5 w-3.5 text-sky-300" />
-              فقط ۳ گام
-            </span>
-            <h2 className="section-title mt-4 text-white">چطور کار می‌کند؟</h2>
-            <p className="mt-4 text-sm leading-7 text-slate-400 sm:text-base">
-              سه ساده‌ترین گام تا سفری که دقیقاً همان‌طور که می‌خواهی برنامه‌ریزی شده است.
-            </p>
-          </motion.div>
-
-          <div className="relative grid grid-cols-1 gap-5 md:grid-cols-3">
-            <div className="pointer-events-none absolute inset-x-10 top-16 hidden h-px bg-gradient-to-l from-transparent via-white/15 to-transparent md:block" />
-
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <motion.div
-                  key={step.number}
-                  initial={{ opacity: 0, y: 26 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.3 }}
-                  transition={{ duration: 0.55, delay: index * 0.12, ease: "easeOut" }}
-                  className="glass glass-hover relative p-7"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-sky-500 text-lg font-extrabold text-white shadow-glow">
-                      {step.number}
-                    </span>
-                    <Icon className="h-5 w-5 text-slate-500" />
-                  </div>
-                  <h3 className="mt-6 text-lg font-bold text-white">{step.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-slate-400">{step.desc}</p>
-                </motion.div>
-              );
-            })}
-          </div>
-
-          {/* CTA پایانی */}
-          <motion.div
-            id="auth"
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="glass relative mt-16 overflow-hidden px-6 py-12 text-center sm:px-12"
-          >
-            <div className="pointer-events-none absolute -top-24 right-1/2 h-64 w-64 translate-x-1/2 rounded-full bg-violet-600/30 blur-[110px]" />
-            <h2 className="relative text-balance text-2xl font-extrabold leading-relaxed text-white sm:text-3xl">
-              آماده‌ای سفر بعدی‌ات را <span className="gradient-text">هوشمند</span> شروع کنی؟
-            </h2>
-            <p className="relative mx-auto mt-4 max-w-xl text-sm leading-7 text-slate-400">
-              همین حالا رایگان ثبت‌نام کن و اولین برنامه سفرت را با سفرینو بساز.
-            </p>
-            <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a href="#auth" className="btn-primary w-full sm:w-auto">
-                ساخت حساب رایگان
-                <ArrowLeft className="h-4 w-4" />
-              </a>
-              <a href="#features" className="btn-ghost w-full sm:w-auto">
-                دیدن امکانات
-              </a>
-            </div>
-          </motion.div>
-        </section>
-      </main>
-
-      {/* ---------------- فوتر ---------------- */}
-      <footer id="about" className="mt-10 border-t border-white/5 bg-[#05050f]/80">
-        <div className="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
-          <div className="flex flex-col justify-between gap-10 md:flex-row">
-            <div className="max-w-sm">
-              <Logo />
-              <p className="mt-5 text-sm leading-7 text-slate-500">
-                سفرینو، همراه هوشمند سفرهای توست؛ برنامه‌ریزی دقیق، بودجه شفاف و
-                تجربه‌ای که به یاد می‌مانی.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
-              <div>
-                <h4 className="text-sm font-bold text-white">محصول</h4>
-                <ul className="mt-4 space-y-2.5 text-sm text-slate-500">
-                  <li><a href="#features" className="transition hover:text-slate-200">امکانات</a></li>
-                  <li><a href="#how-it-works" className="transition hover:text-slate-200">چطور کار می‌کند؟</a></li>
-                  <li><a href="#auth" className="transition hover:text-slate-200">ثبت‌نام</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">پشتیبانی</h4>
-                <ul className="mt-4 space-y-2.5 text-sm text-slate-500">
-                  <li><a href="#about" className="transition hover:text-slate-200">سوالات متداول</a></li>
-                  <li><a href="#about" className="transition hover:text-slate-200">تماس با ما</a></li>
-                  <li><a href="#about" className="transition hover:text-slate-200">حریم خصوصی</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">ارتباط</h4>
-                <ul className="mt-4 space-y-2.5 text-sm text-slate-500">
-                  <li>hello@safarino.ir</li>
-                  <li>تهران، ایران</li>
-                </ul>
+                  <b className="text-lg font-black text-emerald-300">۲٬۴۰۰٬۰۰۰ تومان</b>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-white/5 pt-7 sm:flex-row">
-            <p className="text-xs text-slate-500">© ۱۴۰۳ سفرینو — تمامی حقوق محفوظ است.</p>
-            <p className="text-xs text-slate-600">ساخته‌شده با Next.js 14 و Tailwind CSS</p>
           </div>
         </div>
+      </section>
+
+      {/* -------------------------------------------------------- reviews */}
+      <section id="reviews" className="relative mx-auto max-w-7xl px-5 py-16">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="chip">نظرات مسافران</span>
+          <h2 className="section-title mt-4">سفرهایی که خاطره شدند</h2>
+        </div>
+
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
+          {REVIEWS.map((review, index) => (
+            <motion.blockquote
+              key={review.name}
+              initial={{ opacity: 0, y: 22 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.45, delay: index * 0.1 }}
+              className="glass glass-hover p-6"
+            >
+              <div className="flex gap-1 text-amber-300">
+                {Array.from({ length: 5 }).map((_, star) => (
+                  <Star key={star} className="h-4 w-4 fill-amber-300" />
+                ))}
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-300">«{review.text}»</p>
+              <footer className="mt-5 flex items-center gap-3 border-t border-white/5 pt-4">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-rose-500 text-sm font-black text-slate-950">
+                  {review.name.charAt(0)}
+                </span>
+                <div>
+                  <b className="block text-sm text-white">{review.name}</b>
+                  <span className="text-[11px] text-slate-500">{review.role}</span>
+                </div>
+              </footer>
+            </motion.blockquote>
+          ))}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ faq */}
+      <section className="relative mx-auto max-w-4xl px-5 py-16">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="chip">سؤالات متداول</span>
+          <h2 className="section-title mt-4">پاسخ سریع به ابهام‌ها</h2>
+        </div>
+
+        <div className="mt-10 space-y-3">
+          {FAQ.map((item, index) => {
+            const isOpen = openFaq === index;
+            return (
+              <div key={item.q} className="glass overflow-hidden">
+                <button
+                  onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-right"
+                >
+                  <b className="text-sm font-bold text-white sm:text-base">{item.q}</b>
+                  <span className={"grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-amber-300 transition " + (isOpen ? "rotate-45" : "")}>
+                    +
+                  </span>
+                </button>
+                {isOpen && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="px-6 pb-5 text-sm leading-7 text-slate-400"
+                  >
+                    {item.a}
+                  </motion.p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------ cta + foot */}
+      <section className="relative mx-auto max-w-7xl px-5 pb-24 pt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="glass relative overflow-hidden p-10 text-center sm:p-16"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(245,158,11,0.25),transparent_60%)]" />
+          <div className="relative">
+            <span className="grid mx-auto h-14 w-14 place-items-center rounded-3xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950 shadow-glow">
+              <Building2 className="h-6 w-6" />
+            </span>
+            <h2 className="section-title mt-6">چمدان‌ها را ببندید، بقیه‌اش با سفرینو</h2>
+            <p className="mx-auto mt-4 max-w-xl leading-8 text-slate-300">
+              همین امروز حساب رایگان بسازید و اولین سفر خود را با کد تخفیف
+              <b className="mx-1 text-amber-300">SAFARINO20</b>
+              با ۲۰٪ تخفیف رزرو کنید.
+            </p>
+
+            <form className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row">
+              <input className="field" placeholder="ایمیل یا شمارهٔ موبایل" />
+              <button type="button" className="btn-primary shrink-0">
+                شروع سفر
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            </form>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-500">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> پرداخت امن بانکی
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <BadgeCheck className="h-3.5 w-3.5 text-sky-400" /> بدون هزینهٔ پنهان
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Headphones className="h-3.5 w-3.5 text-amber-300" /> پشتیبانی فارسی ۲۴/۷
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      <footer className="border-t border-white/5 bg-night-950/60">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950">
+                <Plane className="h-4 w-4 -rotate-45" strokeWidth={2.6} />
+              </span>
+              <b className="text-base font-black text-white">سفرینو</b>
+            </div>
+            <p className="mt-4 text-xs leading-6 text-slate-500">
+              سفرینو، همسفر هوشمند سفرهای ایرانی؛ ساخته‌شده با Next.js 14 و Tailwind CSS.
+            </p>
+          </div>
+
+          {[
+            { title: "خدمات", items: ["رزرو پرواز", "رزرو هتل", "تورهای خارجی", "بیمهٔ سفر"] },
+            { title: "شرکت", items: ["دربارهٔ ما", "تماس با ما", "فرصت‌های شغلی", "وبلاگ"] },
+            { title: "قوانین", items: ["شرایط استرداد", "حریم خصوصی", "قوانین پرواز", "پرسش‌های متداول"] },
+          ].map((column) => (
+            <div key={column.title}>
+              <b className="text-sm font-bold text-white">{column.title}</b>
+              <ul className="mt-4 space-y-2.5">
+                {column.items.map((item) => (
+                  <li key={item}>
+                    <a className="text-xs text-slate-500 transition hover:text-amber-300" href="#">
+                      {item}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-white/5 px-5 py-5">
+          <p className="mx-auto max-w-7xl text-center text-[11px] text-slate-600">
+            © ۱۴۰۳ تمام حقوق برای سفرینو محفوظ است — ساخته‌شده با ❤️ در ایران
+          </p>
+        </div>
       </footer>
-    </div>
+    </main>
   );
 }
