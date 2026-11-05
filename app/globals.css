@@ -2,187 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    color-scheme: dark;
-  }
+:root {
+  color-scheme: dark;
+  --ring-glow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
 
-  html {
-    scroll-behavior: smooth;
-    -webkit-tap-highlight-color: transparent;
-  }
+* {
+  -webkit-tap-highlight-color: transparent;
+}
 
-  body {
-    font-family: Vazirmatn, ui-sans-serif, system-ui, "Segoe UI", Tahoma, sans-serif;
-    background-color: #070713;
-    color: #e2e8f0;
-    overflow-x: hidden;
-  }
+html {
+  scroll-behavior: smooth;
+}
 
-  ::selection {
-    background-color: rgba(168, 85, 247, 0.35);
-    color: #ffffff;
-  }
+body {
+  background-color: #05070f;
+  color: #e7ecff;
+  font-family: "Vazirmatn", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  font-feature-settings: "ss02";
+  overflow-x: hidden;
+}
 
-  ::-webkit-scrollbar {
-    width: 10px;
-  }
+::selection {
+  background: rgba(245, 158, 11, 0.35);
+  color: #fff;
+}
 
-  ::-webkit-scrollbar-track {
-    background: #0b0b1c;
-  }
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
 
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #7a1dff, #0ea5e9);
-    border-radius: 999px;
-    border: 2px solid #0b0b1c;
-  }
+::-webkit-scrollbar-track {
+  background: #05070f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #1b2743, #0e7f86);
+  border-radius: 999px;
+  border: 2px solid #05070f;
 }
 
 @layer components {
-  /* شیشه‌ای‌سازی (Glassmorphism) */
   .glass {
-    border-radius: 1.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      rgba(255, 255, 255, 0.025) 55%,
-      rgba(255, 255, 255, 0.01) 100%
-    );
-    backdrop-filter: blur(22px) saturate(140%);
-    -webkit-backdrop-filter: blur(22px) saturate(140%);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
-      0 30px 60px -30px rgba(0, 0, 0, 0.9);
+    @apply relative rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-xl;
   }
 
   .glass-soft {
-    border-radius: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.035);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md;
   }
 
   .glass-hover {
-    transition:
-      transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 0.45s ease,
-      box-shadow 0.45s ease;
+    @apply transition duration-300 hover:-translate-y-1 hover:border-amber-400/30 hover:bg-white/[0.07] hover:shadow-glow;
   }
 
-  .glass-hover:hover {
-    transform: translateY(-6px);
-    border-color: rgba(168, 85, 247, 0.45);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
-      0 40px 80px -40px rgba(122, 29, 255, 0.65);
-  }
-
-  /* متن گرادیانی */
-  .gradient-text {
-    background-image: linear-gradient(100deg, #c084fc 0%, #e879f9 35%, #60a5fa 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .gradient-text-warm {
-    background-image: linear-gradient(100deg, #fbbf24 0%, #f472b6 55%, #a855f7 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* دکمه اصلی */
   .btn-primary {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    border-radius: 1rem;
-    padding: 0.95rem 1.9rem;
-    font-weight: 700;
-    color: #ffffff;
-    background-image: linear-gradient(120deg, #7a1dff 0%, #a855f7 45%, #0ea5e9 100%);
-    box-shadow: 0 18px 40px -18px rgba(122, 29, 255, 0.95);
-    transition: transform 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-amber-400 via-orange-500 to-rose-500 px-7 py-3.5 text-sm font-extrabold text-slate-950 shadow-glow transition hover:brightness-110 active:scale-95;
   }
 
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    filter: brightness(1.08);
-    box-shadow: 0 26px 55px -18px rgba(168, 85, 247, 0.95);
-  }
-
-  .btn-primary:active {
-    transform: translateY(0);
-  }
-
-  /* دکمه شیشه‌ای */
   .btn-ghost {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    border-radius: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 0.95rem 1.75rem;
-    font-weight: 600;
-    color: #e2e8f0;
-    backdrop-filter: blur(12px);
-    transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-slate-100 backdrop-blur transition hover:border-amber-400/40 hover:bg-white/10 active:scale-95;
   }
 
-  .btn-ghost:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.28);
-    transform: translateY(-2px);
+  .field {
+    @apply w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-amber-400/50 focus:bg-white/[0.08] focus:ring-2 focus:ring-amber-400/20;
   }
 
-  /* بج/چیپ */
   .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 0.3rem 0.7rem;
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: #cbd5e1;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-slate-300;
   }
 
   .section-title {
-    font-size: clamp(1.65rem, 3.2vw, 2.6rem);
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    line-height: 1.45;
+    @apply text-3xl font-black leading-tight text-white sm:text-4xl;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-l from-amber-300 via-orange-400 to-rose-400 bg-clip-text text-transparent;
   }
 }
 
-@layer utilities {
-  .bg-grid {
-    background-image:
-      linear-gradient(to left, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-    background-size: 46px 46px;
-  }
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 
-  .mask-radial {
-    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 35%, transparent 100%);
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 35%, transparent 100%);
-  }
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.45;
+}
 
-  .text-balance {
-    text-wrap: balance;
-  }
-
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
+.grid-lines {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 75%);
 }
