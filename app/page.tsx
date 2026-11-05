@@ -32,6 +32,7 @@ import {
 const NAV_LINKS = [
   { label: "خدمات", href: "#services" },
   { label: "مقاصد", href: "#destinations" },
+  { label: "کوییز سفر", href: "/quiz" },
   { label: "چرا سفرینو", href: "#why" },
   { label: "نظرات مسافران", href: "#reviews" },
 ];
@@ -181,7 +182,9 @@ export default function HomePage() {
             <button className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
               ورود
             </button>
-            <button className="btn-primary !px-5 !py-2.5 text-xs">شروع برنامه‌ریزی</button>
+            <a href="/quiz" className="btn-primary !px-5 !py-2.5 text-xs">
+              شروع برنامه‌ریزی
+            </a>
           </div>
 
           <button
@@ -208,7 +211,9 @@ export default function HomePage() {
                 </li>
               ))}
               <li>
-                <button className="btn-primary w-full">شروع برنامه‌ریزی سفر</button>
+                <a href="/quiz" className="btn-primary w-full" onClick={() => setMenuOpen(false)}>
+                  شروع برنامه‌ریزی سفر
+                </a>
               </li>
             </ul>
           </motion.div>
