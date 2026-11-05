@@ -1,16 +1,31 @@
-# سفرینو (Safarino) ✈️
+# ✈️ سفرینو | Safarino
 
-اپلیکیشن فارسی برنامه‌ریزی هوشمند سفر با هوش مصنوعی — ساخته‌شده با **Next.js 14 (App Router)** و **Tailwind CSS**.
+> پلتفرم مدرن رزرو سفر ایرانی — ساخته‌شده با **Next.js 14 (App Router)** و **Tailwind CSS**
 
-## امکانات لندینگ
+![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat-square&logo=next.js)
+![Tailwind](https://img.shields.io/badge/TailwindCSS-3.4-38bdf8?style=flat-square&logo=tailwindcss)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178c6?style=flat-square&logo=typescript)
+![RTL](https://img.shields.io/badge/Layout-RTL%20%2F%20فارسی-22c55e?style=flat-square)
 
-- 🤖 مغز هوشمند سفرینو (AI Travel Brain)
-- 🚗 محاسبه دقیق هزینه حمل‌ونقل (بنزین، استهلاک، قطار، پرواز)
-- 🏨 پیشنهاد هوشمند اقامتگاه
-- 💰 مدیریت و بهینه‌سازی زنده بودجه
-- 🗓️ برنامه‌ریزی روزانه و زمان‌بندی هوشمند
+---
 
-## اجرا به‌صورت محلی
+## 🧭 دربارهٔ پروژه
+
+**سفرینو** یک لندینگ‌پیج کامل و راست‌چین برای یک پلتفرم رزرو پرواز، هتل و تور است.
+طراحی بر پایهٔ **تم تیره**، **افکت Glassmorphism**، **گرید بنتو (Bento Grid)** و انیمیشن‌های
+نرم با **Framer Motion** پیاده‌سازی شده است.
+
+## ⚙️ تکنولوژی‌ها
+
+| ابزار | کاربرد |
+| --- | --- |
+| Next.js 14 (App Router) | ساختار صفحه و رندر سمت سرور |
+| Tailwind CSS | استایل‌دهی یوتیلیتی با تم سفارشی |
+| Framer Motion | انیمیشن‌های ورود، پارالاکس و تعامل |
+| lucide-react | آیکون‌های SVG سبک و مدرن |
+| Vazirmatn | فونت فارسی استاندارد وب |
+
+## 🚀 اجرا
 
 ```bash
 npm install
@@ -19,32 +34,40 @@ npm run dev
 
 سپس مرورگر را روی <http://localhost:3000> باز کنید.
 
-## ساخت نسخه production
+## 📁 ساختار
+
+```
+.
+├── app/
+│   ├── globals.css     # تم تیره، افکت شیشه‌ای، اسکرول‌بار سفارشی
+│   ├── layout.tsx      # RTL، فونت وزیرمتن، متادیتای فارسی
+│   └── page.tsx        # لندینگ‌پیج کامل سفرینو
+├── tailwind.config.js  # تم رنگی سفارشی (night / saffron / turquoise)
+├── postcss.config.js
+├── next.config.mjs
+└── tsconfig.json
+```
+
+## ✨ بخش‌های صفحه
+
+- 🧭 **هدر شیشه‌ای چسبان** با منوی واکنش‌گرا
+- 🎯 **هیرو** با پس‌زمینهٔ آرورا و جعبهٔ جست‌وجوی سه‌حالته (پرواز / هتل / تور)
+- 📊 **نوار آمار** با انیمیشن ورود
+- 🧩 **گرید بنتو** خدمات با کارت‌های هم‌پوشان و سایز متفاوت
+- 🗺️ **مقاصد محبوب** با کارت‌های گرادیانی و قیمت
+- 💡 **بخش چرا سفرینو** همراه نمودار بودجه
+- ⭐ **نظرات مسافران** و **سؤالات متداول** آکاردئونی
+- 📣 **کال‌تو‌اکشن** نهایی با کد تخفیف و فوتر کامل
+
+## 🤖 استقرار خودکار
+
+این مخزن با اسکریپت پایتونی `deploy_safarino.py` ساخته شده است:
 
 ```bash
-npm run build
-npm start
-```
-
-## استقرار روی Vercel
-
-1. به [vercel.com/new](https://vercel.com/new) بروید.
-2. ریپوزیتوری `safarino-mvp` را وارد (Import) کنید.
-3. بدون هیچ تنظیم اضافه‌ای، **Deploy** را بزنید.
-
-## ساختار پروژه
-
-```
-app/
-├── layout.tsx     # لایه اصلی، فونت وزیرمتن، dir="rtl"
-├── page.tsx       # لندینگ‌پیج سفرینو
-└── globals.css    # Tailwind + استایل‌های گلَس‌مورفیزم
-tailwind.config.js
-postcss.config.js
-next.config.js
-tsconfig.json
+export GITHUB_TOKEN="ghp_xxx"
+python deploy_safarino.py
 ```
 
 ---
 
-© ۱۴۰۳ سفرینو
+ساخته‌شده با ❤️ برای جامعهٔ توسعه‌دهندگان ایرانی.
