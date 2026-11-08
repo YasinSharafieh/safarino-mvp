@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -30,6 +30,25 @@ import TravelSteps from "@/components/TravelSteps";
 
 type ResultKey = "kish" | "istanbul" | "dubai" | "cappadocia" | "nature";
 type Points = Partial<Record<ResultKey, number>>;
+
+export type QuizCompletion = {
+  result: ResultKey;
+  answers: Record<string, string>;
+};
+
+export type QuizProgress = {
+  step: number;
+  answers: Record<string, string>;
+};
+
+type TravelQuizProps = {
+  initialAnswers?: Record<string, string>;
+  initialStep?: number;
+  onProgress?: (progress: QuizProgress) => void;
+  onComplete?: (completion: QuizCompletion) => void;
+};
+
+const EMPTY_ANSWERS: Record<string, string> = {};
 
 type QuizOption = {
   id: string;
@@ -319,10 +338,23 @@ function calculateResult(answers: Record<string, string>): ResultKey {
   );
 }
 
-export default function TravelQuiz() {
-  const [step, setStep] = useState(0);
+export default function TravelQuiz({
+  initialAnswers = EMPTY_ANSWERS,
+  initialStep = 0,
+  onProgress,
+  onComplete,
+}: TravelQuizProps) {
+  const [step, setStep] = useState(Math.min(Math.max(initialStep, 0), QUESTIONS.length));
   const [direction, setDirection] = useState(1);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
+
+  useEffect(() => {
+    setAnswers(initialAnswers);
+  }, [initialAnswers]);
+
+  useEffect(() => {
+    setStep(Math.min(Math.max(initialStep, 0), QUESTIONS.length));
+  }, [initialStep]);
 
   const showResult = step === QUESTIONS.length;
   const question = QUESTIONS[Math.min(step, QUESTIONS.length - 1)];
@@ -333,20 +365,31 @@ export default function TravelQuiz() {
 
   const goNext = () => {
     if (!selectedOption || showResult) return;
+    const nextStep = Math.min(step + 1, QUESTIONS.length);
     setDirection(1);
-    setStep((current) => current + 1);
+    setStep(nextStep);
+    onProgress?.({ answers, step: nextStep });
   };
 
   const goBack = () => {
     if (step === 0) return;
+    const previousStep = Math.max(step - 1, 0);
     setDirection(-1);
-    setStep((current) => current - 1);
+    setStep(previousStep);
+    onProgress?.({ answers, step: previousStep });
+  };
+
+  const selectAnswer = (questionId: string, optionId: string) => {
+    const nextAnswers = { ...answers, [questionId]: optionId };
+    setAnswers(nextAnswers);
+    onProgress?.({ answers: nextAnswers, step });
   };
 
   const restart = () => {
-    setAnswers({});
+    setAnswers(EMPTY_ANSWERS);
     setDirection(-1);
     setStep(0);
+    onProgress?.({ answers: EMPTY_ANSWERS, step: 0 });
   };
 
   return (
@@ -447,7 +490,7 @@ export default function TravelQuiz() {
                           type="button"
                           role="radio"
                           aria-checked={isSelected}
-                          onClick={() => setAnswers((current) => ({ ...current, [question.id]: option.id }))}
+                          onClick={() => selectAnswer(question.id, option.id)}
                           className={`group relative flex items-start gap-3 rounded-2xl border p-4 text-right outline-none transition focus-visible:ring-2 focus-visible:ring-amber-300/70 ${
                             isSelected
                               ? "border-amber-300/60 bg-amber-300/10 shadow-glow"
@@ -555,7 +598,15 @@ export default function TravelQuiz() {
                       <RotateCcw className="h-4 w-4" />
                       شروع دوباره
                     </button>
-                    <a href="/transport" className="btn-primary !px-5 !py-3 text-xs">
+                    <a
+                      href="/transport"
+                      className="btn-primary !px-5 !py-3 text-xs"
+                      onClick={(event) => {
+                        if (!onComplete) return;
+                        event.preventDefault();
+                        onComplete({ result: resultKey, answers });
+                      }}
+                    >
                       گام بعدی: محاسبه حمل‌ونقل و خودرو
                       <ArrowLeft className="h-4 w-4" />
                     </a>
