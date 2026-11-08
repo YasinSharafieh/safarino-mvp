@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { TravelProvider } from "./context/TravelContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -50,7 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">
-        {children}
+        <TravelProvider>{children}</TravelProvider>
       </body>
     </html>
   );

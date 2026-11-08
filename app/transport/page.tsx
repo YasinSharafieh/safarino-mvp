@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-const StepIndicator = ({ step }) => (
+const StepIndicator = ({ step }: { step: number }) => (
   <div className="w-full max-w-2xl mx-auto mb-8 px-4">
     <div className="flex justify-between mb-2">
       {[1, 2, 3, 4, 5].map((s) => (
