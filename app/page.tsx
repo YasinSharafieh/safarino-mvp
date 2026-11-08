@@ -6,8 +6,8 @@ export default function Home() {
       <h1 className="text-5xl font-bold mb-6 text-blue-400">سفرینو</h1>
       <p className="text-xl mb-12 text-gray-300">برنامه‌ریز هوشمند سفر با هوش مصنوعی</p>
       <Link href="/quiz">
-        <button className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-full text-xl font-bold transition-transform hover:scale-105 shadow-lg shadow-blue-500/20">
-          بزن بریم! شروع طراحی سفر
+        <button className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl text-xl font-bold transition-all hover:scale-105">
+          شروع طراحی سفر
         </button>
       </Link>
     </main>
