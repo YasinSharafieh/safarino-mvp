@@ -4,23 +4,23 @@ import { useRouter } from 'next/navigation';
 import { useTravel } from '../context/TravelContext';
 
 const StepIndicator = ({ step }: { step: number }) => (
-  <div className="w-full max-w-2xl mx-auto mb-8 px-4">
-    <div className="flex justify-between mb-2">
+  <div className="w-full max-w-2xl mx-auto mb-10 px-4">
+    <div className="flex justify-between mb-3">
       {[1, 2, 3, 4, 5].map((s) => (
-        <div key={s} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${s <= step ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
+        <div key={s} className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-extrabold transition-all duration-300 ${s <= step ? 'bg-orange-500 text-black shadow-[0_0_15px_rgba(249,115,22,0.5)] scale-110' : 'bg-[#1a1a1a] text-gray-500 border border-[#333]'}`}>
           {s}
         </div>
       ))}
     </div>
-    <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden border border-gray-700">
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-500 h-full transition-all duration-500" style={{ width: `${(step / 5) * 100}%` }} />
+    <div className="w-full bg-[#1a1a1a] h-2 rounded-full overflow-hidden border border-[#333]">
+      <div className="bg-orange-500 h-full transition-all duration-500" style={{ width: `${(step / 5) * 100}%` }} />
     </div>
-    <div className="flex justify-between mt-2 text-[11px] text-gray-400 text-center font-medium">
-      <span className={step >= 1 ? "text-blue-400 font-bold" : ""}>شروع</span>
-      <span className={step >= 2 ? "text-blue-400 font-bold" : ""}>مقصد و بودجه</span>
-      <span className={step >= 3 ? "text-blue-400 font-bold" : ""}>حمل و نقل</span>
-      <span className={step >= 4 ? "text-blue-400 font-bold" : ""}>اقامتگاه</span>
-      <span className={step >= 5 ? "text-blue-400 font-bold" : ""}>برنامه سفر</span>
+    <div className="flex justify-between mt-3 text-[11px] text-gray-500 text-center font-bold">
+      <span className={step >= 1 ? "text-orange-500" : ""}>شروع</span>
+      <span className={step >= 2 ? "text-orange-500" : ""}>مقصد و بودجه</span>
+      <span className={step >= 3 ? "text-orange-500" : ""}>حمل و نقل</span>
+      <span className={step >= 4 ? "text-orange-500" : ""}>اقامتگاه</span>
+      <span className={step >= 5 ? "text-orange-500" : ""}>برنامه سفر</span>
     </div>
   </div>
 );
@@ -40,28 +40,25 @@ export default function Quiz() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070713] text-white p-6 pt-10" dir="rtl">
+    <div className="min-h-screen bg-black text-white p-6 pt-10 font-sans" dir="rtl">
       <StepIndicator step={2} />
-      <div className="max-w-xl mx-auto bg-gray-900/60 p-8 rounded-3xl border border-gray-800 shadow-2xl backdrop-blur-md">
-        <h2 className="text-2xl font-bold mb-6 text-center text-blue-400">مقصد و مشخصات سفر</h2>
+      <div className="max-w-xl mx-auto bg-[#111] p-8 md:p-10 rounded-3xl border border-[#333] shadow-2xl">
+        <h2 className="text-3xl font-black mb-8 text-center text-orange-500 tracking-tight">اطلاعات اولیه سفر</h2>
         
-        <div className="space-y-5">
+        <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-300">مبدا حرکت:</label>
+            <label className="block text-sm font-bold mb-3 text-gray-400">مبدا حرکت شما:</label>
             <input 
-              type="text" 
-              value={origin} 
-              onChange={(e) => setOrigin(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+              type="text" value={origin} onChange={(e) => setOrigin(e.target.value)}
+              className="w-full bg-[#1a1a1a] border border-[#333] focus:border-orange-500 rounded-xl px-5 py-4 text-white outline-none transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-300">مقصد سفر:</label>
+            <label className="block text-sm font-bold mb-3 text-gray-400">مقصد سفر:</label>
             <select 
-              value={destination} 
-              onChange={(e) => setDestination(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+              value={destination} onChange={(e) => setDestination(e.target.value)}
+              className="w-full bg-[#1a1a1a] border border-[#333] focus:border-orange-500 rounded-xl px-5 py-4 text-white outline-none transition-colors appearance-none"
             >
               <option value="شیراز">شیراز (فرهنگی و تاریخی)</option>
               <option value="اصفهان">اصفهان (نصف جهان)</option>
@@ -72,39 +69,31 @@ export default function Quiz() {
             </select>
           </div>
 
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-300">کل بودجه مد نظر:</span>
-              <span className="text-blue-400 font-bold">{budget} میلیون تومان</span>
+          <div className="pt-2">
+            <div className="flex justify-between text-sm mb-3 font-bold">
+              <span className="text-gray-400">بودجه کل مد نظر:</span>
+              <span className="text-orange-500 text-lg">{budget} میلیون تومان</span>
             </div>
             <input 
-              type="range" 
-              min="5" 
-              max="60" 
-              value={budget} 
-              onChange={(e) => setBudget(Number(e.target.value))}
-              className="w-full accent-blue-500 h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+              type="range" min="5" max="100" value={budget} onChange={(e) => setBudget(Number(e.target.value))}
+              className="w-full accent-orange-500 h-2 bg-[#222] rounded-full appearance-none cursor-pointer"
             />
           </div>
 
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-300">مدت زمان سفر:</span>
-              <span className="text-blue-400 font-bold">{days} روز</span>
+          <div className="pt-2">
+            <div className="flex justify-between text-sm mb-3 font-bold">
+              <span className="text-gray-400">مدت زمان سفر:</span>
+              <span className="text-orange-500 text-lg">{days} روز</span>
             </div>
             <input 
-              type="range" 
-              min="1" 
-              max="7" 
-              value={days} 
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full accent-blue-500 h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+              type="range" min="1" max="14" value={days} onChange={(e) => setDays(Number(e.target.value))}
+              className="w-full accent-orange-500 h-2 bg-[#222] rounded-full appearance-none cursor-pointer"
             />
           </div>
 
-          <div className="block pt-4">
-            <button onClick={handleNext} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition-all">
-              مرحله بعد: محاسبه هزینه مسیر 🚀
+          <div className="pt-6">
+            <button onClick={handleNext} className="w-full bg-orange-600 hover:bg-orange-500 text-black font-black py-4 rounded-xl shadow-[0_0_20px_rgba(249,115,22,0.3)] transition-all hover:scale-[1.02] text-lg">
+              تایید و ادامه ➔
             </button>
           </div>
         </div>
