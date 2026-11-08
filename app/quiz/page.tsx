@@ -1,147 +1,114 @@
 'use client';
-
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTravel } from '../context/TravelContext';
 
-const DESTINATIONS = ['شیراز', 'اصفهان', 'کیش', 'رشت', 'یزد'];
-
-function StepIndicator({ step }: { step: number }) {
-  return (
-    <div className="mx-auto mb-8 w-full max-w-2xl px-4">
-      <div className="mb-2 flex justify-between">
-        {[1, 2, 3, 4, 5].map((item) => (
-          <div
-            key={item}
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-              item <= step
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'bg-gray-800 text-gray-400'
-            }`}
-          >
-            {item}
-          </div>
-        ))}
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
-        <div
-          className="h-full bg-blue-600 transition-all duration-500"
-          style={{ width: `${(step / 5) * 100}%` }}
-        />
-      </div>
+const StepIndicator = ({ step }: { step: number }) => (
+  <div className="w-full max-w-2xl mx-auto mb-8 px-4">
+    <div className="flex justify-between mb-2">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <div key={s} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${s <= step ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
+          {s}
+        </div>
+      ))}
     </div>
-  );
-}
+    <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden border border-gray-700">
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-500 h-full transition-all duration-500" style={{ width: `${(step / 5) * 100}%` }} />
+    </div>
+    <div className="flex justify-between mt-2 text-[11px] text-gray-400 text-center font-medium">
+      <span className={step >= 1 ? "text-blue-400 font-bold" : ""}>شروع</span>
+      <span className={step >= 2 ? "text-blue-400 font-bold" : ""}>مقصد و بودجه</span>
+      <span className={step >= 3 ? "text-blue-400 font-bold" : ""}>حمل و نقل</span>
+      <span className={step >= 4 ? "text-blue-400 font-bold" : ""}>اقامتگاه</span>
+      <span className={step >= 5 ? "text-blue-400 font-bold" : ""}>برنامه سفر</span>
+    </div>
+  </div>
+);
 
-export default function QuizPage() {
-  const router = useRouter();
+export default function Quiz() {
   const { travelData, setTravelData } = useTravel();
+  const router = useRouter();
 
-  const [origin, setOrigin] = useState(travelData.origin || 'تهران');
-  const [destination, setDestination] = useState(travelData.destination || 'شیراز');
-  const [budget, setBudget] = useState(Number(travelData.budget) || 15);
-  const [days, setDays] = useState(Number(travelData.days) || 3);
+  const [origin, setOrigin] = useState<string>(travelData?.origin || 'تهران');
+  const [destination, setDestination] = useState<string>(travelData?.destination || 'شیراز');
+  const [budget, setBudget] = useState<number>(travelData?.budget || 15);
+  const [days, setDays] = useState<number>(travelData?.days || 3);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    setTravelData({
-      ...travelData,
-      origin,
-      destination,
-      budget,
-      days,
-    });
-
+  const handleNext = () => {
+    setTravelData({ ...travelData, origin, destination, budget, days });
     router.push('/transport');
   };
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#070713] p-6 pt-10 text-white">
+    <div className="min-h-screen bg-[#070713] text-white p-6 pt-10" dir="rtl">
       <StepIndicator step={2} />
-
-      <div className="mx-auto max-w-xl rounded-3xl border border-gray-800 bg-gray-900/60 p-8 shadow-2xl">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-blue-400">مقصد و بودجه</h1>
-          <p className="mt-2 text-sm text-gray-400">اطلاعات اصلی سفر را مشخص کن</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-gray-300">مبدأ</span>
-            <input
-              type="text"
-              value={origin}
-              onChange={(event) => setOrigin(event.target.value)}
-              placeholder="مبدأ (مثلاً تهران)"
-              required
-              className="w-full rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white outline-none transition focus:border-blue-500"
+      <div className="max-w-xl mx-auto bg-gray-900/60 p-8 rounded-3xl border border-gray-800 shadow-2xl backdrop-blur-md">
+        <h2 className="text-2xl font-bold mb-6 text-center text-blue-400">مقصد و مشخصات سفر</h2>
+        
+        <div className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-300">مبدا حرکت:</label>
+            <input 
+              type="text" 
+              value={origin} 
+              onChange={(e) => setOrigin(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-gray-300">مقصد</span>
-            <select
-              value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-              required
-              className="w-full rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white outline-none transition focus:border-blue-500"
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-300">مقصد سفر:</label>
+            <select 
+              value={destination} 
+              onChange={(e) => setDestination(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
             >
-              {DESTINATIONS.map((city) => (
-                <option key={city} value={city}>{city}</option>
-              ))}
+              <option value="شیراز">شیراز (فرهنگی و تاریخی)</option>
+              <option value="اصفهان">اصفهان (نصف جهان)</option>
+              <option value="کیش">جزیره کیش (تفریحی و ساحلی)</option>
+              <option value="رشت">رشت و شمال (طبیعت و غذا)</option>
+              <option value="یزد">یزد (کویر و معماری)</option>
+              <option value="مشهد">مشهد (زیارتی و تاریخی)</option>
             </select>
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-2 flex items-center justify-between gap-4 text-sm font-medium text-gray-300">
-              <span>بودجه سفر</span>
-              <b className="text-blue-400">{budget.toLocaleString('fa-IR')} میلیون تومان</b>
-            </span>
-            <input
-              type="range"
-              min="5"
-              max="60"
-              step="1"
-              value={budget}
-              onChange={(event) => setBudget(Number(event.target.value))}
-              className="w-full cursor-pointer accent-blue-600"
+          <div>
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-gray-300">کل بودجه مد نظر:</span>
+              <span className="text-blue-400 font-bold">{budget} میلیون تومان</span>
+            </div>
+            <input 
+              type="range" 
+              min="5" 
+              max="60" 
+              value={budget} 
+              onChange={(e) => setBudget(Number(e.target.value))}
+              className="w-full accent-blue-500 h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer"
             />
-            <span className="mt-2 flex justify-between text-xs text-gray-500">
-              <span>۵ میلیون</span>
-              <span>۶۰ میلیون</span>
-            </span>
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-2 flex items-center justify-between gap-4 text-sm font-medium text-gray-300">
-              <span>مدت سفر</span>
-              <b className="text-blue-400">{days.toLocaleString('fa-IR')} روز</b>
-            </span>
-            <input
-              type="range"
-              min="1"
-              max="7"
-              step="1"
-              value={days}
-              onChange={(event) => setDays(Number(event.target.value))}
-              className="w-full cursor-pointer accent-blue-600"
+          <div>
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-gray-300">مدت زمان سفر:</span>
+              <span className="text-blue-400 font-bold">{days} روز</span>
+            </div>
+            <input 
+              type="range" 
+              min="1" 
+              max="7" 
+              value={days} 
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="w-full accent-blue-500 h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer"
             />
-            <span className="mt-2 flex justify-between text-xs text-gray-500">
-              <span>۱ روز</span>
-              <span>۷ روز</span>
-            </span>
-          </label>
+          </div>
 
-          <button
-            type="submit"
-            className="mt-4 w-full rounded-xl bg-blue-600 py-4 font-bold text-white transition hover:bg-blue-700"
-          >
-            مرحله بعد: محاسبه هزینه مسیر 🚀
-          </button>
-        </form>
+          <div className="block pt-4">
+            <button onClick={handleNext} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition-all">
+              مرحله بعد: محاسبه هزینه مسیر 🚀
+            </button>
+          </div>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
