@@ -25,6 +25,7 @@ import {
   Wifi,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import TravelSteps from "@/components/TravelSteps";
 
 const TRANSPORT_STORAGE_KEY = "safarino-transport-selection-v1";
 const ACCOMMODATION_STORAGE_KEY = "safarino-accommodation-selection-v1";
@@ -260,6 +261,8 @@ export default function AccommodationPage() {
             <span className="sm:hidden">مرحلهٔ قبل</span>
           </a>
         </header>
+
+        <TravelSteps current={3} />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <motion.section

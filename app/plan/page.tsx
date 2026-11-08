@@ -12,7 +12,6 @@ import {
   CloudSun,
   Coffee,
   Download,
-  Home,
   Lightbulb,
   LoaderCircle,
   MapPin,
@@ -24,6 +23,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import TravelSteps from "@/components/TravelSteps";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = { time: string; title: string; description: string; type: ActivityType };
@@ -244,9 +244,11 @@ export default function PlanPage() {
           </a>
           <div className="flex gap-2">
             <a href="/accommodation" className="btn-ghost !px-4 !py-2.5 text-xs"><ArrowRight className="h-4 w-4" />مرحله قبل</a>
-            <a href="/" className="btn-ghost hidden !px-4 !py-2.5 text-xs sm:inline-flex"><Home className="h-4 w-4" />خانه</a>
+            <a href="/quiz" className="btn-ghost hidden !px-4 !py-2.5 text-xs sm:inline-flex"><RefreshCw className="h-4 w-4" />شروع سفر جدید</a>
           </div>
         </header>
+
+        <TravelSteps current={4} />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <section className="text-center print:text-right">

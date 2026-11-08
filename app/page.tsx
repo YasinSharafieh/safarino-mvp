@@ -611,10 +611,10 @@ export default function HomePage() {
 
             <form className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row">
               <input className="field" placeholder="ایمیل یا شمارهٔ موبایل" />
-              <button type="button" className="btn-primary shrink-0">
-                شروع سفر
+              <a href="/quiz" className="btn-primary shrink-0">
+                شروع برنامه‌ریزی
                 <ArrowLeft className="h-4 w-4" />
-              </button>
+              </a>
             </form>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-500">

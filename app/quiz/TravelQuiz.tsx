@@ -26,6 +26,7 @@ import {
   Waves,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import TravelSteps from "@/components/TravelSteps";
 
 type ResultKey = "kish" | "istanbul" | "dubai" | "cappadocia" | "nature";
 type Points = Partial<Record<ResultKey, number>>;
@@ -376,6 +377,8 @@ export default function TravelQuiz() {
           </a>
         </header>
 
+        <TravelSteps current={1} />
+
         <section className="mx-auto max-w-3xl pb-8 pt-10 sm:pt-14">
           <div className="mb-8 text-center">
             <span className="chip border-amber-400/25 bg-amber-400/10 !text-amber-200">
@@ -552,8 +555,8 @@ export default function TravelQuiz() {
                       <RotateCcw className="h-4 w-4" />
                       شروع دوباره
                     </button>
-                    <a href="/#search" className="btn-primary !px-5 !py-3 text-xs">
-                      جست‌وجوی سفر
+                    <a href="/transport" className="btn-primary !px-5 !py-3 text-xs">
+                      گام بعدی: محاسبه حمل‌ونقل و خودرو
                       <ArrowLeft className="h-4 w-4" />
                     </a>
                   </div>

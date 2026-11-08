@@ -12,7 +12,6 @@ import {
   Clock3,
   ExternalLink,
   Fuel,
-  Home,
   MapPin,
   Plane,
   Route,
@@ -23,6 +22,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import TravelSteps from "@/components/TravelSteps";
 
 const DISTANCE_KM = 900;
 const FUEL_PRICE_PER_LITER = 3_000;
@@ -220,11 +220,14 @@ function TransportPageContent() {
               <small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small>
             </span>
           </a>
-          <a href="/" className="btn-ghost !px-4 !py-2.5 text-xs">
-            <Home className="h-4 w-4" />
-            <span className="hidden sm:inline">صفحهٔ اصلی</span>
+          <a href="/quiz" className="btn-ghost !px-4 !py-2.5 text-xs">
+            <ArrowRight className="h-4 w-4" />
+            <span className="hidden sm:inline">بازگشت به کوییز</span>
+            <span className="sm:hidden">کوییز</span>
           </a>
         </header>
+
+        <TravelSteps current={2} />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <motion.section
@@ -540,7 +543,7 @@ function TransportPageContent() {
               </div>
             </div>
             <a href="/accommodation" className="btn-primary w-full shrink-0 lg:w-auto">
-              برو به مرحله انتخاب اقامتگاه
+              گام بعدی: انتخاب هتل و اقامتگاه
               <ArrowLeft className="h-4 w-4" />
             </a>
           </motion.section>
