@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTravel } from '../context/TravelContext';
 
-const StepIndicator = ({ step }) => (
+const StepIndicator = ({ step }: { step: number }) => (
   <div className="w-full max-w-2xl mx-auto mb-8 px-4">
     <div className="flex justify-between mb-2">
       {[1, 2, 3, 4, 5].map((s) => (
@@ -25,9 +25,8 @@ const StepIndicator = ({ step }) => (
   </div>
 );
 
-// ماتریس مسافت حدودی بین شهرهای اصلی (کیلومتر رفت و برگشت)
-const getDistance = (origin, destination) => {
-  const distances = {
+const getDistance = (origin: string, destination: string): number => {
+  const distances: Record<string, number> = {
     'تهران-شیراز': 1860,
     'تهران-اصفهان': 900,
     'تهران-کیش': 2500,
@@ -40,20 +39,26 @@ const getDistance = (origin, destination) => {
   };
   const key1 = `${origin}-${destination}`;
   const key2 = `${destination}-${origin}`;
-  return distances[key1] || distances[key2] || 1200; // مسافت پیش‌فرض اگر در لیست نبود
+  return distances[key1] || distances[key2] || 1200;
 };
+
+interface CarInfo {
+  name: string;
+  fuelPer100: number;
+  depPerKm: number;
+}
 
 export default function Transport() {
   const { travelData, setTravelData } = useTravel();
   const router = useRouter();
 
-  const [vehicle, setVehicle] = useState(travelData?.vehicle || '206');
+  const [vehicle, setVehicle] = useState<string>(travelData?.vehicle || '206');
 
   const origin = travelData?.origin || 'تهران';
   const destination = travelData?.destination || 'شیراز';
   const totalDistance = getDistance(origin, destination);
 
-  const carData = {
+  const carData: Record<string, CarInfo> = {
     'pride': { name: 'پراید', fuelPer100: 6.5, depPerKm: 1500 },
     '206': { name: 'پژو ۲۰۶ / ۲۰۷', fuelPer100: 7.2, depPerKm: 2200 },
     'samand': { name: 'سمند / پژو پارس', fuelPer100: 8.5, depPerKm: 2500 },
