@@ -219,8 +219,6 @@ export function normalizeStayRows(value: unknown, input: AccommodationSearchInpu
     const baseGuests = finiteNumber(capacity.base);
     const extraGuests = finiteNumber(capacity.extra) || 0;
     const bedrooms = finiteNumber(metrics.bedroomsCount);
-    const mainPrice = toman(price.mainPrice);
-    const vatPrice = finiteNumber(price.vatPrice) || 0;
     return [{
       id,
       kind: "stay",
@@ -233,7 +231,7 @@ export function normalizeStayRows(value: unknown, input: AccommodationSearchInpu
       stars: null,
       priceTotalToman,
       pricePerNightToman: Math.round(priceTotalToman / nightCount),
-      priceBeforeDiscountToman: mainPrice && finiteNumber(price.discountPercent) ? Math.round((mainPrice * 10 + vatPrice) / 10) : null,
+      priceBeforeDiscountToman: null,
       discountPercent: Math.max(0, finiteNumber(price.discountPercent) || 0),
       priceIncludesVat: true,
       details: [

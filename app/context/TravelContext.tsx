@@ -82,6 +82,29 @@ export function TravelProvider({ children }: { children: ReactNode }) {
     }
   }, [isHydrated, travelData]);
 
+  useEffect(() => {
+    if (!isHydrated || travelData.accommodation?.status !== "selected") return;
+    const saved = travelData.accommodation;
+    const incompatibleCity = typeof saved.city === "string" && Boolean(travelData.destination) && saved.city !== travelData.destination;
+    const incompatibleArrival = typeof saved.checkIn === "string" && Boolean(travelData.departureDate) && saved.checkIn !== travelData.departureDate;
+    const hasTransportReturn = Boolean(travelData.returnDate) && travelData.returnDate > travelData.departureDate;
+    const incompatibleCheckout = hasTransportReturn
+      ? typeof saved.checkOut === "string" && saved.checkOut !== travelData.returnDate
+      : typeof saved.nights === "number" && saved.nights !== travelData.days;
+    const incompatibleTravelers =
+      typeof saved.adults === "number" && saved.adults !== travelData.travelers ||
+      typeof saved.children === "number" && saved.children !== travelData.children ||
+      typeof saved.infants === "number" && saved.infants !== travelData.infants;
+    if (!incompatibleCity && !incompatibleArrival && !incompatibleCheckout && !incompatibleTravelers) return;
+
+    setTravelData((current) => current.accommodation?.status === "selected" ? { ...current, accommodation: null } : current);
+    try {
+      window.localStorage.removeItem("safarino-accommodation-selection-v1");
+    } catch {
+      // Context still removes the incompatible selection when storage is unavailable.
+    }
+  }, [isHydrated, travelData]);
+
   const resetTravelData = useCallback(() => {
     setTravelData(INITIAL_DATA);
     try {
