@@ -56,10 +56,10 @@ const formatCompact = (value: number) => `${compactFormatter.format(value / 1_00
 
 const ACTIVITY_STYLES: Record<ActivityType, { icon: LucideIcon; tone: string; label: string }> = {
   sightseeing: { icon: Camera, tone: "bg-sky-400/10 text-sky-300 border-sky-400/20", label: "بازدید" },
-  food: { icon: Utensils, tone: "bg-amber-400/10 text-amber-300 border-amber-400/20", label: "غذا" },
-  transport: { icon: CarFront, tone: "bg-violet-400/10 text-violet-300 border-violet-400/20", label: "جابه‌جایی" },
+  food: { icon: Utensils, tone: "bg-blue-400/10 text-blue-300 border-blue-400/20", label: "غذا" },
+  transport: { icon: CarFront, tone: "bg-blue-400/10 text-blue-300 border-blue-400/20", label: "جابه‌جایی" },
   rest: { icon: BedDouble, tone: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20", label: "استراحت" },
-  activity: { icon: Sparkles, tone: "bg-rose-400/10 text-rose-300 border-rose-400/20", label: "تجربه" },
+  activity: { icon: Sparkles, tone: "bg-sky-400/10 text-rose-300 border-sky-400/20", label: "تجربه" },
 };
 
 function localDay(day: number, destination: string): PlanDay {
@@ -224,17 +224,17 @@ export default function PlanPage() {
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 print:bg-white print:p-0 print:text-black sm:px-6 lg:px-8">
         <style>{`@media print { body { background: white !important; color: black !important; } .print-card { border: 1px solid #ddd !important; background: white !important; color: black !important; box-shadow: none !important; } .print-card * { color: black !important; text-shadow: none !important; } }`}</style>
         <div className="pointer-events-none absolute inset-0 -z-10 print:hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#14223a_0%,#05070f_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#102f55_0%,#061225_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
-            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-violet-500/25" />
-            <span className="left-[2%] top-[45rem] h-80 w-80 animate-float bg-amber-500/20 [animation-delay:1.5s]" />
+            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-indigo-500/25" />
+            <span className="left-[2%] top-[45rem] h-80 w-80 animate-float bg-blue-500/20 [animation-delay:1.5s]" />
           </div>
         </div>
 
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 print:hidden">
           <a href="/" className="group flex items-center gap-2.5">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950 shadow-glow">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 text-slate-950 shadow-glow">
               <Sparkles className="h-5 w-5" />
             </span>
             <span className="flex flex-col leading-none">
@@ -252,7 +252,7 @@ export default function PlanPage() {
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <section className="text-center print:text-right">
-            <span className="chip border-violet-400/25 bg-violet-400/10 !text-violet-200 print:hidden"><Sparkles className="h-3.5 w-3.5" />برنامه‌ساز هوشمند سفر</span>
+            <span className="chip border-blue-400/25 bg-blue-400/10 !text-blue-200 print:hidden"><Sparkles className="h-3.5 w-3.5" />برنامه‌ساز هوشمند سفر</span>
             <h1 className="mt-4 text-3xl font-black leading-tight text-white sm:text-5xl">برنامه سفر {origin} به <span className="gradient-text">{destination}</span></h1>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-slate-400">بودجه، زمان و سلیقه تو؛ تبدیل به یک برنامه روزبه‌روز و قابل اجرا.</p>
           </section>
@@ -271,13 +271,13 @@ export default function PlanPage() {
               <span className="text-xs text-slate-400">{formatNumber(spentPercent)}٪ بودجه تخصیص یافته</span>
             </div>
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
-              <motion.div className="h-full rounded-full bg-gradient-to-l from-emerald-400 via-amber-400 to-rose-400" animate={{ width: `${Math.min(spentPercent, 100)}%` }} />
+              <motion.div className="h-full rounded-full bg-gradient-to-l from-emerald-400 via-blue-400 to-cyan-400" animate={{ width: `${Math.min(spentPercent, 100)}%` }} />
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
               {[
                 { label: "حمل‌ونقل", value: plan.budgetAnalysis.transport, icon: CarFront, color: "bg-sky-400" },
-                { label: "اقامت", value: plan.budgetAnalysis.accommodation, icon: BedDouble, color: "bg-violet-400" },
-                { label: "غذا", value: plan.budgetAnalysis.food, icon: Utensils, color: "bg-amber-400" },
+                { label: "اقامت", value: plan.budgetAnalysis.accommodation, icon: BedDouble, color: "bg-blue-400" },
+                { label: "غذا", value: plan.budgetAnalysis.food, icon: Utensils, color: "bg-blue-400" },
                 { label: "تفریح", value: plan.budgetAnalysis.activities, icon: Camera, color: "bg-rose-400" },
                 { label: "باقی‌مانده", value: plan.budgetAnalysis.remaining, icon: WalletCards, color: "bg-emerald-400" },
               ].map((item) => {
@@ -300,7 +300,7 @@ export default function PlanPage() {
               {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
               {loading ? "در حال ساخت برنامه…" : "بازسازی هوشمند برنامه"}
             </button>
-            <p role="status" className={`text-center text-[11px] leading-6 ${noticeTone === "success" ? "text-emerald-300" : noticeTone === "warning" ? "text-amber-300" : "text-slate-400"}`}>{notice}</p>
+            <p role="status" className={`text-center text-[11px] leading-6 ${noticeTone === "success" ? "text-emerald-300" : noticeTone === "warning" ? "text-blue-300" : "text-slate-400"}`}>{notice}</p>
           </div>
 
           <section className="mt-10">
@@ -310,7 +310,7 @@ export default function PlanPage() {
             </div>
             <div className="mt-5 flex gap-2 overflow-x-auto pb-2 print:hidden">
               {plan.days.map((day, index) => (
-                <button key={day.day} type="button" onClick={() => setActiveDay(index)} className={`shrink-0 rounded-xl border px-5 py-2.5 text-xs font-bold transition ${activeDay === index ? "border-amber-300/50 bg-amber-300/15 text-amber-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>روز {formatNumber(day.day)}</button>
+                <button key={day.day} type="button" onClick={() => setActiveDay(index)} className={`shrink-0 rounded-xl border px-5 py-2.5 text-xs font-bold transition ${activeDay === index ? "border-blue-300/50 bg-blue-300/15 text-blue-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>روز {formatNumber(day.day)}</button>
               ))}
             </div>
 
@@ -325,7 +325,7 @@ export default function PlanPage() {
                       <motion.article key={`${item.time}-${index}`} initial={{ opacity: 0, x: 15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="relative flex gap-4">
                         <span className={`relative z-10 grid h-12 w-12 shrink-0 place-items-center rounded-2xl border ${style.tone}`}><Icon className="h-5 w-5" /></span>
                         <div className="glass-soft flex-1 p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-xs font-black text-amber-200"><Clock3 className="h-3.5 w-3.5" />{item.time}</span><span className="text-[10px] text-slate-500">{style.label}</span></div>
+                          <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-xs font-black text-blue-200"><Clock3 className="h-3.5 w-3.5" />{item.time}</span><span className="text-[10px] text-slate-500">{style.label}</span></div>
                           <h4 className="mt-2 text-sm font-extrabold text-white">{item.title}</h4>
                           <p className="mt-1.5 text-xs leading-6 text-slate-400">{item.description}</p>
                         </div>
@@ -338,11 +338,11 @@ export default function PlanPage() {
           </section>
 
           <section className="glass print-card mt-8 p-5 sm:p-7">
-            <h2 className="flex items-center gap-2 text-xl font-black text-white"><Lightbulb className="h-5 w-5 text-amber-300" />توصیه‌های هوشمند AI</h2>
+            <h2 className="flex items-center gap-2 text-xl font-black text-white"><Lightbulb className="h-5 w-5 text-blue-300" />توصیه‌های هوشمند AI</h2>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               <div className="glass-soft p-5"><CloudSun className="h-5 w-5 text-sky-300" /><h3 className="mt-3 text-sm font-bold text-white">آب‌وهوا</h3><p className="mt-2 text-xs leading-7 text-slate-400">{plan.recommendations.weather}</p></div>
-              <div className="glass-soft p-5"><Shirt className="h-5 w-5 text-violet-300" /><h3 className="mt-3 text-sm font-bold text-white">لباس مناسب</h3><p className="mt-2 text-xs leading-7 text-slate-400">{plan.recommendations.clothing}</p></div>
-              <div className="glass-soft p-5"><Utensils className="h-5 w-5 text-amber-300" /><h3 className="mt-3 text-sm font-bold text-white">رستوران و غذای مقصد</h3><ul className="mt-2 space-y-2">{plan.recommendations.restaurants.map((item) => <li key={item} className="flex gap-2 text-xs leading-6 text-slate-400"><Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-300" />{item}</li>)}</ul></div>
+              <div className="glass-soft p-5"><Shirt className="h-5 w-5 text-blue-300" /><h3 className="mt-3 text-sm font-bold text-white">لباس مناسب</h3><p className="mt-2 text-xs leading-7 text-slate-400">{plan.recommendations.clothing}</p></div>
+              <div className="glass-soft p-5"><Utensils className="h-5 w-5 text-blue-300" /><h3 className="mt-3 text-sm font-bold text-white">رستوران و غذای مقصد</h3><ul className="mt-2 space-y-2">{plan.recommendations.restaurants.map((item) => <li key={item} className="flex gap-2 text-xs leading-6 text-slate-400"><Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-300" />{item}</li>)}</ul></div>
               <div className="glass-soft p-5"><WalletCards className="h-5 w-5 text-emerald-300" /><h3 className="mt-3 text-sm font-bold text-white">کاهش هزینه‌ها</h3><ul className="mt-2 space-y-2">{plan.recommendations.costSaving.map((item) => <li key={item} className="flex gap-2 text-xs leading-6 text-slate-400"><Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-300" />{item}</li>)}</ul></div>
             </div>
           </section>

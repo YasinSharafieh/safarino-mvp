@@ -23,7 +23,7 @@ export default function TravelSteps({ current }: { current: StepNumber }) {
                 aria-current={isActive ? "step" : undefined}
                 className={`flex h-full flex-col items-center justify-center gap-1.5 rounded-xl border px-1.5 py-3 text-center transition sm:flex-row sm:gap-2.5 sm:px-3 ${
                   isActive
-                    ? "border-amber-300/40 bg-amber-300/10 text-amber-200 shadow-glow"
+                    ? "border-blue-300/40 bg-blue-300/10 text-blue-200 shadow-glow"
                     : isComplete
                       ? "border-emerald-400/15 bg-emerald-400/5 text-emerald-300 hover:bg-emerald-400/10"
                       : "border-transparent text-slate-500 hover:bg-white/5 hover:text-slate-200"
@@ -32,7 +32,7 @@ export default function TravelSteps({ current }: { current: StepNumber }) {
                 <span
                   className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[10px] font-black ${
                     isActive
-                      ? "border-amber-300 bg-amber-300 text-slate-950"
+                      ? "border-blue-300 bg-blue-300 text-slate-950"
                       : isComplete
                         ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-300"
                         : "border-white/15 bg-white/5 text-slate-500"

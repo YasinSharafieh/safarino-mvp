@@ -230,24 +230,24 @@ export default function AccommodationPage() {
   };
 
   const progressColor =
-    budgetTone === "red" ? "bg-rose-500" : budgetTone === "yellow" ? "bg-amber-400" : "bg-emerald-400";
+    budgetTone === "red" ? "bg-rose-500" : budgetTone === "yellow" ? "bg-blue-400" : "bg-emerald-400";
 
   return (
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#14223a_0%,#05070f_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#102f55_0%,#061225_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
-            <span className="-top-24 right-[8%] h-96 w-96 animate-float bg-violet-500/25" />
-            <span className="left-[3%] top-[35rem] h-80 w-80 animate-float bg-amber-500/20 [animation-delay:1.5s]" />
+            <span className="-top-24 right-[8%] h-96 w-96 animate-float bg-indigo-500/25" />
+            <span className="left-[3%] top-[35rem] h-80 w-80 animate-float bg-blue-500/20 [animation-delay:1.5s]" />
             <span className="right-[35%] top-[85rem] h-72 w-72 animate-float bg-turquoise-500/15 [animation-delay:3s]" />
           </div>
         </div>
 
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <a href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950 shadow-glow transition group-hover:scale-105">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 text-slate-950 shadow-glow transition group-hover:scale-105">
               <BedDouble className="h-5 w-5" />
             </span>
             <span className="flex flex-col leading-none">
@@ -270,11 +270,11 @@ export default function AccommodationPage() {
             animate={{ opacity: 1, y: 0 }}
             className="glass overflow-hidden p-5 shadow-card sm:p-7"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.13),transparent_45%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.13),transparent_45%)]" />
             <div className="relative">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <span className="chip border-violet-400/25 bg-violet-400/10 !text-violet-200">
+                  <span className="chip border-blue-400/25 bg-blue-400/10 !text-blue-200">
                     <Sparkles className="h-3.5 w-3.5" />
                     مرحلهٔ سوم برنامه‌ریزی سفر
                   </span>
@@ -282,7 +282,7 @@ export default function AccommodationPage() {
                     جایی برای <span className="gradient-text">استراحت و خاطره‌سازی</span>
                   </h1>
                   <p className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                    <MapPin className="h-4 w-4 text-amber-300" />
+                    <MapPin className="h-4 w-4 text-blue-300" />
                     مقصد: مشهد · اقامت {formatNumber(nights)} شب
                   </p>
                 </div>
@@ -290,7 +290,7 @@ export default function AccommodationPage() {
                 <label className="glass-soft block w-full p-4 lg:max-w-xs">
                   <span className="flex items-center justify-between gap-3 text-xs text-slate-300">
                     <span>بودجهٔ کل سفر</span>
-                    <b className="text-amber-200">{formatCompact(totalBudget)}</b>
+                    <b className="text-blue-200">{formatCompact(totalBudget)}</b>
                   </span>
                   <input
                     dir="ltr"
@@ -300,7 +300,7 @@ export default function AccommodationPage() {
                     step="1000000"
                     value={totalBudget}
                     onChange={(event) => setTotalBudget(Number(event.target.value))}
-                    className="mt-4 w-full cursor-pointer accent-amber-400"
+                    className="mt-4 w-full cursor-pointer accent-blue-400"
                     aria-label="بودجه کل سفر"
                   />
                 </label>
@@ -312,7 +312,7 @@ export default function AccommodationPage() {
                     <WalletCards className="h-4 w-4 text-turquoise-300" />
                     نشانگر زندهٔ بودجه
                   </span>
-                  <span className={`text-xs font-black ${budgetTone === "red" ? "text-rose-300" : budgetTone === "yellow" ? "text-amber-300" : "text-emerald-300"}`}>
+                  <span className={`text-xs font-black ${budgetTone === "red" ? "text-rose-300" : budgetTone === "yellow" ? "text-blue-300" : "text-emerald-300"}`}>
                     {formatNumber(budgetPercent)}٪ از بودجه
                   </span>
                 </div>
@@ -374,7 +374,7 @@ export default function AccommodationPage() {
                   aria-pressed={hasReservation === option.value}
                   className={`rounded-xl px-5 py-3 text-xs font-bold transition ${
                     hasReservation === option.value
-                      ? "bg-gradient-to-l from-amber-400 to-orange-500 text-slate-950 shadow-glow"
+                      ? "bg-gradient-to-l from-blue-400 to-sky-500 text-slate-950 shadow-glow"
                       : "text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
@@ -415,10 +415,10 @@ export default function AccommodationPage() {
                 <aside className="glass p-5 lg:sticky lg:top-5">
                   <div className="flex items-center justify-between gap-3">
                     <h2 className="flex items-center gap-2 text-base font-black text-white">
-                      <SlidersHorizontal className="h-5 w-5 text-amber-300" />
+                      <SlidersHorizontal className="h-5 w-5 text-blue-300" />
                       فیلترهای هوشمند
                     </h2>
-                    <button type="button" onClick={resetFilters} className="text-[10px] text-slate-500 transition hover:text-amber-300">
+                    <button type="button" onClick={resetFilters} className="text-[10px] text-slate-500 transition hover:text-blue-300">
                       پاک‌کردن
                     </button>
                   </div>
@@ -426,7 +426,7 @@ export default function AccommodationPage() {
                   <div className="mt-6 border-b border-white/5 pb-6">
                     <label className="flex items-center justify-between gap-2 text-xs font-bold text-slate-300">
                       <span>حداکثر قیمت هر شب</span>
-                      <b className="text-amber-200">{formatCompact(maxNightlyPrice)}</b>
+                      <b className="text-blue-200">{formatCompact(maxNightlyPrice)}</b>
                     </label>
                     <input
                       dir="ltr"
@@ -436,7 +436,7 @@ export default function AccommodationPage() {
                       step="250000"
                       value={maxNightlyPrice}
                       onChange={(event) => setMaxNightlyPrice(Number(event.target.value))}
-                      className="mt-4 w-full cursor-pointer accent-amber-400"
+                      className="mt-4 w-full cursor-pointer accent-blue-400"
                       aria-label="حداکثر بودجه هر شب"
                     />
                     <div className="mt-2 flex justify-between text-[10px] text-slate-600">
@@ -458,7 +458,7 @@ export default function AccommodationPage() {
                             type="checkbox"
                             checked={selectedTypes.includes(type)}
                             onChange={() => toggleType(type)}
-                            className="h-4 w-4 cursor-pointer accent-amber-400"
+                            className="h-4 w-4 cursor-pointer accent-blue-400"
                           />
                         </label>
                       ))}
@@ -480,7 +480,7 @@ export default function AccommodationPage() {
                               type="checkbox"
                               checked={requiredAmenities.includes(amenity.label)}
                               onChange={() => toggleAmenity(amenity.label)}
-                              className="h-4 w-4 cursor-pointer accent-amber-400"
+                              className="h-4 w-4 cursor-pointer accent-blue-400"
                             />
                           </label>
                         );
@@ -528,7 +528,7 @@ export default function AccommodationPage() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.95 }}
                               transition={{ duration: 0.35, delay: index * 0.05 }}
-                              className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-amber-300/50 shadow-glow" : "hover:border-white/25"}`}
+                              className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-blue-300/50 shadow-glow" : "hover:border-white/25"}`}
                             >
                               <div className="relative h-52 overflow-hidden">
                                 <Image
@@ -540,8 +540,8 @@ export default function AccommodationPage() {
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-night-950/90 via-transparent to-night-950/20" />
                                 <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/65 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{item.type}</span>
-                                <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/65 px-2.5 py-1 text-[11px] font-black text-amber-300 backdrop-blur-md">
-                                  <Star className="h-3.5 w-3.5 fill-amber-300" />
+                                <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/65 px-2.5 py-1 text-[11px] font-black text-blue-300 backdrop-blur-md">
+                                  <Star className="h-3.5 w-3.5 fill-blue-300" />
                                   {compactFormatter.format(item.rating)}
                                 </span>
                                 <div className="absolute bottom-3 right-3 left-3">
@@ -556,7 +556,7 @@ export default function AccommodationPage() {
                               <div className="flex flex-1 flex-col p-4">
                                 <div className="flex items-center justify-between gap-2">
                                   <div>
-                                    <b className="text-lg font-black text-amber-200">{formatCompact(item.price)}</b>
+                                    <b className="text-lg font-black text-blue-200">{formatCompact(item.price)}</b>
                                     <span className="block text-[10px] text-slate-500">برای هر شب</span>
                                   </div>
                                   <span className="text-[10px] text-slate-500">{formatNumber(item.reviews)} نظر</span>
@@ -616,9 +616,9 @@ export default function AccommodationPage() {
             viewport={{ once: true }}
             className="glass relative mt-10 overflow-hidden p-6 text-center sm:p-9"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(245,158,11,0.18),transparent_60%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(59,130,246,0.18),transparent_60%)]" />
             <div className="relative">
-              <span className="chip border-amber-400/25 bg-amber-400/10 !text-amber-200">
+              <span className="chip border-blue-400/25 bg-blue-400/10 !text-blue-200">
                 <Sparkles className="h-3.5 w-3.5" />
                 همه‌چیز برای برنامهٔ نهایی آماده است
               </span>

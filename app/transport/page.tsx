@@ -96,8 +96,8 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     emoji: "🚗",
     icon: CarFront,
     duration: "حدود ۱۰ ساعت",
-    accent: "from-amber-400/20 to-orange-500/5",
-    iconTone: "bg-amber-400/10 text-amber-300 border-amber-400/20",
+    accent: "from-blue-400/20 to-sky-500/5",
+    iconTone: "bg-blue-400/10 text-blue-300 border-blue-400/20",
   },
   {
     id: "bus",
@@ -106,8 +106,8 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     icon: Bus,
     duration: "۱۱ ساعت",
     price: 550_000,
-    accent: "from-violet-400/20 to-purple-500/5",
-    iconTone: "bg-violet-400/10 text-violet-300 border-violet-400/20",
+    accent: "from-blue-400/20 to-indigo-500/5",
+    iconTone: "bg-blue-400/10 text-blue-300 border-blue-400/20",
   },
 ];
 
@@ -201,18 +201,18 @@ function TransportPageContent() {
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#14223a_0%,#05070f_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#102f55_0%,#061225_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
-            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-amber-500/25" />
+            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-blue-500/25" />
             <span className="left-[2%] top-[32rem] h-80 w-80 animate-float bg-sky-500/20 [animation-delay:1.5s]" />
-            <span className="right-[30%] top-[75rem] h-72 w-72 animate-float bg-violet-500/15 [animation-delay:3s]" />
+            <span className="right-[30%] top-[75rem] h-72 w-72 animate-float bg-indigo-500/15 [animation-delay:3s]" />
           </div>
         </div>
 
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <a href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 text-slate-950 shadow-glow transition group-hover:scale-105">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 text-slate-950 shadow-glow transition group-hover:scale-105">
               <Plane className="h-5 w-5 -rotate-45" strokeWidth={2.6} />
             </span>
             <span className="flex flex-col leading-none">
@@ -236,10 +236,10 @@ function TransportPageContent() {
             transition={{ duration: 0.5 }}
             className="glass overflow-hidden p-5 shadow-card sm:p-7"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(245,158,11,0.12),transparent_45%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_45%)]" />
             <div className="relative grid items-center gap-6 lg:grid-cols-[1.5fr_1fr_auto]">
               <div>
-                <span className="chip border-amber-400/25 bg-amber-400/10 !text-amber-200">
+                <span className="chip border-blue-400/25 bg-blue-400/10 !text-blue-200">
                   <Sparkles className="h-3.5 w-3.5" />
                   مرحلهٔ دوم برنامه‌ریزی سفر
                 </span>
@@ -248,7 +248,7 @@ function TransportPageContent() {
                 </h1>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <MapPin className="h-4 w-4 text-amber-300" />
+                    <MapPin className="h-4 w-4 text-blue-300" />
                     <b className="text-sm text-white">تهران</b>
                     <ArrowLeft className="h-4 w-4 text-slate-500" />
                     <b className="text-sm text-white">مشهد</b>
@@ -268,7 +268,7 @@ function TransportPageContent() {
                       aria-pressed={budget === amount}
                       className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
                         budget === amount
-                          ? "border-amber-300/50 bg-amber-300/15 text-amber-200"
+                          ? "border-blue-300/50 bg-blue-300/15 text-blue-200"
                           : "border-white/10 bg-white/5 text-slate-400 hover:border-white/25 hover:text-white"
                       }`}
                     >
@@ -301,7 +301,7 @@ function TransportPageContent() {
                     هزینهٔ واقعی‌تر را با لحاظ‌کردن بنزین، استهلاک و عوارض محاسبه کنید.
                   </p>
                 </div>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-blue-400/20 bg-blue-400/10 text-blue-300">
                   <CarFront className="h-6 w-6" />
                 </span>
               </div>
@@ -352,7 +352,7 @@ function TransportPageContent() {
 
               <div className="mt-6 space-y-3">
                 {[
-                  { label: "هزینهٔ بنزین", value: fuelCost, icon: Fuel, tone: "text-amber-300" },
+                  { label: "هزینهٔ بنزین", value: fuelCost, icon: Fuel, tone: "text-blue-300" },
                   { label: "هزینهٔ استهلاک", value: depreciationCost, icon: Wrench, tone: "text-rose-300" },
                   { label: "عوارض آزادراهی", value: tollCost, icon: Route, tone: "text-sky-300" },
                 ].map((row) => {
@@ -369,10 +369,10 @@ function TransportPageContent() {
                 })}
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.07] p-4">
+              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-blue-400/20 bg-blue-400/[0.07] p-4">
                 <div>
                   <span className="text-[11px] text-slate-400">جمع کل سفر</span>
-                  <b className="mt-1 block text-lg font-black text-amber-200">{formatToman(carTotal)}</b>
+                  <b className="mt-1 block text-lg font-black text-blue-200">{formatToman(carTotal)}</b>
                 </div>
                 <div className="border-r border-white/10 pr-3">
                   <span className="text-[11px] text-slate-400">سهم هر سرنشین</span>
@@ -461,7 +461,7 @@ function TransportPageContent() {
                     viewport={{ once: true, margin: "-40px" }}
                     transition={{ duration: 0.4, delay: index * 0.07 }}
                     className={`glass group relative flex flex-col overflow-hidden p-5 transition duration-300 hover:-translate-y-1 ${
-                      isSelected ? "border-amber-300/50 shadow-glow" : "hover:border-white/25"
+                      isSelected ? "border-blue-300/50 shadow-glow" : "hover:border-white/25"
                     }`}
                   >
                     <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${option.accent} opacity-60`} />
@@ -481,7 +481,7 @@ function TransportPageContent() {
                         <span className="block text-[10px] text-slate-500">
                           {option.id === "car" ? "هزینهٔ محاسبه‌شدهٔ کل" : `هزینه برای ${formatNumber(passengers)} مسافر`}
                         </span>
-                        <b className="mt-1 block text-xl font-black text-amber-200">{formatCompactToman(optionCost)}</b>
+                        <b className="mt-1 block text-xl font-black text-blue-200">{formatCompactToman(optionCost)}</b>
                         {option.id !== "car" && (
                           <span className="mt-1 block text-[10px] text-slate-500">هر مسافر {formatToman(option.price ?? 0)}</span>
                         )}
@@ -494,8 +494,8 @@ function TransportPageContent() {
                           aria-pressed={isSelected}
                           className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
                             isSelected
-                              ? "bg-amber-300 text-slate-950"
-                              : "border border-white/10 bg-white/5 text-white hover:border-amber-300/40 hover:bg-white/10"
+                              ? "bg-blue-300 text-slate-950"
+                              : "border border-white/10 bg-white/5 text-white hover:border-blue-300/40 hover:bg-white/10"
                           }`}
                         >
                           {isSelected && <Check className="h-4 w-4" />}
