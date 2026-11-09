@@ -184,5 +184,8 @@ export async function searchAlibabaFlights(input: FlightSearchInput) {
     flights,
     ...(returning ? { returningCount: returning.length, returning } : {}),
     bookingUrl: alibabaBookingUrl(input),
+    ...(input.returnDate
+      ? { returnBookingUrl: alibabaBookingUrl({ ...input, origin: input.destination, destination: input.origin, date: input.returnDate, returnDate: undefined }) }
+      : {}),
   };
 }
