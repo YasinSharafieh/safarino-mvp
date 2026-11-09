@@ -1,39 +1,10 @@
 import { alibabaRequest } from "./alibaba-flights";
+import type { AccommodationOffer, AccommodationSearchInput } from "./accommodation-types";
+import { STAY_TYPE_LABELS } from "./accommodation-types";
+
+export type { AccommodationKind, AccommodationOffer, AccommodationSearchInput } from "./accommodation-types";
 
 const SITE_ROOT = "https://www.alibaba.ir";
-
-export type AccommodationKind = "hotel" | "stay";
-
-export type AccommodationSearchInput = {
-  kind: AccommodationKind;
-  city: string;
-  checkIn: string;
-  checkOut: string;
-  adults: number;
-  childAges: number[];
-  infantAges: number[];
-};
-
-export type AccommodationOffer = {
-  id: string;
-  kind: AccommodationKind;
-  name: string;
-  typeLabel: string;
-  location: string;
-  imageUrl: string | null;
-  rating: number | null;
-  reviewCount: number;
-  stars: number | null;
-  priceTotalToman: number;
-  pricePerNightToman: number;
-  priceBeforeDiscountToman: number | null;
-  discountPercent: number;
-  priceIncludesVat: boolean;
-  details: string[];
-  amenities: string[];
-  provider: "alibaba";
-  bookingUrl: string;
-};
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -121,8 +92,10 @@ export function normalizeHotelRows(
     const badges = rows(hotel.badges).map((badge) => text(badge.text)).filter(Boolean).slice(0, 2);
     const stars = finiteNumber(hotel.star);
     const oldPrice = toman(hotel.oldPrice);
+    const coordinates = Array.isArray(record(hotel.location).coordinates) ? record(hotel.location).coordinates as unknown[] : [];
     return [{
-      id: id || `hotel-${index}`,
+      id: `alibaba-hotel-${id || index}`,
+      providerPropertyId: id || `hotel-${index}`,
       kind: "hotel",
       name,
       typeLabel: stars ? `هتل ${stars} ستاره` : "هتل",
@@ -136,10 +109,14 @@ export function normalizeHotelRows(
       priceBeforeDiscountToman: oldPrice && oldPrice !== priceTotalToman ? oldPrice : null,
       discountPercent: Math.max(0, finiteNumber(hotel.discountPercent) || 0),
       priceIncludesVat: true,
+      priceNote: "قیمت اتاق علی‌بابا برای کل اقامت و ترکیب سنی مسافران این جستجو.",
+      bookingNote: "همان هتل با تاریخ و سن مسافران این جستجو باز می‌شود.",
       details: [mealPlan(hotel.mealPlan), ...roomNames, ...badges].filter(Boolean),
       amenities: (Array.isArray(hotel.facilitiesName) ? hotel.facilitiesName : []).map(text).filter(Boolean).slice(0, 5),
       provider: "alibaba",
       bookingUrl: hotelBookingUrl(link, id, context.cityId, context.countryCode, context.sessionId, context.input),
+      latitude: finiteNumber(coordinates[1]),
+      longitude: finiteNumber(coordinates[0]),
     }];
   });
 }
@@ -191,17 +168,6 @@ async function searchHotels(input: AccommodationSearchInput) {
   };
 }
 
-const STAY_TYPE_LABELS: Record<string, string> = {
-  villa: "ویلا",
-  suite: "سوئیت",
-  traditional: "خانه سنتی",
-  cottage: "کلبه",
-  apartment: "آپارتمان",
-  hostel: "هاستل",
-  ecotourism: "بوم‌گردی",
-  complex: "مجتمع اقامتگاهی",
-};
-
 export function normalizeStayRows(value: unknown, input: AccommodationSearchInput): AccommodationOffer[] {
   const nightCount = nights(input);
   return rows(value).flatMap((stay): AccommodationOffer[] => {
@@ -219,8 +185,10 @@ export function normalizeStayRows(value: unknown, input: AccommodationSearchInpu
     const baseGuests = finiteNumber(capacity.base);
     const extraGuests = finiteNumber(capacity.extra) || 0;
     const bedrooms = finiteNumber(metrics.bedroomsCount);
+    const geo = record(location.geo);
     return [{
-      id,
+      id: `alibaba-stay-${code}`,
+      providerPropertyId: code,
       kind: "stay",
       name,
       typeLabel: STAY_TYPE_LABELS[type] || "اقامتگاه",
@@ -234,6 +202,8 @@ export function normalizeStayRows(value: unknown, input: AccommodationSearchInpu
       priceBeforeDiscountToman: null,
       discountPercent: Math.max(0, finiteNumber(price.discountPercent) || 0),
       priceIncludesVat: true,
+      priceNote: "مبلغ کل اقامت در علی‌بابا، شامل مالیات بر ارزش افزوده در پاسخ جستجو.",
+      bookingNote: "صفحهٔ همان آگهی باز می‌شود؛ تاریخ و مسافران را پیش از پرداخت دوباره کنترل کنید.",
       details: [
         baseGuests ? `ظرفیت ${baseGuests} نفر پایه${extraGuests ? ` + ${extraGuests} نفر اضافه` : ""}` : "",
         bedrooms !== null ? `${bedrooms} اتاق خواب` : "",
@@ -242,6 +212,8 @@ export function normalizeStayRows(value: unknown, input: AccommodationSearchInpu
       amenities: [],
       provider: "alibaba",
       bookingUrl: `${SITE_ROOT}/accommodation/pdp/${type}-${code}`,
+      latitude: finiteNumber(geo.latitude) ?? finiteNumber(geo.lat),
+      longitude: finiteNumber(geo.longitude) ?? finiteNumber(geo.long) ?? finiteNumber(geo.lng),
     }];
   });
 }

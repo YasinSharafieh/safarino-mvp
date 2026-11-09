@@ -12,6 +12,7 @@ import {
   CloudSun,
   Coffee,
   Download,
+  ExternalLink,
   Lightbulb,
   LoaderCircle,
   MapPin,
@@ -24,6 +25,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import ProviderBadge from "@/components/ProviderBadge";
+import type { AccommodationProvider } from "@/lib/accommodation-types";
+import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "../context/TravelContext";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
@@ -317,6 +321,24 @@ export default function PlanPage() {
             </div>
             <p className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/5 p-3 text-xs leading-6 text-slate-300">{plan.budgetAnalysis.summary} مجموع تخمین: {formatToman(totalSpent)}.</p>
           </section>
+
+          {accommodationDetails.status === "selected" && typeof accommodationDetails.name === "string" && (
+            <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="اقامت انتخاب‌شده">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3"><BedDouble className="h-5 w-5 text-cyan-300" /><h2 className="text-xl font-black text-white">اقامت انتخاب‌شده برای این سفر</h2>{typeof accommodationDetails.provider === "string" && <ProviderBadge provider={accommodationDetails.provider as AccommodationProvider} />}</div>
+                  <h3 className="mt-4 text-lg font-black text-white">{accommodationDetails.name}</h3>
+                  <p className="mt-2 text-xs leading-7 text-slate-400">
+                    {typeof accommodationDetails.checkIn === "string" && typeof accommodationDetails.checkOut === "string" ? `${formatJalaliDate(accommodationDetails.checkIn)} تا ${formatJalaliDate(accommodationDetails.checkOut)} · ` : ""}
+                    {formatNumber(Number(accommodationDetails.nights) || 0)} شب · {formatNumber(Number(accommodationDetails.adults) || 0)} بزرگسال{Number(accommodationDetails.children) ? ` · ${formatNumber(Number(accommodationDetails.children))} کودک` : ""}{Number(accommodationDetails.infants) ? ` · ${formatNumber(Number(accommodationDetails.infants))} نوزاد` : ""}
+                  </p>
+                  {typeof accommodationDetails.priceNote === "string" && <p className="mt-3 rounded-xl bg-white/[0.035] p-3 text-[11px] leading-6 text-slate-400">{accommodationDetails.priceNote}</p>}
+                </div>
+                <div className="shrink-0 sm:text-left"><span className="block text-[10px] text-slate-500">قیمت ثبت‌شده در برنامه</span><b className="mt-2 block text-xl font-black text-cyan-200">{formatToman(Number(accommodationDetails.cost) || 0)}</b></div>
+              </div>
+              {typeof accommodationDetails.bookingUrl === "string" && accommodationDetails.bookingUrl && <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="max-w-2xl text-[10px] leading-6 text-slate-500">{typeof accommodationDetails.bookingNote === "string" ? accommodationDetails.bookingNote : "لینک همان اقامتگاه در منبع انتخاب‌شده است؛ جزئیات نهایی را پیش از پرداخت کنترل کنید."}</p><a href={accommodationDetails.bookingUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost shrink-0 !py-2.5 text-xs">رزرو همان اقامتگاه<ExternalLink className="h-3.5 w-3.5" /></a></div>}
+            </section>
+          )}
 
           <div className="mt-6 flex flex-col items-center gap-3 print:hidden">
             <button type="button" onClick={regenerate} disabled={loading || !origin.trim() || !destination.trim()} className="btn-primary w-full max-w-xl !py-4 text-sm disabled:cursor-wait disabled:opacity-60">

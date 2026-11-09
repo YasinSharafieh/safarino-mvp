@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import type { AccommodationOffer, AccommodationSearchInput } from "../lib/accommodation-types";
+import { normalizeJajigaRows } from "../lib/jajiga-accommodation";
+import { normalizeJabamaRows } from "../lib/jabama-accommodation";
+import { normalizeOtaghakRows } from "../lib/otaghak-accommodation";
+import { normalizeSnapptripRows } from "../lib/snapptrip-accommodation";
+import { normalizeEghamat24Rows } from "../lib/eghamat24-accommodation";
+import { deduplicateAccommodationOffers } from "../lib/accommodation-search";
+
+const input: AccommodationSearchInput = {
+  kind: "stay", city: "رامسر", checkIn: "2026-11-20", checkOut: "2026-11-22", adults: 2, childAges: [], infantAges: [],
+};
+
+const jajiga = normalizeJajigaRows([{ id: 3179488, title: "خانه ویلایی در رامسر", url: "/room/3179488?gstnum=2&chin=2026-11-20&chout=2026-11-22", city_name: "رامسر", invoice: { final: 4_000_000 }, pictures: { items: [{ url: "2026/08/03/photo.jpg" }] }, rating: { total: 4.7, count: 27 }, guest_number: 4, max_guest_number: 7, geo: { lat: 36.94, lng: 50.61 } }], input)[0];
+assert.equal(jajiga.priceTotalToman, 4_000_000);
+assert.equal(jajiga.pricePerNightToman, 2_000_000);
+assert.equal(jajiga.bookingUrl, "https://www.jajiga.com/room/3179488?gstnum=2&chin=2026-11-20&chout=2026-11-22");
+assert.equal(jajiga.imageUrl, "https://storage.jajiga.com/public/pictures/medium/2026/08/03/photo.jpg");
+
+const jabama = normalizeJabamaRows([{ code: 800749, name: "ویلا دوخوابه هونام", type: "villa", image: "https://cdn.jabama.com/image/jabama-images/1/photo.jpg", price: { discountedPrice: 46_800_000, mainPrice: 50_000_000, isDefaultDate: false }, location: { city: "رامسر", geo: { lat: 36.88, long: 50.69 } }, rate_review: { score: 4.9, count: 30 } }], input)[0];
+assert.equal(jabama.priceTotalToman, 4_680_000);
+assert.equal(jabama.priceBeforeDiscountToman, 5_000_000);
+assert.equal(jabama.priceIncludesVat, false);
+assert.ok(jabama.bookingUrl.includes("passengersCount=2"));
+assert.ok(jabama.bookingUrl.includes("/stay/villa-800749"));
+
+const otaghak = normalizeOtaghakRows([{ roomId: 2463937, roomName: "نوروزی", roomTypeName: "ویلا", totalPrice: 3_200_000, totalPriceWithExtraPerson: 3_800_000, roomMediaTitles: { mainImageTitle: "photo.webp" }, cityFaName: "رامسر" }], input)[0];
+assert.equal(otaghak.priceTotalToman, 3_800_000);
+assert.equal(otaghak.imageUrl, "https://cdn.otaghak.com/otg-images-new/X500/photo.webp");
+assert.ok(otaghak.bookingUrl.includes("checkIn=2026-11-20"));
+
+const snapptrip = normalizeSnapptripRows([{ id: 60, title: "پارسیان آزادی", price_total: 27_930_000, is_available: true, stars: 5, thumbnail: { url: "/domestic-hotel/galleries/hotel/60/17924.jpeg" }, hotelDetail: { hotelPageUrl: { query: { cityTitle: "تهران", hotelTitle: "هتل-پارسیان-آزادی" } } }, location: { lat: 35.789872, lng: 51.389829 } }], { ...input, kind: "hotel", city: "تهران" })[0];
+assert.equal(snapptrip.priceTotalToman, 2_793_000);
+assert.equal(snapptrip.imageUrl, "https://store.snapptrip.com/domestic-hotel/galleries/hotel/60/17924.jpeg");
+assert.ok(decodeURIComponent(snapptrip.bookingUrl).endsWith("/رزرو-هتل/تهران/هتل-پارسیان-آزادی"));
+
+const eghamat = normalizeEghamat24Rows([{ id: 1253, full_name: "هتل پارسیس مشهد", type: "hotel", star: "5", min_price: "40000000", original_image: "Mashhad-Parsis-66.jpg", uri: "/MashhadHotels/ParsisHotel.html", lat: 36.2896, lng: 59.6289 }], { ...input, kind: "hotel", city: "مشهد" })[0];
+assert.equal(eghamat.priceTotalToman, 4_000_000);
+assert.equal(eghamat.bookingUrl, "https://www.eghamat24.com/MashhadHotels/ParsisHotel.html");
+assert.ok(eghamat.imageUrl?.includes("/app/public/hotel_images/original/"));
+
+function offer(overrides: Partial<AccommodationOffer>): AccommodationOffer {
+  return {
+    ...jabama,
+    id: "offer-base", provider: "jabama", providerPropertyId: "1", name: "ویلا نمونه", priceTotalToman: 2_000_000,
+    bookingUrl: "https://www.jabama.com/stay/villa-1", latitude: 37.1, longitude: 49.1, stars: null,
+    ...overrides,
+  };
+}
+
+const shared = deduplicateAccommodationOffers([
+  offer({ id: "jabama-42", providerPropertyId: "42", priceTotalToman: 2_000_000 }),
+  offer({ id: "alibaba-stay-42", provider: "alibaba", providerPropertyId: "42", priceTotalToman: 2_100_000, bookingUrl: "https://www.alibaba.ir/accommodation/pdp/villa-42" }),
+]);
+assert.equal(shared.length, 1);
+assert.equal(shared[0].offers.length, 2);
+assert.equal(shared[0].matchReason, "shared_inventory");
+assert.equal(shared[0].offers[0].provider, "jabama");
+assert.ok(shared[0].offers.every((item) => item.bookingUrl.includes(item.provider === "alibaba" ? "alibaba.ir" : "jabama.com")));
+
+const noLocationProof = deduplicateAccommodationOffers([
+  offer({ id: "a", latitude: null, longitude: null }),
+  offer({ id: "b", provider: "otaghak", providerPropertyId: "b", latitude: null, longitude: null }),
+]);
+assert.equal(noLocationProof.length, 2, "Name alone must never merge properties");
+
+const close = deduplicateAccommodationOffers([
+  offer({ id: "a", name: "هتل الماس ۲ مشهد", location: "مشهد" }),
+  offer({ id: "b", provider: "snapptrip", providerPropertyId: "b", name: "الماس 2", location: "مشهد", latitude: 37.10001, longitude: 49.10001 }),
+]);
+assert.equal(close.length, 1);
+assert.equal(close[0].matchReason, "verified_name_location");
+
+const differentStars = deduplicateAccommodationOffers([
+  offer({ id: "a", kind: "hotel", stars: 4 }),
+  offer({ id: "b", provider: "snapptrip", kind: "hotel", stars: 5 }),
+]);
+assert.equal(differentStars.length, 2, "Different star ratings are not merged speculatively");
+
+console.log("Accommodation normalization and conservative deduplication tests passed.");

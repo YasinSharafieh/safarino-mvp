@@ -15,7 +15,7 @@ export default function AccommodationImage({ src, alt }: { src: string | null; a
   return (
     <span className="absolute inset-0 block overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#164e63,#0f2939_65%)]">
       {proxiedSource && !failed && (
-        // The server only proxies allowlisted Alibaba/Jabama image paths.
+        // The server only proxies explicitly allowlisted accommodation-provider image paths.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={proxiedSource}

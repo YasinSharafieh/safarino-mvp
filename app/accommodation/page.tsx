@@ -18,15 +18,15 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
-  Star,
   WalletCards,
 } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
-import AccommodationImage from "@/components/AccommodationImage";
+import AccommodationCard from "@/components/AccommodationCard";
+import ProviderBadge from "@/components/ProviderBadge";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
 import { useTravel } from "../context/TravelContext";
-import type { AccommodationKind, AccommodationOffer } from "@/lib/alibaba-accommodation";
+import type { AccommodationGroup, AccommodationKind, AccommodationOffer, ProviderSearchStatus } from "@/lib/accommodation-types";
 import { IRANIAN_CITIES } from "@/lib/iran-cities";
 import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
 
@@ -41,7 +41,13 @@ type SearchResponse = {
   success: boolean;
   error?: string;
   offers?: AccommodationOffer[];
+  groups?: AccommodationGroup[];
+  providerStatuses?: ProviderSearchStatus[];
   found?: number;
+  offerCount?: number;
+  propertyCount?: number;
+  deduplicatedCount?: number;
+  partial?: boolean;
   city?: string;
   fetchedAt?: string;
 };
@@ -68,7 +74,11 @@ export default function AccommodationPage() {
   const [childAges, setChildAges] = useState<number[]>([]);
   const [infantAges, setInfantAges] = useState<number[]>([]);
   const [offers, setOffers] = useState<AccommodationOffer[]>([]);
+  const [groups, setGroups] = useState<AccommodationGroup[]>([]);
+  const [providerStatuses, setProviderStatuses] = useState<ProviderSearchStatus[]>([]);
   const [found, setFound] = useState(0);
+  const [offerCount, setOfferCount] = useState(0);
+  const [deduplicatedCount, setDeduplicatedCount] = useState(0);
   const [resolvedCity, setResolvedCity] = useState("");
   const [fetchedAt, setFetchedAt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -160,7 +170,11 @@ export default function AccommodationPage() {
 
   function resetResultsForCoreChange() {
     setOffers([]);
+    setGroups([]);
+    setProviderStatuses([]);
     setFound(0);
+    setOfferCount(0);
+    setDeduplicatedCount(0);
     setError("");
     setFetchedAt("");
     if (selected) clearSelection();
@@ -233,6 +247,10 @@ export default function AccommodationPage() {
       bookingUrl: offer.bookingUrl,
       imageUrl: offer.imageUrl,
       provider: offer.provider,
+      providerPropertyId: offer.providerPropertyId,
+      priceIncludesVat: offer.priceIncludesVat,
+      priceNote: offer.priceNote,
+      bookingNote: offer.bookingNote,
       fetchedAt: selectionFetchedAt,
     };
     setTravelData((current) => ({ ...current, accommodation: selection, days: nights }));
@@ -255,56 +273,71 @@ export default function AccommodationPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/providers/alibaba/accommodation", {
+      const response = await fetch("/api/providers/accommodation/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, city: city.trim(), checkIn, checkOut, adults: travelData.travelers, childAges, infantAges }),
       });
       const data = await response.json() as SearchResponse;
+      setProviderStatuses(data.providerStatuses || []);
       if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
       const nextOffers = data.offers || [];
+      const nextGroups = data.groups || nextOffers.map((offer) => ({ id: offer.id, matchReason: "single" as const, offers: [offer] }));
       setOffers(nextOffers);
+      setGroups(nextGroups);
       setFound(Math.max(0, Number(data.found) || 0));
+      setOfferCount(Math.max(nextOffers.length, Number(data.offerCount) || 0));
+      setDeduplicatedCount(Math.max(0, Number(data.deduplicatedCount) || 0));
       setResolvedCity(data.city || city);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
       setTravelData((current) => ({ ...current, days: nights }));
       if (selectedId) {
-        const refreshed = nextOffers.find((offer) => offer.id === selectedId);
+        const refreshed = nextGroups.flatMap((group) => group.offers).find((offer) => offer.id === selectedId);
         if (refreshed) selectOffer(refreshed, data.fetchedAt || new Date().toISOString());
         else clearSelection();
       }
     } catch (caught) {
       setOffers([]);
+      setGroups([]);
       setFound(0);
+      setOfferCount(0);
+      setDeduplicatedCount(0);
       setError(caught instanceof Error ? caught.message : "جستجوی اقامت انجام نشد");
     } finally {
       setLoading(false);
     }
   }
 
-  const filteredOffers = useMemo(() => {
-    const filtered = offers.filter((offer) => {
-      if (offer.priceTotalToman > maxTotalPrice) return false;
-      if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
-      if (minRating && (offer.rating || 0) < minRating) return false;
-      if (kind === "hotel" && minStars && (offer.stars || 0) < minStars) return false;
-      if (kind === "stay" && stayType !== "all" && offer.typeLabel !== stayType) return false;
-      if (amenity !== "all") {
-        const text = [...offer.details, ...offer.amenities].join(" ").toLowerCase();
-        const terms: Record<string, RegExp> = {
-          breakfast: /صبحانه/,
-          wifi: /wifi|اینترنت|بي‌سیم|بی‌سیم/i,
-          pool: /استخر/,
-          parking: /پارکینگ/,
-        };
-        if (!terms[amenity]?.test(text)) return false;
-      }
-      return true;
+  const filteredGroups = useMemo(() => {
+    const filtered = groups.flatMap((group) => {
+      const matching = group.offers.filter((offer) => {
+        if (offer.priceTotalToman > maxTotalPrice) return false;
+        if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
+        if (minRating && (offer.rating || 0) < minRating) return false;
+        if (kind === "hotel" && minStars && (offer.stars || 0) < minStars) return false;
+        if (kind === "stay" && stayType !== "all" && offer.typeLabel !== stayType) return false;
+        if (amenity !== "all") {
+          const text = [...offer.details, ...offer.amenities].join(" ").toLowerCase();
+          const terms: Record<string, RegExp> = {
+            breakfast: /صبحانه/,
+            wifi: /wifi|اینترنت|بي‌سیم|بی‌سیم/i,
+            pool: /استخر/,
+            parking: /پارکینگ/,
+          };
+          if (!terms[amenity]?.test(text)) return false;
+        }
+        return true;
+      });
+      if (!matching.length) return [];
+      matching.sort((a, b) => sort === "price"
+        ? a.priceTotalToman - b.priceTotalToman
+        : (b.rating || 0) - (a.rating || 0) || b.reviewCount - a.reviewCount);
+      return [{ ...group, id: matching[0].id, offers: matching }];
     });
     return filtered.sort((a, b) => sort === "price"
-      ? a.priceTotalToman - b.priceTotalToman
-      : (b.rating || 0) - (a.rating || 0) || b.reviewCount - a.reviewCount);
-  }, [amenity, beforeAccommodation, budgetOnly, kind, maxTotalPrice, minRating, minStars, offers, sort, stayType]);
+      ? a.offers[0].priceTotalToman - b.offers[0].priceTotalToman
+      : (b.offers[0].rating || 0) - (a.offers[0].rating || 0) || b.offers[0].reviewCount - a.offers[0].reviewCount);
+  }, [amenity, beforeAccommodation, budgetOnly, groups, kind, maxTotalPrice, minRating, minStars, sort, stayType]);
 
   function resetFilters() {
     setMaxTotalPrice(50_000_000);
@@ -344,7 +377,7 @@ export default function AccommodationPage() {
             <div className="relative">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200"><Sparkles className="h-3.5 w-3.5" />اطلاعات زندهٔ اقامت از علی‌بابا</span>
+                  <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200"><Sparkles className="h-3.5 w-3.5" />جستجوی زنده و مقایسه در ۶ منبع اقامت</span>
                   <h1 className="mt-4 text-2xl font-black leading-tight text-white sm:text-4xl">جایی برای <span className="gradient-text">استراحت و خاطره‌سازی</span></h1>
                   <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-6 text-slate-400"><MapPin className="h-4 w-4 text-cyan-300" />مقصد: {city || travelData.destination || "انتخاب نشده"}{nights > 0 && ` · اقامت ${formatNumber(nights)} شب`} · {formatNumber(travelData.travelers + travelData.children + travelData.infants)} مسافر</p>
                 </div>
@@ -402,7 +435,7 @@ export default function AccommodationPage() {
               <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <section className="glass relative z-30 mt-8 p-5 sm:p-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div><h2 className="text-lg font-black text-white">جستجوی دقیق اقامت</h2><p className="mt-1 text-[11px] text-slate-500">قیمت نمایش‌داده‌شده برای کل اقامت و همان تاریخ و مسافران است.</p></div>
+                    <div><h2 className="text-lg font-black text-white">جستجوی دقیق و مقایسهٔ اقامت</h2><p className="mt-1 text-[11px] text-slate-500">قیمت کل هر منبع جداگانه است؛ مبنای مالیات و نیاز به تأیید مجدد ظرفیت روی همان کارت نوشته می‌شود.</p></div>
                     <div className="flex rounded-xl border border-white/10 bg-white/5 p-1">
                       <button type="button" onClick={() => changeKind("hotel")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${kind === "hotel" ? "bg-cyan-300 text-slate-950" : "text-slate-400"}`}><HotelIcon className="h-4 w-4" />هتل</button>
                       <button type="button" onClick={() => changeKind("stay")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${kind === "stay" ? "bg-cyan-300 text-slate-950" : "text-slate-400"}`}><House className="h-4 w-4" />ویلا و اقامتگاه</button>
@@ -436,9 +469,26 @@ export default function AccommodationPage() {
                   {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-rose-400/15 bg-rose-400/5 p-3 text-xs leading-6 text-rose-200"><CircleAlert className="mt-1 h-4 w-4 shrink-0" />{error}</p>}
                 </section>
 
+                {providerStatuses.length > 0 && (
+                  <section className="glass mt-6 p-4 sm:p-5" aria-label="وضعیت منابع جستجو">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-sm font-black text-white">وضعیت زندهٔ منابع</h2>
+                      <p className="text-[10px] text-slate-500">{offerCount ? `${formatNumber(offerCount)} پیشنهاد دریافت‌شده` : "جزئیات پاسخ هر منبع"}{deduplicatedCount ? ` · ${formatNumber(deduplicatedCount)} پیشنهاد تکراری در یک کارت` : ""}</p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                      {providerStatuses.map((status) => (
+                        <div key={status.provider} title={status.message || status.label} className={`rounded-xl border p-2.5 ${status.status === "ok" ? "border-emerald-400/15 bg-emerald-400/[0.045]" : status.status === "unavailable" ? "border-rose-400/15 bg-rose-400/[0.04]" : "border-white/10 bg-white/[0.025]"}`}>
+                          <div className="flex items-center justify-between gap-1"><ProviderBadge provider={status.provider} /><span className={`text-[9px] font-bold ${status.status === "ok" ? "text-emerald-300" : status.status === "unavailable" ? "text-rose-300" : "text-slate-500"}`}>{status.status === "ok" ? `${formatNumber(status.count)} نتیجه` : status.status === "empty" ? "بدون نتیجه" : status.status === "not_supported" ? "نوع دیگر" : "در دسترس نیست"}</span></div>
+                          {status.message && <p className="mt-2 text-[8px] leading-4 text-slate-500">{status.message}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 {selected && (
                   <section className="glass mt-6 flex flex-col gap-4 border-emerald-400/25 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div><span className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Check className="h-4 w-4" />اقامتگاه در برنامهٔ سفر ذخیره شده</span><h3 className="mt-2 text-lg font-black text-white">{String(selected.name)}</h3><p className="mt-1 text-[11px] text-slate-400">{formatNumber(Number(selected.nights) || 0)} شب · {formatToman(Number(selected.cost) || 0)}</p></div>
+                    <div><span className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Check className="h-4 w-4" />اقامتگاه در برنامهٔ سفر ذخیره شده</span><div className="mt-3 flex flex-wrap items-center gap-2"><h3 className="text-lg font-black text-white">{String(selected.name)}</h3>{typeof selected.provider === "string" && <ProviderBadge provider={selected.provider as AccommodationOffer["provider"]} />}</div><p className="mt-1 text-[11px] text-slate-400">{formatNumber(Number(selected.nights) || 0)} شب · {formatToman(Number(selected.cost) || 0)}</p></div>
                     <div className="flex flex-wrap gap-2"><a href={String(selected.bookingUrl || "#")} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-2.5 text-xs">مشاهده و رزرو<ExternalLink className="h-3.5 w-3.5" /></a><button type="button" onClick={clearSelection} className="btn-ghost !py-2.5 text-xs">لغو انتخاب</button></div>
                   </section>
                 )}
@@ -457,23 +507,15 @@ export default function AccommodationPage() {
                   </aside>
 
                   <section>
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{offers.length ? `${formatNumber(filteredOffers.length)} نتیجه از ${formatNumber(offers.length)} اقامتگاه دریافت‌شده${found > offers.length ? ` · ${formatNumber(found)} مورد در provider` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
 
-                    {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredOffers.length ? (
+                    {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                        <AnimatePresence mode="popLayout">{filteredOffers.map((offer, index) => {
-                          const isSelected = selectedId === offer.id;
-                          return <motion.article layout key={offer.id} initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.35, delay: Math.min(index, 8) * 0.04 }} className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"}`}>
-                            <div className="relative h-52 overflow-hidden"><AccommodationImage src={offer.imageUrl} alt={offer.name} /><div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-night-950/95 via-transparent to-night-950/20" /><span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{offer.typeLabel}</span>{offer.rating ? <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/70 px-2.5 py-1 text-[11px] font-black text-cyan-300 backdrop-blur-md"><Star className="h-3.5 w-3.5 fill-cyan-300" />{compactFormatter.format(offer.rating)}</span> : null}<div className="absolute bottom-3 right-3 left-3"><h3 className="text-base font-black leading-7 text-white">{offer.name}</h3><p className="mt-1 flex items-center gap-1 text-[10px] text-slate-300"><MapPin className="h-3 w-3 shrink-0" />{offer.location}</p></div></div>
-                            <div className="flex flex-1 flex-col p-4">
-                              <div className="flex items-start justify-between gap-3"><div>{offer.priceBeforeDiscountToman && <span className="block text-[10px] text-slate-500 line-through">{formatToman(offer.priceBeforeDiscountToman)}</span>}<b className="text-lg font-black text-cyan-200">{formatToman(offer.priceTotalToman)}</b><span className="mt-1 block text-[10px] text-slate-500">قیمت کل {formatNumber(nights)} شب{kind === "stay" ? " · با مالیات" : ""}</span><span className="mt-1 block text-[10px] text-cyan-300/70">میانگین هر شب {formatToman(offer.pricePerNightToman)}</span></div><span className="shrink-0 text-[10px] text-slate-500">{offer.reviewCount ? `${formatNumber(offer.reviewCount)} نظر` : "بدون نظر ثبت‌شده"}</span></div>
-                              <div className="mt-4 flex flex-wrap gap-1.5">{[...offer.details, ...offer.amenities].slice(0, 5).map((detail, detailIndex) => <span key={`${detail}-${detailIndex}`} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] leading-4 text-slate-300">{detail}</span>)}</div>
-                              <div className="mt-auto space-y-2 pt-5"><button type="button" onClick={() => isSelected ? clearSelection() : selectOffer(offer)} aria-pressed={isSelected} className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${isSelected ? "bg-emerald-400 text-slate-950" : "btn-primary w-full !py-2.5"}`}>{isSelected && <Check className="h-4 w-4" />}{isSelected ? "انتخاب شد؛ برای لغو کلیک کنید" : "انتخاب برای سفرینو"}</button><a href={offer.bookingUrl} target="_blank" rel="noreferrer noopener" className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-[10px] font-bold text-slate-300 transition hover:bg-white/5 hover:text-white">مشاهده و رزرو در علی‌بابا<ExternalLink className="h-3 w-3" /></a><p className="text-center text-[9px] leading-5 text-slate-500">{kind === "hotel" ? "همان هتل با تاریخ و مسافران این جستجو باز می‌شود." : "صفحهٔ همان آگهی؛ تاریخ و مسافران را پیش از پرداخت دوباره کنترل کنید."}</p></div>
-                            </div>
-                          </motion.article>;
-                        })}</AnimatePresence>
+                        <AnimatePresence mode="popLayout">{filteredGroups.map((group, index) => (
+                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} onSelect={selectOffer} onClear={clearSelection} />
+                        ))}</AnimatePresence>
                       </motion.div>
-                    ) : offers.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}
+                    ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}
                   </section>
                 </div>
               </motion.div>

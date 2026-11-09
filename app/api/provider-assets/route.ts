@@ -13,7 +13,12 @@ export async function GET(request: NextRequest) {
   }
   const allowedHost =
     imageUrl.hostname === "cdn.alibaba.ir" && /^\/(?:static\/img|ostorage)\//.test(imageUrl.pathname) ||
-    imageUrl.hostname === "cdn.jabama.com" && imageUrl.pathname.startsWith("/image/");
+    imageUrl.hostname === "cdn.jabama.com" && imageUrl.pathname.startsWith("/image/") ||
+    imageUrl.hostname === "storage.jajiga.com" && imageUrl.pathname.startsWith("/public/pictures/medium/") ||
+    imageUrl.hostname === "cdn.otaghak.com" && imageUrl.pathname.startsWith("/otg-images-new/X500/") ||
+    imageUrl.hostname === "store.snapptrip.com" && imageUrl.pathname.startsWith("/domestic-hotel/") ||
+    imageUrl.hostname === "cdnsnapptrip.com" && imageUrl.pathname.startsWith("/images/market/domestic-hotel/") ||
+    imageUrl.hostname === "www.eghamat24.com" && imageUrl.pathname.startsWith("/app/public/hotel_images/original/");
   if (
     source.length > 4096 || imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password || imageUrl.port ||
     !allowedHost || !/\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname)
