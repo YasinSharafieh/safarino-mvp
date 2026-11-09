@@ -315,7 +315,7 @@ export default function AccommodationPage() {
         if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
         if (minRating && (offer.rating || 0) < minRating) return false;
         if (kind === "hotel" && minStars && (offer.stars || 0) < minStars) return false;
-        if (kind === "stay" && stayType !== "all" && offer.typeLabel !== stayType) return false;
+        if (kind === "stay" && stayType !== "all" && ![offer.typeLabel, offer.name, ...offer.details].join(" ").includes(stayType)) return false;
         if (amenity !== "all") {
           const text = [...offer.details, ...offer.amenities].join(" ").toLowerCase();
           const terms: Record<string, RegExp> = {

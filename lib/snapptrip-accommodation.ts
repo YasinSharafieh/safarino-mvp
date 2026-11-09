@@ -88,28 +88,30 @@ export async function searchSnapptripAccommodation(input: AccommodationSearchInp
   });
   const locations = collection(locationsPayload, ["cities", "items", "locations"]);
   const exact = locations.find((item) => normalizeTerm(text(item.title) || text(item.name)) === normalizeTerm(input.city));
-  const city = exact || locations.find((item) => finiteNumber(item.id) !== null || finiteNumber(item.city_id) !== null) || locations[0];
-  const cityId = finiteNumber(city?.id) ?? finiteNumber(city?.city_id);
+  const city = exact || locations.find((item) => finiteNumber(item.id) !== null) || locations[0];
+  const cityId = finiteNumber(city?.id);
   if (!cityId || cityId <= 0) throw new Error("SNAPPTRIP_CITY_NOT_FOUND");
-  const payload = await publicProviderJson(`${API}/search-city`, {
-    query: {
-      city_id: cityId,
-      date_from: input.checkIn,
-      date_to: input.checkOut,
-      page: 1,
-      order_by: "best_selling",
-      token: "Jek",
-      no_rooms: 1,
-    },
-    headers: HEADERS,
-    timeoutMs: 20_000,
-  });
-  const hotels = collection(payload, ["hotels", "items", "hotelsData"]);
-  const body = record(payload);
-  const found = finiteNumber(body.total) ?? hotels.length;
+
+  const pages = [1, 2, 3];
+  const results = await Promise.all(pages.map(async (page) => {
+    try {
+      const payload = await publicProviderJson(`${API}/search-city`, {
+        query: { city_id: cityId, date_from: input.checkIn, date_to: input.checkOut, page, order_by: "best_selling", token: "Jek", no_rooms: 1 },
+        headers: HEADERS,
+        timeoutMs: 20_000,
+      });
+      return { payload, page };
+    } catch {
+      return { payload: null, page };
+    }
+  }));
+  const first = results.find((result) => result.page === 1 && result.payload);
+  if (!first?.payload) throw new Error("SNAPPTRIP_SEARCH_FAILED");
+  const hotels = results.flatMap((result) => (result.payload ? collection(result.payload, ["hotels", "items", "hotelsData"]) : []));
+  const found = finiteNumber(record(first.payload).total) ?? hotels.length;
   return {
     offers: normalizeSnapptripRows(hotels, input),
-    found: Math.max(0, Math.round(found)),
-    resolvedCity: text(city?.title) || text(city?.name) || input.city,
+    found: Math.max(hotels.length, Math.round(found)),
+    resolvedCity: text(city?.fa_title) || text(city?.title) || input.city,
   };
 }
