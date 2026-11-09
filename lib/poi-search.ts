@@ -141,23 +141,27 @@ out center tags 150;`;
 
 async function fetchOverpass(center: Coordinate): Promise<OverpassTagged[]> {
   const query = overpassQuery(center);
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": USER_AGENT },
-        body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(18_000),
-        cache: "no-store",
-      });
-      if (!response.ok) continue;
-      const payload = (await response.json()) as { elements?: OverpassTagged[] };
-      if (Array.isArray(payload.elements) && payload.elements.length) return payload.elements;
-    } catch {
-      // Public Overpass mirrors are often overloaded; the encyclopedia sources still answer.
-    }
-  }
-  return [];
+  // Both mirrors are asked at the same time with a short deadline: this source is
+  // an optional supplement and must never slow the encyclopedia sources down.
+  const attempts = await Promise.all(
+    OVERPASS_ENDPOINTS.map(async (endpoint) => {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": USER_AGENT },
+          body: new URLSearchParams({ data: query }),
+          signal: AbortSignal.timeout(7_000),
+          cache: "no-store",
+        });
+        if (!response.ok) return [];
+        const payload = (await response.json()) as { elements?: OverpassTagged[] };
+        return Array.isArray(payload.elements) ? payload.elements : [];
+      } catch {
+        return [];
+      }
+    }),
+  );
+  return attempts.find((rows) => rows.length) ?? [];
 }
 
 /** Famous places: Wikidata items with several encyclopedia articles in different languages. */
