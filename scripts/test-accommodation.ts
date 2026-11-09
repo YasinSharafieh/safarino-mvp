@@ -170,4 +170,15 @@ assert.equal(similarChain.length, 3, "a second hotel sharing one word stays its 
 const almasCard = similarChain.find((group) => group.offers.some((item) => item.id === "alamas"));
 assert.equal(almasCard?.offers.length, 3, "the same building with three spellings is one card");
 
+// Live cases: a guest house ("خانه مسافر") and a "مهمان‌پذیر" are the same property as the hotel
+// listing, and a provider that sends 0 stars means "not rated", not a zero-star building.
+const kindWording = deduplicateAccommodationOffers([
+  offer({ id: "hermes-g", kind: "hotel", provider: "eghamat24", providerPropertyId: "hermes-g", name: "خانه مسافر هرمس مشهد", stars: null, latitude: 36.275656630647, longitude: 59.61080986771 }),
+  offer({ id: "hermes-h", kind: "hotel", provider: "alibaba", providerPropertyId: "hermes-h", name: "هتل هرمس مشهد", stars: 2, latitude: 36.275328950810014, longitude: 59.61145791381735 }),
+  offer({ id: "zanbaq-1", kind: "hotel", provider: "alibaba", providerPropertyId: "zanbaq-1", name: "هتل زنبق مشهد", stars: 0, latitude: 36.2856679412673, longitude: 59.6084133404744 }),
+  offer({ id: "zanbaq-2", kind: "hotel", provider: "eghamat24", providerPropertyId: "zanbaq-2", name: "مهمان‌پذیر زنبق مشهد", stars: 2, latitude: 36.28553719646, longitude: 59.608457352505 }),
+]);
+assert.equal(kindWording.length, 2, "both pairs collapse to one card each");
+assert.equal(kindWording[0].offers.length + kindWording[1].offers.length, 4);
+
 console.log("Accommodation near-name deduplication tests passed.");

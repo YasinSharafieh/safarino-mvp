@@ -37,7 +37,8 @@ const PROVIDER_ORDER: AccommodationProvider[] = ["alibaba", "jajiga", "jabama", 
 
 const GENERIC_NAME_TOKENS = new Set([
   "هتل", "هتل‌آپارتمان", "هتل‌اپارتمان", "آپارتمان", "اپارتمان", "سوئیت", "سوییت", "اقامتگاه",
-  "بوتیک", "مهمان‌پذیر", "مهمان‌سرا", "مهمانخانه", "مسافرخانه", "اقامت", "خونه", "خانه",
+  "بوتیک", "مهمان‌پذیر", "مهمانپذیر", "مهمان", "پذیر", "مهمان‌سرا", "مهمانسرا", "سرا",
+  "مهمانخانه", "مسافرخانه", "مسافر", "اقامت", "خونه", "خانه", "سنتی", "بوتیک",
   "ویلا", "دفتر", "شعبه", "رزرو", "آنلاین", "انلاین", "شب", "از", "در", "با", "و",
   "ستاره", "بزرگ", "کوچک", "ایرانی", "ایرانگردی",
   "بین", "المللی", "بین‌المللی", "بین المللی", "مللی", "مجتمع", "مجموعه", "واحد",
@@ -50,7 +51,7 @@ function fold(value: string): string {
     .replace(/[أإآ]/g, "ا")
     .replace(/ؤ/g, "و")
     .replace(/ۀ|ة/g, "ه")
-    .replace(/[\u200c\u200e\u200f]/g, " ")
+    .replace(/[\u200c\u200e\u200f]/g, "")
     .replace(/[«»"'()\[\]{}.,،؛:!?\\/|_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -117,6 +118,11 @@ function nameSimilarity(a: AccommodationOffer, b: AccommodationOffer): number {
 }
 
 /** A shared distinctive word (long, not a number) is required before merging two names. */
+/** Providers send 0 for "not rated", which must not count as a zero-star hotel. */
+function knownStars(offer: AccommodationOffer): number | null {
+  return offer.stars !== null && offer.stars > 0 ? offer.stars : null;
+}
+
 function hasDistinctiveOverlap(a: AccommodationOffer, b: AccommodationOffer): boolean {
   const right = new Set(nameTokens(b));
   return nameTokens(a).some((token) => right.has(token) && token.length >= 3 && !/^\d+$/.test(token));
@@ -185,12 +191,15 @@ function nameMatch(a: AccommodationOffer, b: AccommodationOffer): MatchStrength 
   // One provider only says "شیراز" and its pin is a city-level placeholder, so it cannot veto a merge.
   const loosePin = vagueAddress(a) || vagueAddress(b);
 
-  // An identical full name in the same city is the same hotel even when the two providers geocode
-  // it differently; only a two-star gap says they are two different buildings sharing a name.
+  // An identical full name in the same building is that hotel, whatever each provider writes about it.
   if (exactName) {
-    const starsAgree = a.stars === null || b.stars === null || Math.abs(a.stars - b.stars) <= 1;
+    if (distance !== null && distance <= 400) return "exact_name";
+    // Apart or unplaced: then a two-star gap means two different buildings sharing a name.
+    const leftStars = knownStars(a);
+    const rightStars = knownStars(b);
+    const starsAgree = leftStars === null || rightStars === null || Math.abs(leftStars - rightStars) <= 1;
     if (!starsAgree) return null;
-    if (distance === null || distance <= 400 || loosePin || distance <= 25_000) return "exact_name";
+    if (distance === null || loosePin || distance <= 25_000) return "exact_name";
     return null;
   }
 
@@ -201,13 +210,13 @@ function nameMatch(a: AccommodationOffer, b: AccommodationOffer): MatchStrength 
     if (overlap >= 0.75 && distance <= 400) return "similar_name";
     // Same words, only a house number added ("الماس ۱" vs "الماس"), on the same building.
     const sameNumberLess = nameJaccardWithoutNumbers(a, b) >= 0.9;
-    const sameStars = a.stars !== null && b.stars !== null && a.stars === b.stars;
+    const sameStars = knownStars(a) !== null && knownStars(a) === knownStars(b);
     if (sameNumberLess && sameStars && distance <= 120) return "similar_name";
     return null;
   }
 
   // Different spellings with no coordinates need a near-identical name and the same star level.
-  const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
+  const ratedBoth = knownStars(a) !== null && knownStars(a) === knownStars(b);
   return ratedBoth && overlap >= 0.9 ? "similar_name" : null;
 }
 
