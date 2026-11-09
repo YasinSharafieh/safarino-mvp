@@ -159,12 +159,12 @@ assert.equal(addressFormats[0].offers.length, 2, "both booking links are preserv
 // Live case: three different Mashhad hotels whose names share one word must stay three cards,
 // while each one still merges with its own duplicates on other providers.
 const similarChain = deduplicateAccommodationOffers([
-  offer({ id: "alamas", kind: "hotel", provider: "eghamat24", providerPropertyId: "alamas", name: "هتل الماس مشهد", stars: 4, latitude: 36.281804236384, longitude: 59.610812686144 }),
-  offer({ id: "alamas-a", kind: "hotel", provider: "alibaba", providerPropertyId: "alamas-a", name: "هتل الماس مشهد", stars: 4, latitude: 36.281761233237, longitude: 59.610867756612 }),
-  offer({ id: "alamas1", kind: "hotel", provider: "snapptrip", providerPropertyId: "alamas1", name: "الماس ۱", stars: 4, latitude: 36.281811, longitude: 59.610961 }),
-  offer({ id: "novin", kind: "hotel", provider: "eghamat24", providerPropertyId: "novin", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.281172327117, longitude: 59.607992905522 }),
-  offer({ id: "novin-a", kind: "hotel", provider: "alibaba", providerPropertyId: "novin-a", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.28117671872834, longitude: 59.60798455400472 }),
-  offer({ id: "two", kind: "hotel", provider: "eghamat24", providerPropertyId: "two", name: "هتل الماس ۲ مشهد", stars: 4, latitude: 36.291000, longitude: 59.621000 }),
+  offer({ id: "alamas", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "eghamat24", providerPropertyId: "alamas", name: "هتل الماس مشهد", stars: 4, latitude: 36.281804236384, longitude: 59.610812686144 }),
+  offer({ id: "alamas-a", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "alibaba", providerPropertyId: "alamas-a", name: "هتل الماس مشهد", stars: 4, latitude: 36.281761233237, longitude: 59.610867756612 }),
+  offer({ id: "alamas1", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "snapptrip", providerPropertyId: "alamas1", name: "الماس ۱", stars: 4, latitude: 36.281811, longitude: 59.610961 }),
+  offer({ id: "novin", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "eghamat24", providerPropertyId: "novin", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.281172327117, longitude: 59.607992905522 }),
+  offer({ id: "novin-a", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "alibaba", providerPropertyId: "novin-a", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.28117671872834, longitude: 59.60798455400472 }),
+  offer({ id: "two", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "eghamat24", providerPropertyId: "two", name: "هتل الماس ۲ مشهد", stars: 4, latitude: 36.291000, longitude: 59.621000 }),
 ]);
 assert.equal(similarChain.length, 3, "a second hotel sharing one word stays its own card");
 const almasCard = similarChain.find((group) => group.offers.some((item) => item.id === "alamas"));
@@ -173,10 +173,10 @@ assert.equal(almasCard?.offers.length, 3, "the same building with three spelling
 // Live cases: a guest house ("خانه مسافر") and a "مهمان‌پذیر" are the same property as the hotel
 // listing, and a provider that sends 0 stars means "not rated", not a zero-star building.
 const kindWording = deduplicateAccommodationOffers([
-  offer({ id: "hermes-g", kind: "hotel", provider: "eghamat24", providerPropertyId: "hermes-g", name: "خانه مسافر هرمس مشهد", stars: null, latitude: 36.275656630647, longitude: 59.61080986771 }),
-  offer({ id: "hermes-h", kind: "hotel", provider: "alibaba", providerPropertyId: "hermes-h", name: "هتل هرمس مشهد", stars: 2, latitude: 36.275328950810014, longitude: 59.61145791381735 }),
-  offer({ id: "zanbaq-1", kind: "hotel", provider: "alibaba", providerPropertyId: "zanbaq-1", name: "هتل زنبق مشهد", stars: 0, latitude: 36.2856679412673, longitude: 59.6084133404744 }),
-  offer({ id: "zanbaq-2", kind: "hotel", provider: "eghamat24", providerPropertyId: "zanbaq-2", name: "مهمان‌پذیر زنبق مشهد", stars: 2, latitude: 36.28553719646, longitude: 59.608457352505 }),
+  offer({ id: "hermes-g", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "eghamat24", providerPropertyId: "hermes-g", name: "خانه مسافر هرمس مشهد", stars: null, latitude: 36.275656630647, longitude: 59.61080986771 }),
+  offer({ id: "hermes-h", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "alibaba", providerPropertyId: "hermes-h", name: "هتل هرمس مشهد", stars: 2, latitude: 36.275328950810014, longitude: 59.61145791381735 }),
+  offer({ id: "zanbaq-1", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "alibaba", providerPropertyId: "zanbaq-1", name: "هتل زنبق مشهد", stars: 0, latitude: 36.2856679412673, longitude: 59.6084133404744 }),
+  offer({ id: "zanbaq-2", kind: "hotel", location: "مشهد، خیابان امام رضا", provider: "eghamat24", providerPropertyId: "zanbaq-2", name: "مهمان‌پذیر زنبق مشهد", stars: 2, latitude: 36.28553719646, longitude: 59.608457352505 }),
 ]);
 assert.equal(kindWording.length, 2, "both pairs collapse to one card each");
 assert.equal(kindWording[0].offers.length + kindWording[1].offers.length, 4);

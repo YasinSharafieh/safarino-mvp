@@ -67,12 +67,28 @@ function cityTokens(offer: AccommodationOffer): string[] {
 }
 
 /** Name words that actually identify the property, with the city and trading words removed. */
-function nameTokens(offer: AccommodationOffer): string[] {
-  const city = new Set(cityTokens(offer));
-  const words = fold(offer.name).split(" ").filter((token) => token && !GENERIC_NAME_TOKENS.has(token));
-  const distinctive = words.filter((token) => !city.has(token) && !CITY_NAME_SET.has(token));
+function nameWords(offer: AccommodationOffer): string[] {
+  return fold(offer.name).split(" ").filter((token) => token && !GENERIC_NAME_TOKENS.has(token));
+}
+
+/**
+ * Two readings of a property name: one dropping the city from that property's own address, one
+ * dropping every Iranian city name. "الوند" is also a town, so only the second reading must never
+ * be the only one used; matching succeeds when either reading lines up.
+ */
+function nameVariants(offer: AccommodationOffer): string[][] {
+  const words = nameWords(offer);
+  if (!words.length) return [];
+  const addressCities = new Set(cityTokens(offer));
+  const withoutAddressCity = words.filter((token) => !addressCities.has(token));
+  const withoutAnyCity = words.filter((token) => !addressCities.has(token) && !CITY_NAME_SET.has(token));
+  const variants = [withoutAddressCity, withoutAnyCity].filter((list) => list.length > 0);
   // "هتل تهران مشهد" is a real hotel name: when every word is a city, keep them all.
-  return distinctive.length ? distinctive : words;
+  return variants.length ? variants : [words];
+}
+
+function nameTokens(offer: AccommodationOffer): string[] {
+  return nameVariants(offer)[0] || [];
 }
 
 function comparableName(offer: AccommodationOffer): string {
@@ -82,8 +98,10 @@ function comparableName(offer: AccommodationOffer): string {
 /** Name words with the trailing numbers removed: "الماس ۱" and "الماس" name the same building. */
 function nameJaccardWithoutNumbers(a: AccommodationOffer, b: AccommodationOffer): number {
   const clean = (offer: AccommodationOffer) => nameTokens(offer).filter((token) => !/^\d+$/.test(token));
-  const left = clean(a);
-  const right = clean(b);
+  return jaccardOf(clean(a), clean(b));
+}
+
+function jaccardOf(left: string[], right: string[]): number {
   if (!left.length || !right.length) return 0;
   const first = new Set(left);
   const second = new Set(right);
@@ -93,14 +111,11 @@ function nameJaccardWithoutNumbers(a: AccommodationOffer, b: AccommodationOffer)
 }
 
 function nameJaccard(a: AccommodationOffer, b: AccommodationOffer): number {
-  const left = nameTokens(a);
-  const right = nameTokens(b);
-  if (!left.length || !right.length) return 0;
-  const first = new Set(left);
-  const second = new Set(right);
-  let shared = 0;
-  first.forEach((token) => { if (second.has(token)) shared += 1; });
-  return shared / (first.size + second.size - shared);
+  let best = 0;
+  for (const left of nameVariants(a)) {
+    for (const right of nameVariants(b)) best = Math.max(best, jaccardOf(left, right));
+  }
+  return best;
 }
 
 function nameSimilarity(a: AccommodationOffer, b: AccommodationOffer): number {
@@ -184,7 +199,8 @@ function nameMatch(a: AccommodationOffer, b: AccommodationOffer): MatchStrength 
   if (!sameCity(a, b)) return null;
 
   const distance = distanceMeters(a, b);
-  const exactName = nameA === comparableName(b);
+  const variantsB = nameVariants(b).map((list) => list.join(" "));
+  const exactName = nameVariants(a).map((list) => list.join(" ")).some((value) => value && variantsB.includes(value));
   // An identical name is proof on its own; a shared word needs at least three letters.
   if (!exactName && !hasDistinctiveOverlap(a, b)) return null;
   const similarity = nameSimilarity(a, b);
