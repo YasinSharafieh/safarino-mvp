@@ -38,7 +38,7 @@ function toman(rial: unknown): number | null {
   return Number.isFinite(value) && value >= 0 ? Math.round(value / 10) : null;
 }
 
-function jalaliDate(date: string): string {
+export function alibabaJalaliDate(date: string): string {
   const parts = new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-latn", {
     timeZone: "UTC",
     year: "numeric",
@@ -54,7 +54,7 @@ export function alibabaBookingUrl(input: FlightSearchInput): string {
     adult: String(input.adults),
     child: String(input.children),
     infant: String(input.infants),
-    departing: jalaliDate(input.date),
+    departing: alibabaJalaliDate(input.date),
     ticketType: "Family",
     isExclusive: "false",
     isForeign: "false",
@@ -63,7 +63,7 @@ export function alibabaBookingUrl(input: FlightSearchInput): string {
   return `${SITE_ROOT}/flights/${input.origin}-${input.destination}?${query.toString()}`;
 }
 
-async function request(path: string, init?: { body?: unknown }): Promise<unknown> {
+export async function alibabaRequest(path: string, init?: { body?: unknown }): Promise<unknown> {
   const response = await fetch(`${API_ROOT}/${path}`, {
     method: init?.body ? "POST" : "GET",
     headers: {
@@ -116,7 +116,7 @@ function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
 }
 
 export async function searchAlibabaFlights(input: FlightSearchInput) {
-  const started = await request("v1/flights/domestic/available", {
+  const started = await alibabaRequest("v1/flights/domestic/available", {
     body: {
       origin: input.origin.toLowerCase(),
       destination: input.destination.toLowerCase(),
@@ -133,7 +133,7 @@ export async function searchAlibabaFlights(input: FlightSearchInput) {
 
   let result: Record<string, unknown> = {};
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    result = (await request(`v1/flights/domestic/available/${requestId}`)) as Record<string, unknown>;
+    result = (await alibabaRequest(`v1/flights/domestic/available/${requestId}`)) as Record<string, unknown>;
     if (result.isCompleted === true) break;
     if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 1_500));
   }

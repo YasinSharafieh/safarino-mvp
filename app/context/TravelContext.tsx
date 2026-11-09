@@ -8,6 +8,11 @@ export type TravelData = {
   destination: string;
   budget: number;
   days: number;
+  departureDate: string;
+  returnDate: string;
+  travelers: number;
+  children: number;
+  infants: number;
   tripStyle: string;
   quizResult: string;
   quizStep: number;
@@ -29,6 +34,11 @@ const INITIAL_DATA: TravelData = {
   destination: "",
   budget: 15,
   days: 3,
+  departureDate: "",
+  returnDate: "",
+  travelers: 2,
+  children: 0,
+  infants: 0,
   tripStyle: "",
   quizResult: "",
   quizStep: 0,

@@ -1,20 +1,23 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
   Bus,
+  CalendarDays,
   CarFront,
   Check,
   Clock3,
+  LoaderCircle,
   ExternalLink,
   Fuel,
   MapPin,
   Plane,
   Route,
+  SlidersHorizontal,
   Sparkles,
   TrainFront,
   Users,
@@ -23,8 +26,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import { useTravel } from "../context/TravelContext";
+import { resolveIranianCity } from "@/lib/iran-cities";
 
-const DISTANCE_KM = 900;
 const FUEL_PRICE_PER_LITER = 3_000;
 const TOLL_PER_KM = 180;
 const STORAGE_KEY = "safarino-transport-selection-v1";
@@ -73,22 +77,18 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     name: "هواپیما",
     emoji: "✈️",
     icon: Plane,
-    duration: "۱ ساعت و ۳۰ دقیقه",
-    price: 2_800_000,
+    duration: "زمان پرواز در نتایج زنده",
     accent: "from-sky-400/20 to-teal-500/5",
     iconTone: "bg-sky-400/10 text-sky-300 border-sky-400/20",
-    link: { label: "مشاهده در علی‌بابا", href: "https://www.alibaba.ir/" },
   },
   {
     id: "train",
     name: "قطار",
     emoji: "🚆",
     icon: TrainFront,
-    duration: "۱۲ ساعت",
-    price: 850_000,
+    duration: "زمان سفر در نتایج زنده",
     accent: "from-emerald-400/20 to-teal-500/5",
     iconTone: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20",
-    link: { label: "مشاهده در رجا", href: "https://www.raja.ir/" },
   },
   {
     id: "car",
@@ -104,21 +104,47 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     name: "اتوبوس VIP",
     emoji: "🚌",
     icon: Bus,
-    duration: "۱۱ ساعت",
-    price: 550_000,
+    duration: "ساعت حرکت در نتایج زنده",
     accent: "from-cyan-400/20 to-teal-500/5",
     iconTone: "bg-cyan-400/10 text-cyan-300 border-cyan-400/20",
   },
 ];
 
+type LiveOffer = {
+  id: string;
+  title: string;
+  subtitle: string;
+  departure: string;
+  arrival: string | null;
+  priceToman: number;
+  seatsLeft: number;
+  details: string[];
+};
+
+type LiveSearchResponse = {
+  success: boolean;
+  error?: string;
+  provider?: string;
+  fetchedAt?: string;
+  bookingUrl?: string;
+  flights?: Array<Record<string, unknown>>;
+  offers?: LiveOffer[];
+};
+
 type Selection = {
   vehicleId: TransportId;
   cost: number;
+  unitPrice?: number;
+  offerId?: string;
+  offerTitle?: string;
+  provider?: string;
+  bookingUrl?: string;
+  fetchedAt?: string;
 };
 
 type TransportContextValue = {
   selection: Selection;
-  selectVehicle: (vehicleId: TransportId, cost: number) => void;
+  selectVehicle: (vehicleId: TransportId, cost: number, details?: Partial<Selection>) => void;
   isReady: boolean;
 };
 
@@ -135,7 +161,7 @@ function TransportProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(saved) as Partial<Selection>;
         const validId = TRANSPORT_OPTIONS.some((option) => option.id === parsed.vehicleId);
         if (validId && typeof parsed.cost === "number" && Number.isFinite(parsed.cost)) {
-          setSelection({ vehicleId: parsed.vehicleId as TransportId, cost: parsed.cost });
+          setSelection({ ...parsed, vehicleId: parsed.vehicleId as TransportId, cost: parsed.cost });
         }
       }
     } catch {
@@ -158,7 +184,8 @@ function TransportProvider({ children }: { children: ReactNode }) {
     () => ({
       selection,
       isReady,
-      selectVehicle: (vehicleId: TransportId, cost: number) => setSelection({ vehicleId, cost }),
+      selectVehicle: (vehicleId: TransportId, cost: number, details?: Partial<Selection>) =>
+        setSelection({ vehicleId, cost, ...details }),
     }),
     [isReady, selection],
   );
@@ -174,25 +201,159 @@ function useTransport() {
 
 function TransportPageContent() {
   const { selection, selectVehicle, isReady } = useTransport();
+  const { travelData, setTravelData, isHydrated } = useTravel();
   const [carId, setCarId] = useState("dena");
-  const [passengers, setPassengers] = useState(2);
-  const [budget, setBudget] = useState(5_000_000);
+  const [searchMode, setSearchMode] = useState<Exclude<TransportId, "car">>("plane");
+  const [offers, setOffers] = useState<LiveOffer[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [providerMeta, setProviderMeta] = useState<{ bookingUrl?: string; fetchedAt?: string }>({});
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const [distanceError, setDistanceError] = useState("");
+  const [fuelPrice, setFuelPrice] = useState(FUEL_PRICE_PER_LITER);
+  const [customConsumption, setCustomConsumption] = useState<number | null>(null);
+  const [customDepreciation, setCustomDepreciation] = useState<number | null>(null);
+  const [tollPerKm, setTollPerKm] = useState(TOLL_PER_KM);
+
+  const originCity = resolveIranianCity(travelData.origin);
+  const destinationCity = resolveIranianCity(travelData.destination);
+  const passengers = travelData.travelers;
+  const budget = travelData.budget * 1_000_000;
+  const setPassengers = useCallback((value: number) => {
+    setTravelData((current) => ({ ...current, travelers: Math.min(9, Math.max(1, value)) }));
+  }, [setTravelData]);
+  const setBudget = useCallback((amount: number) => {
+    setTravelData((current) => ({ ...current, budget: Math.round(amount / 1_000_000) }));
+  }, [setTravelData]);
 
   const selectedCar = CARS.find((car) => car.id === carId) ?? CARS[0];
-  const fuelCost = (DISTANCE_KM / 100) * selectedCar.consumption * FUEL_PRICE_PER_LITER;
-  const depreciationCost = DISTANCE_KM * selectedCar.depreciationPerKm;
-  const tollCost = DISTANCE_KM * TOLL_PER_KM;
+  const consumption = customConsumption ?? selectedCar.consumption;
+  const depreciationPerKm = customDepreciation ?? selectedCar.depreciationPerKm;
+  const roadDistance = distanceKm ?? 0;
+  const fuelCost = (roadDistance / 100) * consumption * fuelPrice;
+  const depreciationCost = roadDistance * depreciationPerKm;
+  const tollCost = roadDistance * tollPerKm;
   const carTotal = fuelCost + depreciationCost + tollCost;
   const costPerPassenger = carTotal / passengers;
-  const trainSaving = Math.max(0, carTotal - 850_000 * passengers);
+  const cheapestTrain = searchMode === "train" && offers.length ? offers[0].priceToman * passengers : null;
+  const trainSaving = cheapestTrain === null ? 0 : Math.max(0, carTotal - cheapestTrain);
+
+  useEffect(() => {
+    setCustomConsumption(null);
+    setCustomDepreciation(null);
+  }, [carId]);
+
+  useEffect(() => {
+    if (!isHydrated || !originCity || !destinationCity) {
+      setDistanceKm(null);
+      setDistanceError("برای محاسبه مسیر، مبدا و مقصد ایرانی را در کوییز مشخص کنید.");
+      return;
+    }
+    let cancelled = false;
+    setDistanceError("");
+    fetch("/api/route/distance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ origin: originCity.code, destination: destinationCity.code }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "مسیر دریافت نشد");
+        if (!cancelled) setDistanceKm(Number(data.distanceKm));
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDistanceKm(null);
+          setDistanceError(error instanceof Error ? error.message : "مسیر دریافت نشد");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [destinationCity, isHydrated, originCity]);
 
   useEffect(() => {
     if (!isReady) return;
-    const selectedOption = TRANSPORT_OPTIONS.find((option) => option.id === selection.vehicleId);
-    if (!selectedOption) return;
-    const currentCost = selection.vehicleId === "car" ? carTotal : (selectedOption.price ?? 0) * passengers;
-    if (selection.cost !== currentCost) selectVehicle(selection.vehicleId, currentCost);
+    const currentCost = selection.vehicleId === "car"
+      ? carTotal
+      : selection.unitPrice
+        ? selection.unitPrice * passengers
+        : selection.cost;
+    if (selection.cost !== currentCost) selectVehicle(selection.vehicleId, currentCost, selection);
   }, [carTotal, isReady, passengers, selectVehicle, selection]);
+
+  useEffect(() => {
+    setTravelData((current) => ({
+      ...current,
+      transport: {
+        ...selection,
+        origin: current.origin,
+        destination: current.destination,
+        departureDate: current.departureDate,
+        travelers: current.travelers,
+      },
+    }));
+  }, [selection, setTravelData]);
+
+  useEffect(() => {
+    setOffers([]);
+    setProviderMeta({});
+    setSearchError("");
+  }, [searchMode, travelData.departureDate, travelData.destination, travelData.origin]);
+
+  const searchTickets = useCallback(async () => {
+    if (!originCity || !destinationCity) {
+      setSearchError("برای جستجوی زنده، مبدا و مقصد ایرانی را مشخص کنید.");
+      return;
+    }
+    if (!travelData.departureDate) {
+      setSearchError("ابتدا تاریخ حرکت را انتخاب کنید.");
+      return;
+    }
+    setSearchLoading(true);
+    setSearchError("");
+    try {
+      const endpoint = searchMode === "plane"
+        ? "/api/providers/alibaba/flights"
+        : "/api/providers/alibaba/ground";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: searchMode,
+          origin: originCity.code,
+          destination: destinationCity.code,
+          date: travelData.departureDate,
+          adults: travelData.travelers,
+          children: travelData.children,
+          infants: travelData.infants,
+        }),
+      });
+      const data = await response.json() as LiveSearchResponse;
+      if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
+      const normalized: LiveOffer[] = searchMode === "plane"
+        ? (data.flights || []).map((value, index) => ({
+            id: String(value.id || index),
+            title: `${String(value.airline || "پرواز")} · ${String(value.flightNumber || "")}`,
+            subtitle: String(value.fareClass || "اکونومی"),
+            departure: String(value.departure || ""),
+            arrival: value.arrival ? String(value.arrival) : null,
+            priceToman: Number(value.priceToman),
+            seatsLeft: Number(value.seatsLeft),
+            details: [
+              value.aircraft ? String(value.aircraft) : "",
+              value.baggageKg ? `${String(value.baggageKg)} کیلوگرم بار` : "",
+            ].filter(Boolean),
+          })).filter((offer) => offer.priceToman > 0 && offer.departure)
+        : data.offers || [];
+      setOffers(normalized);
+      setProviderMeta({ bookingUrl: data.bookingUrl, fetchedAt: data.fetchedAt });
+      if (!normalized.length) setSearchError("برای این مسیر و تاریخ، گزینه دارای صندلی و قیمت پیدا نشد.");
+    } catch (error) {
+      setOffers([]);
+      setSearchError(error instanceof Error ? error.message : "جستجو انجام نشد");
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [destinationCity, originCity, searchMode, travelData]);
 
   const selectedName = TRANSPORT_OPTIONS.find((option) => option.id === selection.vehicleId)?.name;
   const budgetDifference = budget - selection.cost;
@@ -249,11 +410,13 @@ function TransportPageContent() {
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <MapPin className="h-4 w-4 text-cyan-300" />
-                    <b className="text-sm text-white">تهران</b>
+                    <b className="text-sm text-white">{travelData.origin || "مبدا نامشخص"}</b>
                     <ArrowLeft className="h-4 w-4 text-slate-500" />
-                    <b className="text-sm text-white">مشهد</b>
+                    <b className="text-sm text-white">{travelData.destination || "مقصد را در کوییز انتخاب کن"}</b>
                   </div>
-                  <span className="chip !px-4 !py-2.5 !text-xs">{formatNumber(DISTANCE_KM)} کیلومتر</span>
+                  <span className="chip !px-4 !py-2.5 !text-xs">
+                    {distanceKm !== null ? `${formatNumber(distanceKm)} کیلومتر جاده‌ای` : "مسیر جاده‌ای در حال دریافت"}
+                  </span>
                 </div>
               </div>
 
@@ -298,8 +461,9 @@ function TransportPageContent() {
                   <span className="chip">ماشین‌حساب زنده</span>
                   <h2 className="mt-3 text-xl font-black text-white sm:text-2xl">سفر با خودروی شخصی</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-400">
-                    هزینهٔ واقعی‌تر را با لحاظ‌کردن بنزین، استهلاک و عوارض محاسبه کنید.
+                    هزینه را با لحاظ‌کردن بنزین، استهلاک و عوارض و بر اساس مسیر جاده‌ای دریافت‌شده محاسبه کنید.
                   </p>
+                  {distanceError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{distanceError}</p>}
                 </div>
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
                   <CarFront className="h-6 w-6" />
@@ -328,7 +492,7 @@ function TransportPageContent() {
                     onChange={(event) => setPassengers(Number(event.target.value))}
                     className="field cursor-pointer appearance-none bg-night-800"
                   >
-                    {[1, 2, 3, 4, 5].map((count) => (
+                    {Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
                       <option key={count} value={count} className="bg-night-800 text-white">
                         {formatNumber(count)} نفر
                       </option>
@@ -338,16 +502,55 @@ function TransportPageContent() {
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="glass-soft p-3">
-                  <span className="text-[10px] text-slate-500">مصرف ترکیبی</span>
-                  <b className="mt-1 block text-xs text-white">
-                    {compactFormatter.format(selectedCar.consumption)} لیتر در ۱۰۰ کیلومتر
-                  </b>
-                </div>
-                <div className="glass-soft p-3">
-                  <span className="text-[10px] text-slate-500">بنزین آزاد</span>
-                  <b className="mt-1 block text-xs text-white">لیتری {formatToman(FUEL_PRICE_PER_LITER)}</b>
-                </div>
+                <label className="glass-soft p-3">
+                  <span className="mb-2 block text-[10px] text-slate-500">مصرف در ۱۰۰ کیلومتر (لیتر)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="40"
+                    step="0.1"
+                    value={consumption}
+                    onChange={(event) => setCustomConsumption(Math.max(1, Number(event.target.value) || 1))}
+                    className="w-full bg-transparent text-left text-xs font-bold text-white outline-none"
+                    dir="ltr"
+                  />
+                </label>
+                <label className="glass-soft p-3">
+                  <span className="mb-2 block text-[10px] text-slate-500">قیمت هر لیتر بنزین (تومان)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={fuelPrice}
+                    onChange={(event) => setFuelPrice(Math.max(0, Number(event.target.value) || 0))}
+                    className="w-full bg-transparent text-left text-xs font-bold text-white outline-none"
+                    dir="ltr"
+                  />
+                </label>
+                <label className="glass-soft p-3">
+                  <span className="mb-2 block text-[10px] text-slate-500">استهلاک هر کیلومتر (تومان)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={depreciationPerKm}
+                    onChange={(event) => setCustomDepreciation(Math.max(0, Number(event.target.value) || 0))}
+                    className="w-full bg-transparent text-left text-xs font-bold text-white outline-none"
+                    dir="ltr"
+                  />
+                </label>
+                <label className="glass-soft p-3">
+                  <span className="mb-2 block text-[10px] text-slate-500">عوارض هر کیلومتر (تومان)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={tollPerKm}
+                    onChange={(event) => setTollPerKm(Math.max(0, Number(event.target.value) || 0))}
+                    className="w-full bg-transparent text-left text-xs font-bold text-white outline-none"
+                    dir="ltr"
+                  />
+                </label>
               </div>
 
               <div className="mt-6 space-y-3">
@@ -400,13 +603,17 @@ function TransportPageContent() {
                       exit={{ opacity: 0, y: -8 }}
                       className="mt-3 text-sm leading-8 text-emerald-100"
                     >
-                      {trainSaving > 0 ? (
+                      {cheapestTrain === null ? (
                         <>
-                          اگر با قطار بروی، <b className="text-emerald-300">{formatCompactToman(trainSaving)}</b> صرفه‌جویی می‌کنی!
+                          برای مقایسهٔ واقعی خودرو و قطار، ابتدا <b className="text-emerald-300">بلیت قطار را جستجو کن</b>؛ بدون قیمت زنده مقایسه‌ای اعلام نمی‌کنیم.
+                        </>
+                      ) : trainSaving > 0 ? (
+                        <>
+                          با ارزان‌ترین بلیت جستجوشده، سفر با قطار حدود <b className="text-emerald-300">{formatCompactToman(trainSaving)}</b> کمتر از خودرو تمام می‌شود.
                         </>
                       ) : (
                         <>
-                          با این تعداد مسافر، خودروی شخصی از قطار اقتصادی‌تر است؛ سهم هر نفر فقط{` `}
+                          با بلیت قطار جستجوشده، هزینهٔ خودرو کمتر است؛ سهم هر نفر{` `}
                           <b className="text-emerald-300">{formatCompactToman(costPerPassenger)}</b> است.
                         </>
                       )}
@@ -422,13 +629,13 @@ function TransportPageContent() {
                 <h2 className="text-lg font-black text-white">فرمول محاسبه؛ بدون هزینهٔ پنهان</h2>
                 <div className="mt-5 space-y-4 text-xs leading-7 text-slate-400">
                   <p>
-                    <b className="text-slate-200">بنزین:</b> مسافت ÷ ۱۰۰ × مصرف خودرو × ۳٬۰۰۰ تومان
+                    <b className="text-slate-200">بنزین:</b> مسافت ÷ ۱۰۰ × {compactFormatter.format(consumption)} لیتر × {formatNumber(fuelPrice)} تومان
                   </p>
                   <p>
-                    <b className="text-slate-200">استهلاک:</b> مسافت × نرخ کیلومتری خودرو ({formatNumber(selectedCar.depreciationPerKm)} تومان برای {selectedCar.name})
+                    <b className="text-slate-200">استهلاک:</b> مسافت × نرخ کیلومتری خودرو ({formatNumber(depreciationPerKm)} تومان برای {selectedCar.name})
                   </p>
                   <p>
-                    <b className="text-slate-200">عوارض:</b> مسافت × {formatNumber(TOLL_PER_KM)} تومان
+                    <b className="text-slate-200">عوارض:</b> مسافت × {formatNumber(tollPerKm)} تومان
                   </p>
                 </div>
                 <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] p-3 text-[11px] text-slate-500">
@@ -439,20 +646,167 @@ function TransportPageContent() {
             </motion.div>
           </section>
 
+          <section id="live-transport-search" className="glass mt-8 scroll-mt-6 overflow-hidden">
+            <div className="border-b border-white/10 p-5 sm:p-7">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <span className="chip">اطلاعات زندهٔ سفر</span>
+                  <h2 className="mt-3 text-xl font-black text-white sm:text-2xl">جستجوی واقعی {selectedName}</h2>
+                  <p className="mt-2 text-xs leading-6 text-slate-400">
+                    قیمت، ساعت حرکت و ظرفیت از پاسخ دریافت‌شدهٔ علی‌بابا؛ هیچ بلیت تخمینی نمایش داده نمی‌شود.
+                  </p>
+                </div>
+                <span className="text-3xl" aria-hidden="true">{searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}</span>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {([
+                  { id: "plane" as const, label: "✈️ هواپیما" },
+                  { id: "train" as const, label: "🚂 قطار" },
+                  { id: "bus" as const, label: "🚌 اتوبوس" },
+                ]).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSearchMode(item.id)}
+                    aria-pressed={searchMode === item.id}
+                    className={`min-h-10 rounded-xl border px-4 text-xs font-bold transition-all ${
+                      searchMode === item.id
+                        ? "border-turquoise-400/40 bg-turquoise-400/15 text-turquoise-100"
+                        : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-slate-300">تاریخ حرکت</span>
+                  <input
+                    type="date"
+                    value={travelData.departureDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(event) => setTravelData((current) => ({ ...current, departureDate: event.target.value }))}
+                    className="field min-h-12 bg-night-800 text-left text-white"
+                    dir="ltr"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={searchTickets}
+                  disabled={searchLoading}
+                  className="btn-primary self-end !min-h-12 !px-6 !text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {searchLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
+                  {searchLoading ? "در حال جستجو..." : "جستجوی بلیت واقعی"}
+                </button>
+              </div>
+            </div>
+
+            {searchError && (
+              <div className="m-5 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-xs leading-6 text-rose-100">
+                {searchError}
+              </div>
+            )}
+
+            <div className="divide-y divide-white/5">
+              {offers.map((offer, index) => {
+                const isSelected = selection.vehicleId === searchMode && selection.offerId === offer.id;
+                return (
+                  <div key={offer.id} className="flex flex-col gap-4 p-5 transition-colors hover:bg-white/[0.025] lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-4">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/5 text-xl">
+                        {searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}
+                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <b className="text-sm text-white">{offer.title}</b>
+                          {index === 0 && <span className="badge-turquoise !py-0.5 !text-[9px]">ارزان‌ترین</span>}
+                        </div>
+                        <span className="mt-1 block text-[11px] text-slate-400">{offer.subtitle}</span>
+                        {offer.details?.length ? <span className="mt-1 block text-[10px] text-slate-500">{offer.details.join(" · ")}</span> : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-5 lg:justify-end">
+                      <div className="text-left">
+                        <span className="block text-[10px] text-slate-500">حرکت</span>
+                        <b className="block text-base text-white" dir="ltr">{offer.departure}</b>
+                        {offer.arrival && <span className="mt-1 block text-[10px] text-slate-500" dir="ltr">رسیدن {offer.arrival}</span>}
+                      </div>
+                      <div className="text-left">
+                        <b className="block text-base font-black text-turquoise-200">{formatToman(offer.priceToman)}</b>
+                        <span className="mt-1 block text-[10px] text-slate-500">
+                          {offer.seatsLeft > 0 ? `${formatNumber(offer.seatsLeft)} صندلی باقی‌مانده` : "ظرفیت موجود"}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const details = {
+                            provider: "alibaba",
+                            offerId: offer.id,
+                            offerTitle: offer.title,
+                            unitPrice: offer.priceToman,
+                            bookingUrl: providerMeta.bookingUrl,
+                            fetchedAt: providerMeta.fetchedAt,
+                          };
+                          selectVehicle(searchMode, offer.priceToman * passengers, details);
+                          setTravelData((current) => ({
+                            ...current,
+                            transport: {
+                              vehicleId: searchMode,
+                              cost: offer.priceToman * passengers,
+                              ...details,
+                              origin: current.origin,
+                              destination: current.destination,
+                              departureDate: current.departureDate,
+                              travelers: current.travelers,
+                            },
+                          }));
+                        }}
+                        aria-pressed={isSelected}
+                        className={`min-h-10 rounded-xl px-4 text-xs font-bold transition ${
+                          isSelected ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        {isSelected && <Check className="ml-1 inline h-4 w-4" />}
+                        {isSelected ? "انتخاب شده" : "انتخاب بلیت"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 bg-white/[0.02] p-4 sm:flex-row">
+              <p className="flex items-center gap-2 text-[11px] text-slate-400">
+                <Clock3 className="h-4 w-4 text-turquoise-300" />
+                {providerMeta.fetchedAt ? `دریافت اطلاعات: ${new Date(providerMeta.fetchedAt).toLocaleString("fa-IR")}` : "برای مشاهده نتایج واقعی جستجو کنید"}
+              </p>
+              {providerMeta.bookingUrl && (
+                <a href={providerMeta.bookingUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary !min-h-10 !px-5 !py-2.5 !text-xs">
+                  خرید از علی‌بابا
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              )}
+            </div>
+          </section>
+
           <section className="mt-12">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <span className="chip">مقایسهٔ همزمان</span>
                 <h2 className="section-title mt-3">کدام وسیله بیشتر به سفر تو می‌خورد؟</h2>
               </div>
-              <p className="text-xs text-slate-500">قیمت بلیت‌ها برای هر مسافر است.</p>
+              <p className="text-xs text-slate-500">قیمت بلیت‌ها برای هر مسافر و پس از جستجوی زنده نمایش داده می‌شود.</p>
             </div>
 
             <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {TRANSPORT_OPTIONS.map((option, index) => {
                 const Icon = option.icon;
                 const isSelected = selection.vehicleId === option.id;
-                const optionCost = option.id === "car" ? carTotal : (option.price ?? 0) * passengers;
+                const liveUnitPrice = option.id !== "car" && option.id === searchMode && offers.length ? offers[0].priceToman : null;
+                const optionCost = option.id === "car" ? carTotal : liveUnitPrice !== null ? liveUnitPrice * passengers : 0;
                 return (
                   <motion.article
                     key={option.id}
@@ -481,16 +835,27 @@ function TransportPageContent() {
                         <span className="block text-[10px] text-slate-500">
                           {option.id === "car" ? "هزینهٔ محاسبه‌شدهٔ کل" : `هزینه برای ${formatNumber(passengers)} مسافر`}
                         </span>
-                        <b className="mt-1 block text-xl font-black text-cyan-200">{formatCompactToman(optionCost)}</b>
+                        <b className="mt-1 block text-xl font-black text-cyan-200">
+                          {option.id !== "car" && liveUnitPrice === null ? "پس از جستجو" : formatCompactToman(optionCost)}
+                        </b>
                         {option.id !== "car" && (
-                          <span className="mt-1 block text-[10px] text-slate-500">هر مسافر {formatToman(option.price ?? 0)}</span>
+                          <span className="mt-1 block text-[10px] text-slate-500">
+                            {liveUnitPrice !== null ? `هر مسافر ${formatToman(liveUnitPrice)}` : "برای دیدن قیمت واقعی جستجو کنید"}
+                          </span>
                         )}
                       </div>
 
                       <div className="mt-auto space-y-2 pt-5">
                         <button
                           type="button"
-                          onClick={() => selectVehicle(option.id, optionCost)}
+                          onClick={() => {
+                            if (option.id === "car" || liveUnitPrice !== null) {
+                              selectVehicle(option.id, optionCost);
+                            } else {
+                              setSearchMode(option.id);
+                              document.getElementById("live-transport-search")?.scrollIntoView({ behavior: "smooth" });
+                            }
+                          }}
                           aria-pressed={isSelected}
                           className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
                             isSelected
@@ -499,7 +864,7 @@ function TransportPageContent() {
                           }`}
                         >
                           {isSelected && <Check className="h-4 w-4" />}
-                          {isSelected ? "انتخاب شده" : `انتخاب ${option.name}`}
+                          {isSelected ? "انتخاب شده" : option.id !== "car" && liveUnitPrice === null ? `جستجوی ${option.name}` : `انتخاب ${option.name}`}
                         </button>
                         {option.link && (
                           <a
@@ -533,7 +898,7 @@ function TransportPageContent() {
               <div>
                 <span className="text-[11px] text-slate-500">وسیلهٔ انتخابی شما</span>
                 <b className="mt-1 block text-sm text-white">
-                  {selectedName} · {formatToman(selection.cost)}
+                  {selectedName}{selection.offerTitle ? ` · ${selection.offerTitle}` : ""} · {formatToman(selection.cost)}
                 </b>
                 <span className={`mt-1 block text-[11px] ${budgetDifference >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
                   {budgetDifference >= 0
