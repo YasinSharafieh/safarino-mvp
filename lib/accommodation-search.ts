@@ -96,13 +96,27 @@ function hasDistinctiveOverlap(a: AccommodationOffer, b: AccommodationOffer): bo
   return nameTokens(a).some((token) => right.has(token) && token.length >= 4 && !/^\d+$/.test(token));
 }
 
+/** A 0/0 or out-of-country pin is a placeholder, not a location. */
+function usablePin(latitude: number | null, longitude: number | null): boolean {
+  return latitude !== null && longitude !== null
+    && latitude >= 24 && latitude <= 40 && longitude >= 44 && longitude <= 64;
+}
+
+function vagueAddress(offer: AccommodationOffer): boolean {
+  return fold(offer.location).split(" ").filter(Boolean).length <= 2;
+}
+
 function distanceMeters(a: AccommodationOffer, b: AccommodationOffer): number | null {
-  if (a.latitude === null || a.longitude === null || b.latitude === null || b.longitude === null) return null;
+  if (!usablePin(a.latitude, a.longitude) || !usablePin(b.latitude, b.longitude)) return null;
+  const aLat = Number(a.latitude);
+  const aLng = Number(a.longitude);
+  const bLat = Number(b.latitude);
+  const bLng = Number(b.longitude);
   const toRadians = (value: number) => value * Math.PI / 180;
-  const dLat = toRadians(b.latitude - a.latitude);
-  const dLng = toRadians(b.longitude - a.longitude);
-  const lat1 = toRadians(a.latitude);
-  const lat2 = toRadians(b.latitude);
+  const dLat = toRadians(bLat - aLat);
+  const dLng = toRadians(bLng - aLng);
+  const lat1 = toRadians(aLat);
+  const lat2 = toRadians(bLat);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
@@ -131,26 +145,31 @@ function starsCompatible(a: AccommodationOffer, b: AccommodationOffer): boolean 
 
 function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boolean {
   if (a.kind !== b.kind) return false;
-  if (!comparableName(a) || comparableName(a).length < 2) return false;
-  if (!sameCity(a, b) || !starsCompatible(a, b)) return false;
-  if (!hasDistinctiveOverlap(a, b)) return false;
+  const nameA = comparableName(a);
+  if (!nameA || nameA.length < 2) return false;
+  if (!hasDistinctiveOverlap(a, b) || !sameCity(a, b)) return false;
 
   const distance = distanceMeters(a, b);
-  const exactName = comparableName(a) === comparableName(b);
+  const exactName = nameA === comparableName(b);
   const similarity = nameSimilarity(a, b);
+  // One provider only says "شیراز" and its pin is a city-level placeholder, so it cannot veto a merge.
+  const loosePin = vagueAddress(a) || vagueAddress(b);
 
-  // An identical distinctive name is the same property. Two pins prove it; when a provider
-  // publishes no pin, the addresses must still describe the same city.
   if (exactName) {
-    if (a.stars !== null && b.stars !== null && Math.abs(a.stars - b.stars) >= 2) return false;
-    if (distance !== null) return distance <= 2_000;
-    return sameCity(a, b);
+    if (distance !== null) {
+      if (distance <= 400) return true;
+      return loosePin && distance <= 12_000;
+    }
+    // No usable pin at all: the name plus the same star level must carry the decision.
+    return a.stars === null || b.stars === null || Math.abs(a.stars - b.stars) <= 1;
   }
 
-  // Different spellings still merge when both pins show the same building.
-  if (distance !== null) return similarity >= 0.8 && distance <= 400;
+  if (distance !== null) {
+    if (similarity >= 0.8 && distance <= 400) return true;
+    return loosePin && similarity >= 0.8 && distance <= 12_000;
+  }
 
-  // With no coordinates at all only a near-identical name plus the same star rating is accepted.
+  // Different spellings with no coordinates need a near-identical name and the same star level.
   const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
   return ratedBoth && similarity >= 0.9;
 }

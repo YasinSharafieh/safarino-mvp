@@ -102,11 +102,19 @@ const close = deduplicateAccommodationOffers([
 assert.equal(close.length, 1);
 assert.equal(close[0].matchReason, "verified_name_location");
 
-const differentStars = deduplicateAccommodationOffers([
+// Same name on the same pin with a one-star disagreement is one property (providers rate it differently).
+const starDisagreement = deduplicateAccommodationOffers([
   offer({ id: "a", kind: "hotel", stars: 4 }),
   offer({ id: "b", provider: "snapptrip", kind: "hotel", stars: 5 }),
 ]);
-assert.equal(differentStars.length, 2, "Different star ratings are not merged speculatively");
+assert.equal(starDisagreement.length, 1, "One property with two star labels still merges");
+
+// A different name at a different pin must never merge, whatever the stars say.
+const differentStars = deduplicateAccommodationOffers([
+  offer({ id: "c", kind: "hotel", name: "هتل الف مشهد", stars: 4, latitude: 36.29, longitude: 59.60 }),
+  offer({ id: "d", provider: "snapptrip", kind: "hotel", name: "هتل ب مشهد", stars: 5, latitude: 36.33, longitude: 59.55 }),
+]);
+assert.equal(differentStars.length, 2, "Different names and different pins stay apart");
 
 assert.deepEqual(categorizeStay("ویلا و اقامتگاه", "سوئیت در جاده ماسوله - همکف"), { key: "suite", label: "سوئیت" });
 assert.deepEqual(categorizeStay("سوییت", "دنج سرسبز"), { key: "suite", label: "سوئیت" });
