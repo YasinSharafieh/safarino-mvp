@@ -61,10 +61,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, cached: false, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    const status = message === "PROVIDER_RATE_LIMIT_EXCEEDED" ? 429 : message === "PROVIDER_RATE_LIMIT_UNAVAILABLE" ? 503 : 502;
-    return NextResponse.json(
-      { success: false, error: status === 429 ? "تعداد جستجوها بیش از حد مجاز است." : "دریافت اطلاعات زنده انجام نشد؛ دوباره تلاش کنید." },
-      { status },
-    );
+    const status = message === "PROVIDER_RATE_LIMIT_EXCEEDED"
+      ? 429
+      : message === "PROVIDER_RATE_LIMIT_UNAVAILABLE"
+        ? 503
+        : message === "ALIBABA_BUS_CITY_NOT_FOUND"
+          ? 404
+          : 502;
+    const userError = status === 429
+      ? "تعداد جستجوها بیش از حد مجاز است."
+      : status === 404
+        ? "فروش اتوبوس برای یکی از این شهرها پیدا نشد؛ مسیر دیگری را امتحان کنید."
+        : "دریافت اطلاعات زنده انجام نشد؛ دوباره تلاش کنید.";
+    return NextResponse.json({ success: false, error: userError }, { status });
   }
 }

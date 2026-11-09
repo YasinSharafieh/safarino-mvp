@@ -14,7 +14,8 @@ export type GroundOffer = {
 };
 
 function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value === "string") return value.trim();
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 }
 
 function toman(value: unknown): number | null {
@@ -84,7 +85,7 @@ export async function searchAlibabaTrains(input: FlightSearchInput) {
     const trainNumber = text(train.trainNumber);
     return [{
       id: text(train.proposalId) || `${company}-${trainNumber}-${departure}-${index}`,
-      title: `${company} · قطار ${trainNumber}`,
+      title: trainNumber ? `${company} · قطار ${trainNumber}` : company,
       subtitle: text(train.wagonName) || "گزارش‌دهنده علی‌بابا",
       departure,
       arrival: text(train.arrivalDateTime) || null,
