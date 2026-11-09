@@ -26,8 +26,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { useTravel } from "../context/TravelContext";
-import { resolveIranianCity } from "@/lib/iran-cities";
+import { IRANIAN_CITIES, resolveIranianCity } from "@/lib/iran-cities";
+import { addDaysToIso, formatProviderDateTime, todayIso } from "@/lib/jalali";
 
 const FUEL_PRICE_PER_LITER = 3_000;
 const TOLL_PER_KM = 180;
@@ -246,7 +248,7 @@ function TransportPageContent() {
   useEffect(() => {
     if (!isHydrated || !originCity || !destinationCity) {
       setDistanceKm(null);
-      setDistanceError("برای محاسبه مسیر، مبدا و مقصد ایرانی را در کوییز مشخص کنید.");
+      setDistanceError("برای محاسبه مسیر، مبدا و مقصد را در بخش جستجوی زنده انتخاب کنید.");
       return;
     }
     let cancelled = false;
@@ -294,14 +296,29 @@ function TransportPageContent() {
   }, [selection, setTravelData]);
 
   useEffect(() => {
+    if (!isHydrated || travelData.departureDate) return;
+    const departureDate = addDaysToIso(todayIso(), 7);
+    setTravelData((current) => current.departureDate ? current : { ...current, departureDate });
+  }, [isHydrated, setTravelData, travelData.departureDate]);
+
+  useEffect(() => {
     setOffers([]);
     setProviderMeta({});
     setSearchError("");
   }, [searchMode, travelData.departureDate, travelData.destination, travelData.origin]);
 
+  const changeJourney = useCallback((field: "origin" | "destination" | "departureDate", value: string) => {
+    if (selection.vehicleId !== "car") selectVehicle("car", carTotal);
+    setTravelData((current) => ({ ...current, [field]: value }));
+  }, [carTotal, selectVehicle, selection.vehicleId, setTravelData]);
+
   const searchTickets = useCallback(async () => {
     if (!originCity || !destinationCity) {
-      setSearchError("برای جستجوی زنده، مبدا و مقصد ایرانی را مشخص کنید.");
+      setSearchError("برای جستجوی زنده، مبدا و مقصد ایرانی را انتخاب کنید.");
+      return;
+    }
+    if (originCity.code === destinationCity.code) {
+      setSearchError("مبدا و مقصد نمی‌توانند یکی باشند.");
       return;
     }
     if (!travelData.departureDate) {
@@ -356,6 +373,7 @@ function TransportPageContent() {
   }, [destinationCity, originCity, searchMode, travelData]);
 
   const selectedName = TRANSPORT_OPTIONS.find((option) => option.id === selection.vehicleId)?.name;
+  const searchModeName = TRANSPORT_OPTIONS.find((option) => option.id === searchMode)?.name;
   const budgetDifference = budget - selection.cost;
 
   return (
@@ -651,14 +669,57 @@ function TransportPageContent() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <span className="chip">اطلاعات زندهٔ سفر</span>
-                  <h2 className="mt-3 text-xl font-black text-white sm:text-2xl">جستجوی واقعی {selectedName}</h2>
+                  <h2 className="mt-3 text-xl font-black text-white sm:text-2xl">جستجوی واقعی {searchModeName}</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-400">
                     قیمت، ساعت حرکت و ظرفیت از پاسخ دریافت‌شدهٔ علی‌بابا؛ هیچ بلیت تخمینی نمایش داده نمی‌شود.
                   </p>
                 </div>
                 <span className="text-3xl" aria-hidden="true">{searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}</span>
               </div>
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="glass-soft mt-6 p-4 sm:p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-cyan-300" />
+                  <b className="text-sm text-white">اول مبدا و مقصد را انتخاب کن</b>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold text-slate-300">مبدا</span>
+                    <select
+                      value={travelData.origin}
+                      onChange={(event) => changeJourney("origin", event.target.value)}
+                      className="field min-h-12 cursor-pointer appearance-none bg-night-800 text-white"
+                    >
+                      <option value="" className="bg-night-800">انتخاب مبدا</option>
+                      {IRANIAN_CITIES.map((city) => (
+                        <option key={city.code} value={city.name} className="bg-night-800">{city.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold text-slate-300">مقصد</span>
+                    <select
+                      value={travelData.destination}
+                      onChange={(event) => changeJourney("destination", event.target.value)}
+                      className="field min-h-12 cursor-pointer appearance-none bg-night-800 text-white"
+                    >
+                      <option value="" className="bg-night-800">انتخاب مقصد</option>
+                      {IRANIAN_CITIES.map((city) => (
+                        <option key={city.code} value={city.name} className="bg-night-800">{city.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <JalaliDatePicker
+                  value={travelData.departureDate}
+                  min={todayIso()}
+                  onChange={(departureDate) => changeJourney("departureDate", departureDate)}
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2" aria-label="انتخاب نوع حمل‌ونقل">
                 {([
                   { id: "plane" as const, label: "✈️ هواپیما" },
                   { id: "train" as const, label: "🚂 قطار" },
@@ -679,28 +740,15 @@ function TransportPageContent() {
                   </button>
                 ))}
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-300">تاریخ حرکت</span>
-                  <input
-                    type="date"
-                    value={travelData.departureDate}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={(event) => setTravelData((current) => ({ ...current, departureDate: event.target.value }))}
-                    className="field min-h-12 bg-night-800 text-left text-white"
-                    dir="ltr"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={searchTickets}
-                  disabled={searchLoading}
-                  className="btn-primary self-end !min-h-12 !px-6 !text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {searchLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
-                  {searchLoading ? "در حال جستجو..." : "جستجوی بلیت واقعی"}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={searchTickets}
+                disabled={searchLoading}
+                className="btn-primary mt-5 w-full !min-h-12 !px-6 !text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {searchLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
+                {searchLoading ? "در حال جستجو..." : "جستجوی بلیت واقعی"}
+              </button>
             </div>
 
             {searchError && (
@@ -730,8 +778,8 @@ function TransportPageContent() {
                     <div className="flex flex-wrap items-center justify-between gap-5 lg:justify-end">
                       <div className="text-left">
                         <span className="block text-[10px] text-slate-500">حرکت</span>
-                        <b className="block text-base text-white" dir="ltr">{offer.departure}</b>
-                        {offer.arrival && <span className="mt-1 block text-[10px] text-slate-500" dir="ltr">رسیدن {offer.arrival}</span>}
+                        <b className="block text-sm leading-7 text-white">{formatProviderDateTime(offer.departure)}</b>
+                        {offer.arrival && <span className="mt-1 block text-[10px] leading-5 text-slate-500">رسیدن: {formatProviderDateTime(offer.arrival)}</span>}
                       </div>
                       <div className="text-left">
                         <b className="block text-base font-black text-turquoise-200">{formatToman(offer.priceToman)}</b>
