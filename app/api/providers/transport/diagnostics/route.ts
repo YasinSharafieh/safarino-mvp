@@ -24,7 +24,18 @@ export async function POST(request: NextRequest) {
     searchAlibabaTrains({ origin: "THR", destination: "MHD", date, adults: 2, children: 0, infants: 0 }).catch((error) => ({ error: String(error) })),
   ]);
 
+  const apiPaths = Array.from(new Set((html.match(/\/api\/[a-zA-Z0-9/_\-\.\?=&{}]+/g) ?? []).map((value) => value.slice(0, 90)))).slice(0, 25);
+  const fadakHosts = Array.from(new Set((html.match(/https?:\/\/[a-zA-Z0-9.\-]*fadak[a-zA-Z0-9.\-]*/g) ?? []))).slice(0, 15);
+  const legacyGround = await fetch("https://safarino-mvp.vercel.app/api/providers/alibaba/ground", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "train", origin: "THR", destination: "MHD", date, adults: 2, children: 0, infants: 0 }),
+  }).then(async (response) => ({ status: response.status, body: (await response.text()).slice(0, 300) })).catch((error) => ({ status: 0, body: String(error) }));
+
   return NextResponse.json({
+    apiPaths,
+    fadakHosts,
+    legacyGround,
     date,
     httpStatus: raw.status,
     htmlLength: html.length,
