@@ -25,6 +25,7 @@ import AccommodationCard from "@/components/AccommodationCard";
 import ProviderBadge from "@/components/ProviderBadge";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
+import FilterSelect from "@/components/FilterSelect";
 import { useTravel } from "../context/TravelContext";
 import { categorizeStay, STAY_TYPE_FILTERS } from "@/lib/accommodation-types";
 import type { AccommodationGroup, AccommodationKind, AccommodationOffer, ProviderSearchStatus } from "@/lib/accommodation-types";
@@ -37,6 +38,18 @@ const compactFormatter = new Intl.NumberFormat("fa-IR", { maximumFractionDigits:
 const formatNumber = (value: number) => numberFormatter.format(Math.round(value));
 const formatToman = (value: number) => `${formatNumber(value)} تومان`;
 const formatCompact = (value: number) => `${compactFormatter.format(value / 1_000_000)} میلیون تومان`;
+
+/** Folds Persian/Arabic letter variants and zero-width joiners so a typed name still matches. */
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[۰-۹٠-٩]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩".indexOf(digit) % 10))
+    .replace(/ي/g, "ی")
+    .replace(/ك/g, "ک")
+    .replace(/\u200c/g, " ")
+    .replace(/\s+/g, " ");
+}
 
 type SearchResponse = {
   success: boolean;
@@ -91,6 +104,7 @@ export default function AccommodationPage() {
   const [stayType, setStayType] = useState("all");
   const [amenity, setAmenity] = useState("all");
   const [sort, setSort] = useState<"price" | "rating">("price");
+  const [nameQuery, setNameQuery] = useState("");
   const [budgetOnly, setBudgetOnly] = useState(false);
 
   const accommodation = travelData.accommodation;
@@ -311,7 +325,9 @@ export default function AccommodationPage() {
 
   const filteredGroups = useMemo(() => {
     const filtered = groups.flatMap((group) => {
+      const needle = normalizeSearchText(nameQuery);
       const matching = group.offers.filter((offer) => {
+        if (needle && !`${offer.name} ${offer.location} ${offer.typeLabel}`.toLowerCase().replace(/\u200c/g, " ").includes(needle)) return false;
         if (offer.priceTotalToman > maxTotalPrice) return false;
         if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
         if (minRating && (offer.rating || 0) < minRating) return false;
@@ -338,9 +354,10 @@ export default function AccommodationPage() {
     return filtered.sort((a, b) => sort === "price"
       ? a.offers[0].priceTotalToman - b.offers[0].priceTotalToman
       : (b.offers[0].rating || 0) - (a.offers[0].rating || 0) || b.offers[0].reviewCount - a.offers[0].reviewCount);
-  }, [amenity, beforeAccommodation, budgetOnly, groups, kind, maxTotalPrice, minRating, minStars, sort, stayType]);
+  }, [amenity, beforeAccommodation, budgetOnly, groups, kind, maxTotalPrice, minRating, minStars, nameQuery, sort, stayType]);
 
   function resetFilters() {
+    setNameQuery("");
     setMaxTotalPrice(50_000_000);
     setMinRating(0);
     setMinStars(0);
@@ -499,15 +516,33 @@ export default function AccommodationPage() {
                     <div className="flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-base font-black text-white"><SlidersHorizontal className="h-5 w-5 text-cyan-300" />فیلترها</h2><button type="button" onClick={resetFilters} className="text-[10px] text-slate-500 hover:text-cyan-300">پاک‌کردن</button></div>
                     <label className="mt-6 block border-b border-white/5 pb-6"><span className="flex items-center justify-between gap-2 text-xs font-bold text-slate-300"><span>حداکثر قیمت کل</span><b className="text-cyan-200">{formatCompact(maxTotalPrice)}</b></span><input dir="ltr" type="range" min="1000000" max="100000000" step="1000000" value={maxTotalPrice} onChange={(event) => setMaxTotalPrice(Number(event.target.value))} className="mt-4 w-full accent-cyan-400" aria-label="حداکثر قیمت کل اقامت" /></label>
                     <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-3"><input type="checkbox" checked={budgetOnly} onChange={(event) => setBudgetOnly(event.target.checked)} className="mt-1 h-4 w-4 accent-cyan-400" /><span><b className="block text-[11px] text-cyan-100">فقط داخل بودجهٔ باقی‌مانده</b><small className="mt-1 block text-[10px] leading-5 text-slate-500">سقف: {formatToman(Math.max(0, beforeAccommodation))}</small></span></label>
-                    <label className="mt-5 block text-xs font-bold text-slate-300">حداقل امتیاز مسافران<select value={minRating} onChange={(event) => setMinRating(Number(event.target.value))} className="field mt-2 !py-2.5 text-xs"><option value="0">همه امتیازها</option><option value="3">۳ به بالا</option><option value="4">۴ به بالا</option><option value="4.5">۴٫۵ به بالا</option></select></label>
+                    <FilterSelect label="حداقل امتیاز مسافران" value={String(minRating)} onChange={(next) => setMinRating(Number(next))} options={[{ value: "0", label: "همه امتیازها" }, { value: "3", label: "۳ به بالا" }, { value: "4", label: "۴ به بالا" }, { value: "4.5", label: "۴٫۵ به بالا" }]} />
                     {kind === "hotel" ? <>
-                      <label className="mt-5 block text-xs font-bold text-slate-300">حداقل ستاره هتل<select value={minStars} onChange={(event) => setMinStars(Number(event.target.value))} className="field mt-2 !py-2.5 text-xs"><option value="0">همه هتل‌ها</option>{[2, 3, 4, 5].map((value) => <option key={value} value={value}>{formatNumber(value)} ستاره به بالا</option>)}</select></label>
-                      <label className="mt-5 block text-xs font-bold text-slate-300">امکانات<select value={amenity} onChange={(event) => setAmenity(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option><option value="breakfast">صبحانه</option><option value="wifi">اینترنت / WiFi</option><option value="pool">استخر</option><option value="parking">پارکینگ</option></select></label>
-                    </> : <label className="mt-5 block text-xs font-bold text-slate-300">نوع اقامتگاه<select value={stayType} onChange={(event) => setStayType(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option>{STAY_TYPE_FILTERS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>}
-                    <label className="mt-5 block text-xs font-bold text-slate-300">مرتب‌سازی<select value={sort} onChange={(event) => setSort(event.target.value as "price" | "rating")} className="field mt-2 !py-2.5 text-xs"><option value="price">ارزان‌ترین قیمت کل</option><option value="rating">بالاترین امتیاز</option></select></label>
+                      <FilterSelect label="حداقل ستاره هتل" value={String(minStars)} onChange={(next) => setMinStars(Number(next))} options={[{ value: "0", label: "همه هتل‌ها" }, ...[2, 3, 4, 5].map((value) => ({ value: String(value), label: `${formatNumber(value)} ستاره به بالا` }))]} />
+                      <FilterSelect label="امکانات" value={amenity} onChange={setAmenity} options={[{ value: "all", label: "همه امکانات" }, { value: "breakfast", label: "صبحانه" }, { value: "wifi", label: "اینترنت / WiFi" }, { value: "pool", label: "استخر" }, { value: "parking", label: "پارکینگ" }]} />
+                    </> : <FilterSelect label="نوع اقامتگاه" value={stayType} onChange={setStayType} options={[{ value: "all", label: "همه" }, ...STAY_TYPE_FILTERS.map((item) => ({ value: item.key, label: item.label }))]} />}
+                    <FilterSelect label="مرتب‌سازی" value={sort} onChange={(next) => setSort(next as "price" | "rating")} options={[{ value: "price", label: "ارزان‌ترین قیمت کل" }, { value: "rating", label: "بالاترین امتیاز" }]} />
                   </aside>
 
                   <section>
+                    <div className="glass mb-5 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300/70" />
+                        <input
+                          type="search"
+                          value={nameQuery}
+                          onChange={(event) => setNameQuery(event.target.value)}
+                          placeholder="جستجو در همین نتایج: نام هتل یا اقامتگاه…"
+                          aria-label="جستجوی نام اقامتگاه در نتایج"
+                          className="field !py-2.5 pr-11 text-xs"
+                        />
+                      </div>
+                      {nameQuery && (
+                        <button type="button" onClick={() => setNameQuery("")} className="btn-ghost shrink-0 !px-4 !py-2.5 text-[11px]">
+                          <RotateCcw className="h-3.5 w-3.5" />پاک‌کردن جستجو
+                        </button>
+                      )}
+                    </div>
                     <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
 
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (

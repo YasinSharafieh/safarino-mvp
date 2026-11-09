@@ -17,6 +17,7 @@ import {
   MapPin,
   Plane,
   Route,
+  Search,
   SlidersHorizontal,
   Sparkles,
   TrainFront,
@@ -30,6 +31,7 @@ import CityCombobox from "@/components/CityCombobox";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
 import ProviderLogo from "@/components/ProviderLogo";
+import FilterSelect from "@/components/FilterSelect";
 import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
 import { addDaysToIso, formatProviderDateTime, todayIso } from "@/lib/jalali";
@@ -130,6 +132,13 @@ type LiveOffer = {
   provider?: "alibaba" | "safar724";
   bookingUrl?: string;
   bookingNote?: string;
+  alsoAvailableAt?: {
+    provider: "alibaba" | "safar724";
+    providerLabel: string;
+    priceToman: number;
+    bookingUrl: string;
+    seatsLeft: number | null;
+  }[];
 };
 
 type ProviderStatus = {
@@ -236,6 +245,7 @@ function TransportPageContent() {
   const [returnOffers, setReturnOffers] = useState<LiveOffer[]>([]);
   const [activeLeg, setActiveLeg] = useState<"outbound" | "return">("outbound");
   const [searchLoading, setSearchLoading] = useState(false);
+  const [offerQuery, setOfferQuery] = useState("");
   const [searchError, setSearchError] = useState("");
   const [providerMeta, setProviderMeta] = useState<{ bookingUrl?: string; fetchedAt?: string }>({});
   const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([]);
@@ -442,7 +452,16 @@ function TransportPageContent() {
 
   const selectedName = TRANSPORT_OPTIONS.find((option) => option.id === selection.vehicleId)?.name;
   const searchModeName = TRANSPORT_OPTIONS.find((option) => option.id === searchMode)?.name;
-  const visibleOffers = activeLeg === "return" ? returnOffers : offers;
+  const legOffers = activeLeg === "return" ? returnOffers : offers;
+  const needle = offerQuery.trim().toLowerCase().replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ");
+  const visibleOffers = needle
+    ? legOffers.filter((offer) => `${offer.title} ${offer.subtitle} ${offer.details?.join(" ") || ""} ${TRANSPORT_PROVIDER_LABELS[offer.provider || "alibaba"] || ""}`
+        .toLowerCase()
+        .replace(/ي/g, "ی")
+        .replace(/ك/g, "ک")
+        .replace(/\u200c/g, " ")
+        .includes(needle))
+    : legOffers;
   const budgetDifference = budget - selection.cost;
 
   function verifiedOfferTotal(offer: LiveOffer): number | null {
@@ -870,6 +889,25 @@ function TransportPageContent() {
               </button>
             </div>
 
+            {(offers.length > 0 || returnOffers.length > 0) && (
+              <div className="flex flex-col gap-2 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300/70" />
+                  <input
+                    type="search"
+                    value={offerQuery}
+                    onChange={(event) => setOfferQuery(event.target.value)}
+                    placeholder={`جستجو در ${formatNumber(legOffers.length)} بلیت یافته‌شده: نام شرکت، سرویس یا منبع…`}
+                    aria-label="جستجوی نام شرکت یا سرویس در بلیت‌های یافته‌شده"
+                    className="field !py-2.5 pr-11 text-xs"
+                  />
+                </div>
+                <span className="shrink-0 text-[10px] text-slate-400">
+                  {formatNumber(visibleOffers.length)} از {formatNumber(legOffers.length)} بلیت
+                </span>
+              </div>
+            )}
+
             {providerStatuses.length > 0 && (
               <div className="flex flex-wrap gap-2 border-b border-white/10 bg-white/[0.02] p-4" aria-label="وضعیت منابع بلیت">
                 {providerStatuses.map((status) => (
@@ -923,6 +961,20 @@ function TransportPageContent() {
                         </div>
                         <span className="mt-1 block text-[11px] text-slate-400">{offer.subtitle}</span>
                         {offer.details?.length ? <span className="mt-1 block text-[10px] text-slate-500">{offer.details.join(" · ")}</span> : null}
+                        {offer.alsoAvailableAt?.length ? (
+                          <span className="mt-2 block text-[10px] leading-5 text-slate-400">
+                            همین بلیت در{" "}
+                            {offer.alsoAvailableAt.map((alternate, alternateIndex) => (
+                              <span key={`${alternate.provider}-${alternateIndex}`}>
+                                {alternateIndex > 0 ? " و " : ""}
+                                <a href={alternate.bookingUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-cyan-200 underline decoration-cyan-400/40 underline-offset-4 hover:text-cyan-100">
+                                  {alternate.providerLabel}
+                                </a>{" "}
+                                هم هست ({formatToman(alternate.priceToman)})
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-5 lg:justify-end">
@@ -982,7 +1034,7 @@ function TransportPageContent() {
               {visibleOffers.length > 0 && (
                 <p className="max-w-md text-[10px] leading-5 text-slate-500">
                   هر بلیت لینک خرید همان منبع را دارد؛ نام شرکت و ساعت ردیف را با بلیت انتخابی تطبیق بده.
-                  {duplicateCount > 0 ? ` ${formatNumber(duplicateCount)} پیشنهاد تکراری بین منابع ادغام شد.` : ""}
+                  {duplicateCount > 0 ? ` ${formatNumber(duplicateCount)} مورد یکسان (همان شرکت و همان ساعت، حتی با نام‌های کمی متفاوت) ادغام شد و لینک سایر منابع زیر همان بلیت آمده است.` : ""}
                 </p>
               )}
             </div>

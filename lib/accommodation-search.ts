@@ -34,16 +34,62 @@ const PROVIDERS: Record<AccommodationProvider, { kinds: readonly ("hotel" | "sta
 
 const PROVIDER_ORDER: AccommodationProvider[] = ["alibaba", "jajiga", "jabama", "snapptrip", "otaghak", "eghamat24"];
 
-function comparableName(offer: AccommodationOffer): string {
-  const generic = new Set(["هتل", "اقامتگاه", "رزرو", "آنلاین", "در", "شهر"]);
-  const city = normalizeTerm(offer.location.split("،")[0] || "");
-  return normalizeTerm(offer.name)
-    .replace(/\//g, " ")
-    .replace(/[-_[\]{}()"«».,،؛:!?\\]+/g, " ")
-    .split(/\s+/)
-    .filter((token) => token && !generic.has(token) && token !== city)
-    .join(" ")
+const GENERIC_NAME_TOKENS = new Set([
+  "هتل", "هتل‌آپارتمان", "هتل‌اپارتمان", "آپارتمان", "اپارتمان", "سوئیت", "سوییت", "اقامتگاه",
+  "بوتیک", "مهمان‌پذیر", "مهمان‌سرا", "مهمانخانه", "مسافرخانه", "اقامت", "خونه", "خانه",
+  "ویلا", "دفتر", "شعبه", "رزرو", "آنلاین", "انلاین", "شب", "از", "در", "با", "و",
+  "ستاره", "بزرگ", "کوچک", "بین‌المللی", "ایرانی", "ایرانگردی",
+  "hotel", "apartment", "suite", "resort", "hostel", "guest", "house", "inn", "boutique",
+]);
+
+/** Folds letter variants, digits, punctuation and joins so two spellings meet in the middle. */
+function fold(value: string): string {
+  return normalizeTerm(value || "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ۀ|ة/g, "ه")
+    .replace(/[\u200c\u200e\u200f]/g, " ")
+    .replace(/[«»"'()\[\]{}.,،؛:!?\\/|_-]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function cityTokens(offer: AccommodationOffer): string[] {
+  return fold(offer.location.split("،")[0] || "")
+    .split(" ")
+    .filter(Boolean);
+}
+
+/** Name words that actually identify the property, with the city and trading words removed. */
+function nameTokens(offer: AccommodationOffer): string[] {
+  const city = new Set(cityTokens(offer));
+  return fold(offer.name)
+    .split(" ")
+    .filter((token) => token && !GENERIC_NAME_TOKENS.has(token) && !city.has(token));
+}
+
+function comparableName(offer: AccommodationOffer): string {
+  return nameTokens(offer).join(" ");
+}
+
+function nameSimilarity(a: AccommodationOffer, b: AccommodationOffer): number {
+  const left = nameTokens(a);
+  const right = nameTokens(b);
+  if (!left.length || !right.length) return 0;
+  const first = new Set(left);
+  const second = new Set(right);
+  let shared = 0;
+  first.forEach((token) => { if (second.has(token)) shared += 1; });
+  const jaccard = shared / (first.size + second.size - shared);
+  const containment = shared / Math.min(first.size, second.size);
+  // Containment catches "پارس" vs "پارس آپارتمان" where one listing simply adds words.
+  return Math.max(jaccard, containment * 0.95);
+}
+
+/** A shared distinctive word (long, not a number) is required before merging two names. */
+function hasDistinctiveOverlap(a: AccommodationOffer, b: AccommodationOffer): boolean {
+  const right = new Set(nameTokens(b));
+  return nameTokens(a).some((token) => right.has(token) && token.length >= 4 && !/^\d+$/.test(token));
 }
 
 function distanceMeters(a: AccommodationOffer, b: AccommodationOffer): number | null {
@@ -63,11 +109,38 @@ function sharedInventory(a: AccommodationOffer, b: AccommodationOffer): boolean 
     a.providerPropertyId === b.providerPropertyId;
 }
 
+function sameCity(a: AccommodationOffer, b: AccommodationOffer): boolean {
+  const left = cityTokens(a).join(" ");
+  const right = cityTokens(b).join(" ");
+  return !left || !right || left === right;
+}
+
+function starsCompatible(a: AccommodationOffer, b: AccommodationOffer): boolean {
+  return a.stars === null || b.stars === null || a.stars === b.stars;
+}
+
 function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boolean {
-  if (a.kind !== b.kind || !comparableName(a) || comparableName(a).length < 3 || comparableName(a) !== comparableName(b)) return false;
-  if (a.stars !== null && b.stars !== null && a.stars !== b.stars) return false;
+  if (a.kind !== b.kind) return false;
+  if (!comparableName(a) || comparableName(a).length < 2) return false;
+  if (!sameCity(a, b) || !starsCompatible(a, b)) return false;
+  if (!hasDistinctiveOverlap(a, b)) return false;
+
   const distance = distanceMeters(a, b);
-  return distance !== null && distance <= 200;
+  const exactName = comparableName(a) === comparableName(b);
+  const similarity = nameSimilarity(a, b);
+
+  // With coordinates, the two cards must also sit at the same place (allowing a small pin drift).
+  if (distance !== null) {
+    if (exactName && distance <= 400) return true;
+    return similarity >= 0.8 && distance <= 400;
+  }
+
+  // Without coordinates on either side a name is not proof on its own: both cards must also
+  // publish the same star rating, otherwise two different places with a generic name merge.
+  const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
+  if (!ratedBoth) return false;
+  if (exactName) return true;
+  return similarity >= 0.9;
 }
 
 function compatible(a: AccommodationOffer, b: AccommodationOffer): "shared_inventory" | "verified_name_location" | null {

@@ -108,3 +108,28 @@ assert.deepEqual(categorizeStay("اقامتگاه", "مجتمع اقامتی س�
 assert.equal(categorizeStay("", "اقامتگاه ساحلی").key, null);
 
 console.log("Accommodation normalization and conservative deduplication tests passed.");
+
+// Same property, different spelling across two providers (extra words, punctuation, Arabic letters).
+const nearName = deduplicateAccommodationOffers([
+  offer({ id: "h1", kind: "hotel", provider: "jabama", providerPropertyId: "h1", name: "هتل بین‌المللی پارسیس مشهد", location: "مشهد، خیابان امام رضا", latitude: 36.2896, longitude: 59.6289, stars: 5 }),
+  offer({ id: "h2", kind: "hotel", provider: "eghamat24", providerPropertyId: "h2", name: "پارسیس (مشهد)", location: "مشهد", latitude: 36.2897, longitude: 59.6290, stars: 5 }),
+]);
+assert.equal(nearName.length, 1, "near-identical hotel names at the same spot merge");
+assert.equal(nearName[0].offers.length, 2, "both purchase links stay inside the merged card");
+assert.ok(nearName[0].offers.every((item) => item.bookingUrl.length > 10));
+
+// Two genuinely different hotels in the same city must never merge, however similar the words.
+const differentHotel = deduplicateAccommodationOffers([
+  offer({ id: "d1", kind: "hotel", name: "هتل پارس مشهد", location: "مشهد", latitude: 36.29, longitude: 59.60, stars: 4 }),
+  offer({ id: "d2", kind: "hotel", provider: "snapptrip", providerPropertyId: "d2", name: "هتل پارسیان مشهد", location: "مشهد", latitude: 36.31, longitude: 59.55, stars: 4 }),
+]);
+assert.equal(differentHotel.length, 2, "a different name and a different pin stay separate");
+
+// One provider without coordinates still merges when the name and the star rating match.
+const oneSideMissing = deduplicateAccommodationOffers([
+  offer({ id: "m1", kind: "hotel", name: "هتل قصر طلایی مشهد", location: "مشهد", latitude: 36.3, longitude: 59.6, stars: 5 }),
+  offer({ id: "m2", kind: "hotel", provider: "otaghak", providerPropertyId: "m2", name: "قصر طلایی", location: "مشهد", latitude: null, longitude: null, stars: 5 }),
+]);
+assert.equal(oneSideMissing.length, 1, "same name and same stars merge even without coordinates");
+
+console.log("Accommodation near-name deduplication tests passed.");

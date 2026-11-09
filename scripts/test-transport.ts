@@ -34,4 +34,39 @@ const deduped = dedupeTransportOffers(dupes);
 assert.equal(deduped.removed, 1, "same operator, same minute, near price = one offer");
 assert.equal(deduped.offers.length, 2, "a different departure time stays separate");
 
+// Near-identical operator spellings across providers must collapse to one row,
+// while a different class/price or a different company must stay separate.
+const mk = (id: string, provider: "alibaba" | "safar724", operator: string, departure: string, price: number): TransportOffer => ({
+  id, provider, mode: "bus", operator, serviceLabel: "VIP", departure, arrival: null, priceToman: price,
+  childPriceToman: null, infantPriceToman: null, seatsLeft: 5, details: [], bookingUrl: `https://example.test/${id}`, bookingNote: "",
+});
+const nearNames = dedupeTransportOffers([
+  mk("a1", "alibaba", "تعاونی ۱۱ آریا سفر", "2026-11-20T18:00:00", 1_100_000),
+  mk("s1", "safar724", "آریا سفر", "2026-11-20T18:05:00", 1_150_000),
+  mk("a2", "alibaba", "تعاونی ۲۲ پارس", "2026-11-20T18:00:00", 1_100_000),
+  mk("s2", "safar724", "پارس ترابر", "2026-11-20T18:00:00", 1_100_000),
+  mk("s3", "safar724", "آریا سفر", "2026-11-20T18:00:00", 2_600_000),
+]);
+assert.equal(nearNames.removed, 1, "only the near-identical operator/time/price pair collapses");
+assert.equal(nearNames.offers.length, 4, "other companies and other price classes survive");
+const merged = nearNames.offers.find((offer: TransportOffer) => offer.id === "a1");
+assert.ok(merged?.alsoAvailableAt?.length === 1, "the second provider stays reachable through the merged row");
+assert.equal(merged?.alsoAvailableAt?.[0].bookingUrl, "https://example.test/s1");
+assert.equal(merged?.alsoAvailableAt?.[0].providerLabel, "سفر۷۲۴");
+
+// The same provider repeating the exact row must not be listed twice.
+const sameProvider = dedupeTransportOffers([
+  mk("x1", "safar724", "تعاونی ۱۱ آریا سفر", "2026-11-20T18:00:00", 1_100_000),
+  mk("x2", "safar724", "تعاونی 11 آریا سفر", "2026-11-20T18:00:00", 1_100_000),
+]);
+assert.equal(sameProvider.offers.length, 1, "exact repeat inside one provider collapses");
+assert.equal(sameProvider.offers[0].alsoAvailableAt, undefined, "no self-link when the sources match");
+
+// Persian digits, Arabic yeh/kaf and punctuation must not split the same company.
+const spelling = dedupeTransportOffers([
+  mk("p1", "alibaba", "شركت تعاوني ۱۲ سير و سفر", "2026-11-20T22:00:00", 900_000),
+  mk("p2", "safar724", "سیر و سفر", "2026-11-20T21:58:00", 905_000),
+]);
+assert.equal(spelling.offers.length, 1, "Arabic-letter and digit spellings of one company collapse");
+
 console.log("Transport provider parsing and deduplication tests passed.");
