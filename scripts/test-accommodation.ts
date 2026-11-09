@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { AccommodationOffer, AccommodationSearchInput } from "../lib/accommodation-types";
+import { categorizeStay } from "../lib/accommodation-types";
 import { normalizeJajigaRows } from "../lib/jajiga-accommodation";
 import { normalizeJabamaRows } from "../lib/jabama-accommodation";
 import { normalizeOtaghakRows } from "../lib/otaghak-accommodation";
@@ -98,5 +99,12 @@ const differentStars = deduplicateAccommodationOffers([
   offer({ id: "b", provider: "snapptrip", kind: "hotel", stars: 5 }),
 ]);
 assert.equal(differentStars.length, 2, "Different star ratings are not merged speculatively");
+
+assert.deepEqual(categorizeStay("ویلا و اقامتگاه", "سوئیت در جاده ماسوله - همکف"), { key: "suite", label: "سوئیت" });
+assert.deepEqual(categorizeStay("سوییت", "دنج سرسبز"), { key: "suite", label: "سوئیت" });
+assert.deepEqual(categorizeStay("خانه مسافر", "خانه مسافر خوشحال دوست"), { key: "house", label: "خانه مسافر" });
+assert.deepEqual(categorizeStay("ویلا", "ویلا یک خوابه چلچراغ"), { key: "villa", label: "ویلا" });
+assert.deepEqual(categorizeStay("اقامتگاه", "مجتمع اقامتی سیلوانه"), { key: "complex", label: "مجتمع اقامتگاهی" });
+assert.equal(categorizeStay("", "اقامتگاه ساحلی").key, null);
 
 console.log("Accommodation normalization and conservative deduplication tests passed.");

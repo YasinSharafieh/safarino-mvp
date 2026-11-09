@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Check, ExternalLink, MapPin, Star } from "lucide-react";
 import type { AccommodationGroup, AccommodationOffer } from "@/lib/accommodation-types";
-import { PROVIDER_LABELS } from "@/lib/accommodation-types";
+import { categorizeStay, PROVIDER_LABELS } from "@/lib/accommodation-types";
 import AccommodationImage from "./AccommodationImage";
 import ProviderBadge, { ProviderMark } from "./ProviderBadge";
 
@@ -41,7 +41,7 @@ export default function AccommodationCard({
       <div className="relative h-52 overflow-hidden">
         <AccommodationImage src={offer.imageUrl} alt={offer.name} />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-night-950/95 via-transparent to-night-950/20" />
-        <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{offer.typeLabel}</span>
+        <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{offer.kind === "stay" ? categorizeStay(offer.typeLabel, offer.name).label || offer.typeLabel : offer.typeLabel}</span>
         {offer.rating ? <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/70 px-2.5 py-1 text-[11px] font-black text-cyan-300 backdrop-blur-md"><Star className="h-3.5 w-3.5 fill-cyan-300" />{compactFormatter.format(offer.rating)}</span> : null}
         <div className="absolute bottom-3 right-3 left-3">
           <ProviderBadge provider={offer.provider} inverse className="mb-2" />

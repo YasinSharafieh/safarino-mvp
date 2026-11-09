@@ -26,6 +26,7 @@ import ProviderBadge from "@/components/ProviderBadge";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
 import { useTravel } from "../context/TravelContext";
+import { categorizeStay, STAY_TYPE_FILTERS } from "@/lib/accommodation-types";
 import type { AccommodationGroup, AccommodationKind, AccommodationOffer, ProviderSearchStatus } from "@/lib/accommodation-types";
 import { IRANIAN_CITIES } from "@/lib/iran-cities";
 import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
@@ -315,7 +316,7 @@ export default function AccommodationPage() {
         if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
         if (minRating && (offer.rating || 0) < minRating) return false;
         if (kind === "hotel" && minStars && (offer.stars || 0) < minStars) return false;
-        if (kind === "stay" && stayType !== "all" && ![offer.typeLabel, offer.name, ...offer.details].join(" ").includes(stayType)) return false;
+        if (kind === "stay" && stayType !== "all" && categorizeStay(offer.typeLabel, offer.name).key !== stayType) return false;
         if (amenity !== "all") {
           const text = [...offer.details, ...offer.amenities].join(" ").toLowerCase();
           const terms: Record<string, RegExp> = {
@@ -502,7 +503,7 @@ export default function AccommodationPage() {
                     {kind === "hotel" ? <>
                       <label className="mt-5 block text-xs font-bold text-slate-300">حداقل ستاره هتل<select value={minStars} onChange={(event) => setMinStars(Number(event.target.value))} className="field mt-2 !py-2.5 text-xs"><option value="0">همه هتل‌ها</option>{[2, 3, 4, 5].map((value) => <option key={value} value={value}>{formatNumber(value)} ستاره به بالا</option>)}</select></label>
                       <label className="mt-5 block text-xs font-bold text-slate-300">امکانات<select value={amenity} onChange={(event) => setAmenity(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option><option value="breakfast">صبحانه</option><option value="wifi">اینترنت / WiFi</option><option value="pool">استخر</option><option value="parking">پارکینگ</option></select></label>
-                    </> : <label className="mt-5 block text-xs font-bold text-slate-300">نوع اقامتگاه<select value={stayType} onChange={(event) => setStayType(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option>{["ویلا", "سوئیت", "آپارتمان", "کلبه", "خانه سنتی", "بوم‌گردی", "مجتمع اقامتگاهی", "هاستل"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+                    </> : <label className="mt-5 block text-xs font-bold text-slate-300">نوع اقامتگاه<select value={stayType} onChange={(event) => setStayType(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option>{STAY_TYPE_FILTERS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>}
                     <label className="mt-5 block text-xs font-bold text-slate-300">مرتب‌سازی<select value={sort} onChange={(event) => setSort(event.target.value as "price" | "rating")} className="field mt-2 !py-2.5 text-xs"><option value="price">ارزان‌ترین قیمت کل</option><option value="rating">بالاترین امتیاز</option></select></label>
                   </aside>
 
