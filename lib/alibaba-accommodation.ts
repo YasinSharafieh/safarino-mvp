@@ -5,6 +5,9 @@ import { STAY_TYPE_LABELS } from "./accommodation-types";
 export type { AccommodationKind, AccommodationOffer, AccommodationSearchInput } from "./accommodation-types";
 
 const SITE_ROOT = "https://www.alibaba.ir";
+const PAGE_SIZE = 60;
+/** Extra result pages read on top of the first one, so the request stays inside the serverless limit. */
+const EXTRA_PAGES = 2;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -151,21 +154,33 @@ async function searchHotels(input: AccommodationSearchInput) {
     removeOutlier: false,
     sort: { order: 1, field: "minPrice" },
     skip: 0,
-    limit: 60,
+    limit: PAGE_SIZE,
   };
-  let result: Record<string, unknown> = {};
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    result = record(await alibabaRequest(`v1/hotel/result?${new URLSearchParams(place).toString()}`, { body }));
-    if ((finiteNumber(result.progress) ?? 100) >= 100) break;
-    if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-  if ((finiteNumber(result.progress) ?? 0) < 100) throw new Error("ALIBABA_HOTEL_SEARCH_INCOMPLETE");
+  const fetchPage = async (skip: number) => {
+    let result: Record<string, unknown> = {};
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      result = record(await alibabaRequest(`v1/hotel/result?${new URLSearchParams(place).toString()}`, { body: { ...body, skip } }));
+      if ((finiteNumber(result.progress) ?? 100) >= 100) break;
+      if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+    if ((finiteNumber(result.progress) ?? 0) < 100) throw new Error("ALIBABA_HOTEL_SEARCH_INCOMPLETE");
+    return result;
+  };
+
+  const firstPage = await fetchPage(0);
+  const found = Math.max(0, Math.round(finiteNumber(record(firstPage.info).totalResultNo) || 0));
   const context = { input, cityId: city.cityId, countryCode: city.countryCode, sessionId };
-  return {
-    offers: normalizeHotelRows(result.result, context),
-    found: Math.max(0, Math.round(finiteNumber(record(result.info).totalResultNo) || 0)),
-    resolvedCity: city.name,
-  };
+  const offers = normalizeHotelRows(firstPage.result, context);
+  const extraPages = Math.min(EXTRA_PAGES, Math.max(0, Math.ceil((found - offers.length) / PAGE_SIZE)));
+  const extraResults = await Promise.all(
+    Array.from({ length: extraPages }, (_, index) => fetchPage(PAGE_SIZE * (index + 1)).catch(() => null)),
+  );
+  const merged = new Map(offers.map((offer) => [offer.id, offer]));
+  for (const result of extraResults) {
+    if (!result) continue;
+    for (const offer of normalizeHotelRows(result.result, context)) merged.set(offer.id, offer);
+  }
+  return { offers: Array.from(merged.values()), found, resolvedCity: city.name };
 }
 
 export function normalizeStayRows(value: unknown, input: AccommodationSearchInput): AccommodationOffer[] {
@@ -236,10 +251,11 @@ async function stayPlace(city: string) {
 async function searchStays(input: AccommodationSearchInput) {
   const place = await stayPlace(input.city);
   const guests = input.adults + input.childAges.length + input.infantAges.length;
-  const payload = record(await alibabaRequest("v2/accommodation/Available/Search", {
-    body: {
-      pageSize: 60,
-      pageNumber: 1,
+  const fetchPage = async (pageNumber: number) => {
+    const payload = record(await alibabaRequest("v2/accommodation/Available/Search", {
+      body: {
+      pageSize: PAGE_SIZE,
+      pageNumber,
       location: place.slug,
       date: { startTime: tehranMidnight(input.checkIn), endTime: tehranMidnight(input.checkOut) },
       filters: {
@@ -251,13 +267,24 @@ async function searchStays(input: AccommodationSearchInput) {
         scores: [],
         guarantees: false,
       },
-    },
-  }));
-  return {
-    offers: normalizeStayRows(payload.items, input),
-    found: Math.max(0, Math.round(finiteNumber(payload.total) || 0)),
-    resolvedCity: place.name,
+      },
+    }));
+    return payload;
   };
+
+  const firstPage = await fetchPage(1);
+  const found = Math.max(0, Math.round(finiteNumber(firstPage.total) || 0));
+  const offers = normalizeStayRows(firstPage.items, input);
+  const extraPages = Math.min(EXTRA_PAGES, Math.max(0, Math.ceil((found - offers.length) / PAGE_SIZE)));
+  const extra = await Promise.all(
+    Array.from({ length: extraPages }, (_, index) => fetchPage(index + 2).catch(() => null)),
+  );
+  const merged = new Map(offers.map((offer) => [offer.id, offer]));
+  for (const payload of extra) {
+    if (!payload) continue;
+    for (const offer of normalizeStayRows(payload.items, input)) merged.set(offer.id, offer);
+  }
+  return { offers: Array.from(merged.values()), found, resolvedCity: place.name };
 }
 
 export async function searchAlibabaAccommodation(input: AccommodationSearchInput) {
