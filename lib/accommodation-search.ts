@@ -109,10 +109,18 @@ function sharedInventory(a: AccommodationOffer, b: AccommodationOffer): boolean 
     a.providerPropertyId === b.providerPropertyId;
 }
 
+/**
+ * Providers format the address differently ("مشهد، خیابان…" vs "آدرس: مشهد- …"), so a strict
+ * string comparison rejects the same city. Two cards count as one city when their addresses
+ * share a place word or one address contains the other.
+ */
 function sameCity(a: AccommodationOffer, b: AccommodationOffer): boolean {
-  const left = cityTokens(a).join(" ");
-  const right = cityTokens(b).join(" ");
-  return !left || !right || left === right;
+  const left = fold(a.location);
+  const right = fold(b.location);
+  if (!left || !right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+  const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
+  return right.split(" ").some((token) => token.length >= 3 && leftTokens.has(token));
 }
 
 function starsCompatible(a: AccommodationOffer, b: AccommodationOffer): boolean {
@@ -129,12 +137,12 @@ function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boo
   const exactName = comparableName(a) === comparableName(b);
   const similarity = nameSimilarity(a, b);
 
-  // An identical distinctive name in the same city is the same property even when one provider
-  // publishes no map pin. A two-star gap means they are different buildings that share a name.
+  // An identical distinctive name is the same property. Two pins prove it; when a provider
+  // publishes no pin, the addresses must still describe the same city.
   if (exactName) {
     if (a.stars !== null && b.stars !== null && Math.abs(a.stars - b.stars) >= 2) return false;
-    if (distance !== null && distance > 2_000) return false;
-    return true;
+    if (distance !== null) return distance <= 2_000;
+    return sameCity(a, b);
   }
 
   // Different spellings still merge when both pins show the same building.

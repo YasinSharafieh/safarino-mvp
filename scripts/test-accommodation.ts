@@ -140,4 +140,12 @@ const oneSideMissing = deduplicateAccommodationOffers([
 ]);
 assert.equal(oneSideMissing.length, 1, "same name and same stars merge even without coordinates");
 
+// Live-miss regression: the same hotel with two different address formats and a 20-metre pin drift.
+const addressFormats = deduplicateAccommodationOffers([
+  offer({ id: "ast1", kind: "hotel", provider: "eghamat24", providerPropertyId: "ast1", name: "هتل آپارتمان آستانه شیراز", location: "آدرس:  شیراز- خیابان حسینی- میدان آستانه", stars: 2, latitude: 29.605670834209, longitude: 52.546993405101 }),
+  offer({ id: "ast2", kind: "hotel", provider: "alibaba", providerPropertyId: "ast2", name: "هتل آپارتمان آستانه شیراز", location: "شیراز", stars: 2, latitude: 29.605494087860947, longitude: 52.54700989740245 }),
+]);
+assert.equal(addressFormats.length, 1, "different address formats for one city do not block a merge");
+assert.equal(addressFormats[0].offers.length, 2, "both booking links are preserved");
+
 console.log("Accommodation near-name deduplication tests passed.");
