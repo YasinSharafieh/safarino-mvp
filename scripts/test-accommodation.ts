@@ -156,4 +156,18 @@ const addressFormats = deduplicateAccommodationOffers([
 assert.equal(addressFormats.length, 1, "different address formats for one city do not block a merge");
 assert.equal(addressFormats[0].offers.length, 2, "both booking links are preserved");
 
+// Live case: three different Mashhad hotels whose names share one word must stay three cards,
+// while each one still merges with its own duplicates on other providers.
+const similarChain = deduplicateAccommodationOffers([
+  offer({ id: "alamas", kind: "hotel", provider: "eghamat24", providerPropertyId: "alamas", name: "هتل الماس مشهد", stars: 4, latitude: 36.281804236384, longitude: 59.610812686144 }),
+  offer({ id: "alamas-a", kind: "hotel", provider: "alibaba", providerPropertyId: "alamas-a", name: "هتل الماس مشهد", stars: 4, latitude: 36.281761233237, longitude: 59.610867756612 }),
+  offer({ id: "alamas1", kind: "hotel", provider: "snapptrip", providerPropertyId: "alamas1", name: "الماس ۱", stars: 4, latitude: 36.281811, longitude: 59.610961 }),
+  offer({ id: "novin", kind: "hotel", provider: "eghamat24", providerPropertyId: "novin", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.281172327117, longitude: 59.607992905522 }),
+  offer({ id: "novin-a", kind: "hotel", provider: "alibaba", providerPropertyId: "novin-a", name: "هتل الماس نوین مشهد", stars: 4, latitude: 36.28117671872834, longitude: 59.60798455400472 }),
+  offer({ id: "two", kind: "hotel", provider: "eghamat24", providerPropertyId: "two", name: "هتل الماس ۲ مشهد", stars: 4, latitude: 36.291000, longitude: 59.621000 }),
+]);
+assert.equal(similarChain.length, 3, "a second hotel sharing one word stays its own card");
+const almasCard = similarChain.find((group) => group.offers.some((item) => item.id === "alamas"));
+assert.equal(almasCard?.offers.length, 3, "the same building with three spellings is one card");
+
 console.log("Accommodation near-name deduplication tests passed.");

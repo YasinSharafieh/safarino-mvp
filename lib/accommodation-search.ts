@@ -39,7 +39,8 @@ const GENERIC_NAME_TOKENS = new Set([
   "هتل", "هتل‌آپارتمان", "هتل‌اپارتمان", "آپارتمان", "اپارتمان", "سوئیت", "سوییت", "اقامتگاه",
   "بوتیک", "مهمان‌پذیر", "مهمان‌سرا", "مهمانخانه", "مسافرخانه", "اقامت", "خونه", "خانه",
   "ویلا", "دفتر", "شعبه", "رزرو", "آنلاین", "انلاین", "شب", "از", "در", "با", "و",
-  "ستاره", "بزرگ", "کوچک", "بین‌المللی", "ایرانی", "ایرانگردی",
+  "ستاره", "بزرگ", "کوچک", "ایرانی", "ایرانگردی",
+  "بین", "المللی", "بین‌المللی", "بین المللی", "مللی", "مجتمع", "مجموعه", "واحد",
   "hotel", "apartment", "suite", "resort", "hostel", "guest", "house", "inn", "boutique",
 ]);
 
@@ -67,13 +68,38 @@ function cityTokens(offer: AccommodationOffer): string[] {
 /** Name words that actually identify the property, with the city and trading words removed. */
 function nameTokens(offer: AccommodationOffer): string[] {
   const city = new Set(cityTokens(offer));
-  return fold(offer.name)
-    .split(" ")
-    .filter((token) => token && !GENERIC_NAME_TOKENS.has(token) && !city.has(token));
+  const words = fold(offer.name).split(" ").filter((token) => token && !GENERIC_NAME_TOKENS.has(token));
+  const distinctive = words.filter((token) => !city.has(token) && !CITY_NAME_SET.has(token));
+  // "هتل تهران مشهد" is a real hotel name: when every word is a city, keep them all.
+  return distinctive.length ? distinctive : words;
 }
 
 function comparableName(offer: AccommodationOffer): string {
   return nameTokens(offer).join(" ");
+}
+
+/** Name words with the trailing numbers removed: "الماس ۱" and "الماس" name the same building. */
+function nameJaccardWithoutNumbers(a: AccommodationOffer, b: AccommodationOffer): number {
+  const clean = (offer: AccommodationOffer) => nameTokens(offer).filter((token) => !/^\d+$/.test(token));
+  const left = clean(a);
+  const right = clean(b);
+  if (!left.length || !right.length) return 0;
+  const first = new Set(left);
+  const second = new Set(right);
+  let shared = 0;
+  first.forEach((token) => { if (second.has(token)) shared += 1; });
+  return shared / (first.size + second.size - shared);
+}
+
+function nameJaccard(a: AccommodationOffer, b: AccommodationOffer): number {
+  const left = nameTokens(a);
+  const right = nameTokens(b);
+  if (!left.length || !right.length) return 0;
+  const first = new Set(left);
+  const second = new Set(right);
+  let shared = 0;
+  first.forEach((token) => { if (second.has(token)) shared += 1; });
+  return shared / (first.size + second.size - shared);
 }
 
 function nameSimilarity(a: AccommodationOffer, b: AccommodationOffer): number {
@@ -93,7 +119,7 @@ function nameSimilarity(a: AccommodationOffer, b: AccommodationOffer): number {
 /** A shared distinctive word (long, not a number) is required before merging two names. */
 function hasDistinctiveOverlap(a: AccommodationOffer, b: AccommodationOffer): boolean {
   const right = new Set(nameTokens(b));
-  return nameTokens(a).some((token) => right.has(token) && token.length >= 4 && !/^\d+$/.test(token));
+  return nameTokens(a).some((token) => right.has(token) && token.length >= 3 && !/^\d+$/.test(token));
 }
 
 /** A 0/0 or out-of-country pin is a placeholder, not a location. */
@@ -143,66 +169,155 @@ function starsCompatible(a: AccommodationOffer, b: AccommodationOffer): boolean 
   return a.stars === null || b.stars === null || a.stars === b.stars;
 }
 
-function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boolean {
-  if (a.kind !== b.kind) return false;
+type MatchStrength = "shared_inventory" | "exact_name" | "similar_name";
+
+function nameMatch(a: AccommodationOffer, b: AccommodationOffer): MatchStrength | null {
+  if (a.kind !== b.kind) return null;
   const nameA = comparableName(a);
-  if (!nameA || nameA.length < 2) return false;
-  if (!hasDistinctiveOverlap(a, b) || !sameCity(a, b)) return false;
+  if (!nameA || nameA.length < 2) return null;
+  if (!sameCity(a, b)) return null;
 
   const distance = distanceMeters(a, b);
   const exactName = nameA === comparableName(b);
+  // An identical name is proof on its own; a shared word needs at least three letters.
+  if (!exactName && !hasDistinctiveOverlap(a, b)) return null;
   const similarity = nameSimilarity(a, b);
   // One provider only says "شیراز" and its pin is a city-level placeholder, so it cannot veto a merge.
   const loosePin = vagueAddress(a) || vagueAddress(b);
 
+  // An identical full name in the same city is the same hotel even when the two providers geocode
+  // it differently; only a two-star gap says they are two different buildings sharing a name.
   if (exactName) {
-    if (distance !== null) {
-      if (distance <= 400) return true;
-      return loosePin && distance <= 12_000;
-    }
-    // No usable pin at all: the name plus the same star level must carry the decision.
-    return a.stars === null || b.stars === null || Math.abs(a.stars - b.stars) <= 1;
+    const starsAgree = a.stars === null || b.stars === null || Math.abs(a.stars - b.stars) <= 1;
+    if (!starsAgree) return null;
+    if (distance === null || distance <= 400 || loosePin || distance <= 25_000) return "exact_name";
+    return null;
   }
 
-  // A different spelling only merges when both pins point at the same building; a provider that
-  // publishes no street address must never merge two hotels that merely share a word.
-  if (distance !== null) return similarity >= 0.8 && distance <= 400;
+  // A different spelling must cover most of both names ("هتل پارس" vs "پارس" is fine,
+  // "الماس" vs "الماس نوین" is not: those are two hotels in the same street).
+  const overlap = nameJaccard(a, b);
+  if (distance !== null) {
+    if (overlap >= 0.75 && distance <= 400) return "similar_name";
+    // Same words, only a house number added ("الماس ۱" vs "الماس"), on the same building.
+    const sameNumberLess = nameJaccardWithoutNumbers(a, b) >= 0.9;
+    const sameStars = a.stars !== null && b.stars !== null && a.stars === b.stars;
+    if (sameNumberLess && sameStars && distance <= 120) return "similar_name";
+    return null;
+  }
 
   // Different spellings with no coordinates need a near-identical name and the same star level.
   const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
-  return ratedBoth && similarity >= 0.9;
+  return ratedBoth && overlap >= 0.9 ? "similar_name" : null;
 }
 
-function compatible(a: AccommodationOffer, b: AccommodationOffer): "shared_inventory" | "verified_name_location" | null {
+function compatible(a: AccommodationOffer, b: AccommodationOffer): MatchStrength | null {
   if (sharedInventory(a, b)) return "shared_inventory";
-  if (verifiedNameLocation(a, b)) return "verified_name_location";
-  return null;
+  return nameMatch(a, b);
 }
 
+/**
+ * Some providers publish one city-level pin for every property (the same coordinate repeats for
+ * dozens of hotels). Such a pin says nothing about the building, so it must not decide a merge.
+ */
+function markPlaceholderPins(offers: AccommodationOffer[]): AccommodationOffer[] {
+  const counts = new Map<string, number>();
+  for (const offer of offers) {
+    if (offer.latitude === null || offer.longitude === null) continue;
+    const key = `${offer.provider}:${offer.latitude.toFixed(4)}:${offer.longitude.toFixed(4)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return offers.map((offer) => {
+    if (offer.latitude === null || offer.longitude === null) return offer;
+    const key = `${offer.provider}:${offer.latitude.toFixed(4)}:${offer.longitude.toFixed(4)}`;
+    if ((counts.get(key) || 0) < 3) return offer;
+    return { ...offer, latitude: null, longitude: null };
+  });
+}
+
+/**
+ * Groups the same property offered by different providers. Merging is transitive: if provider A and
+ * B describe one hotel and B also matches C, all three belong to one card, because the card still
+ * lists every provider with its own name, price and booking link.
+ */
+/**
+ * Groups the same property offered by different providers.
+ * Strong evidence (shared inventory, an identical name) is merged transitively, because the card
+ * still lists every provider with its own name, price and booking link. A merely similar spelling
+ * only joins when it fits every member of that card, so one shared word cannot chain two hotels.
+ */
 export function deduplicateAccommodationOffers(offers: readonly AccommodationOffer[]): AccommodationGroup[] {
   const unique = new Map<string, AccommodationOffer>();
   for (const offer of offers) if (!unique.has(offer.id)) unique.set(offer.id, offer);
-  const groups: AccommodationGroup[] = [];
-  for (const offer of Array.from(unique.values())) {
-    let matched: AccommodationGroup | null = null;
-    let reason: AccommodationGroup["matchReason"] = "single";
-    for (const group of groups) {
-      const relationships = group.offers.map((existing) => compatible(existing, offer));
-      if (relationships.every(Boolean)) {
-        matched = group;
-        reason = relationships.find((value) => value === "shared_inventory") || "verified_name_location";
-        break;
+  const list = markPlaceholderPins(Array.from(unique.values()));
+
+  const parent = list.map((_, index) => index);
+  const find = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root];
+    let walk = index;
+    while (parent[walk] !== walk) {
+      const next = parent[walk];
+      parent[walk] = root;
+      walk = next;
+    }
+    return root;
+  };
+  const reasons = new Map<number, AccommodationGroup["matchReason"]>();
+
+  const similarPairs: [number, number][] = [];
+  for (let i = 0; i < list.length; i += 1) {
+    for (let j = i + 1; j < list.length; j += 1) {
+      const relationship = compatible(list[i], list[j]);
+      if (!relationship) continue;
+      if (relationship === "similar_name") {
+        similarPairs.push([i, j]);
+        continue;
+      }
+      const rootA = find(i);
+      const rootB = find(j);
+      if (rootA === rootB) continue;
+      parent[rootB] = rootA;
+      if (relationship === "shared_inventory") {
+        reasons.set(rootA, "shared_inventory");
+      } else if (!reasons.has(rootA)) {
+        reasons.set(rootA, "verified_name_location");
       }
     }
-    if (matched) {
-      matched.offers.push(offer);
-      matched.offers.sort((a, b) => a.priceTotalToman - b.priceTotalToman || a.provider.localeCompare(b.provider));
-      matched.id = matched.offers[0].id;
-      if (matched.offers.length > 1) matched.matchReason = reason;
-    } else {
-      groups.push({ id: offer.id, matchReason: "single", offers: [offer] });
-    }
   }
+
+  // Weaker matches join only a card they fit completely.
+  for (const [i, j] of similarPairs) {
+    const rootI = find(i);
+    const rootJ = find(j);
+    if (rootI === rootJ) continue;
+    const membersI = list.filter((_, index) => find(index) === rootI);
+    const membersJ = list.filter((_, index) => find(index) === rootJ);
+    const fitsI = membersI.every((member) => compatible(member, list[j]));
+    const fitsJ = membersJ.every((member) => compatible(member, list[i]));
+    if (!fitsI && !fitsJ) continue;
+    parent[rootJ] = rootI;
+    if (!reasons.has(rootI)) reasons.set(rootI, "verified_name_location");
+  }
+
+  const buckets = new Map<number, AccommodationOffer[]>();
+  list.forEach((offer, index) => {
+    const root = find(index);
+    const bucket = buckets.get(root) || [];
+    bucket.push(offer);
+    buckets.set(root, bucket);
+  });
+
+  const groups: AccommodationGroup[] = [];
+  buckets.forEach((bucket, root) => {
+    bucket.sort((a, b) => a.priceTotalToman - b.priceTotalToman || a.provider.localeCompare(b.provider));
+    groups.push({
+      id: bucket[0].id,
+      matchReason: bucket.length > 1 ? reasons.get(root) || "verified_name_location" : "single",
+      offers: bucket,
+    });
+  });
+
   return groups.sort((a, b) => a.offers[0].priceTotalToman - b.offers[0].priceTotalToman);
 }
 
