@@ -389,8 +389,17 @@ function TransportPageContent() {
       });
       const data = await response.json() as LiveSearchResponse;
       if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
+      const withLabels = (offer: LiveOffer & { operator?: string; serviceLabel?: string }): LiveOffer => {
+        const operator = (offer.operator || offer.title || (searchMode === "plane" ? "پرواز" : searchMode === "train" ? "قطار" : "اتوبوس")).trim();
+        const service = (offer.serviceLabel || offer.subtitle || "").trim();
+        return {
+          ...offer,
+          title: service ? `${operator} · ${service}` : operator,
+          subtitle: service && !service.includes(operator) ? service : (offer.subtitle || (searchMode === "plane" ? "پرواز" : searchMode === "train" ? "قطار" : "اتوبوس")),
+        };
+      };
       const normalized: LiveOffer[] = (data.offers || []).map((offer) => ({
-        ...offer,
+        ...withLabels(offer),
         logoUrl: offer.logoUrl ?? null,
         arrival: offer.arrival ?? null,
         childPriceToman: offer.childPriceToman ?? null,
@@ -399,7 +408,7 @@ function TransportPageContent() {
         details: Array.isArray(offer.details) ? offer.details : [],
       }));
       const normalizedReturn: LiveOffer[] = (data.returningOffers || []).map((offer) => ({
-        ...offer,
+        ...withLabels(offer),
         logoUrl: offer.logoUrl ?? null,
         arrival: offer.arrival ?? null,
         childPriceToman: offer.childPriceToman ?? null,
