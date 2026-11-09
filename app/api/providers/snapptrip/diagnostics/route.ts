@@ -31,15 +31,16 @@ export async function GET(request: NextRequest) {
       timeoutMs: 25_000,
     });
     const body = search as Record<string, unknown>;
-    const hotels = (Array.isArray(search) ? search : (body.hotels || body.items || body.hotelsData)) as unknown[] | undefined;
+    const data = body.data as unknown;
+    const list = Array.isArray(data) ? data : Array.isArray((data as Record<string, unknown>)?.hotels) ? (data as Record<string, unknown>).hotels as unknown[] : [];
     return NextResponse.json({
       ok: true,
-      locationKeys: first ? Object.keys(first) : [],
-      locationSample: first,
       searchTopKeys: Array.isArray(search) ? "array" : Object.keys(body),
-      hotelCount: Array.isArray(hotels) ? hotels.length : null,
-      hotelShape: hotels && hotels[0] ? shape(hotels[0]) : null,
-      hotelSample: hotels && hotels[0] ? hotels[0] : null,
+      dataType: Array.isArray(data) ? "array" : typeof data,
+      dataKeys: data && !Array.isArray(data) ? Object.keys(data as Record<string, unknown>) : [],
+      hotelCount: list.length,
+      hotelShape: list[0] ? shape(list[0]) : null,
+      hotelSample: list[0] ?? null,
     });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
