@@ -1,3 +1,5 @@
+import { alibabaCdnUrl } from "./alibaba-assets";
+
 const API_ROOT = "https://ws.alibaba.ir/api";
 const SITE_ROOT = "https://www.alibaba.ir";
 
@@ -8,10 +10,13 @@ export type FlightSearchInput = {
   adults: number;
   children: number;
   infants: number;
+  returnDate?: string;
 };
 
 export type FlightOffer = {
   id: string;
+  proposalId: string;
+  logoUrl: string | null;
   airline: string;
   airlineCode: string;
   flightNumber: string;
@@ -59,6 +64,7 @@ export function alibabaBookingUrl(input: FlightSearchInput): string {
     isExclusive: "false",
     isForeign: "false",
     cabinType: "All",
+    ...(input.returnDate ? { returning: alibabaJalaliDate(input.returnDate) } : {}),
   });
   return `${SITE_ROOT}/flights/${input.origin}-${input.destination}?${query.toString()}`;
 }
@@ -115,6 +121,8 @@ function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
   const flightNumber = cleanText(flight.flightNumber);
   return {
     id: cleanText(flight.flightId, `${airlineCode}${flightNumber}-${departure}-${index}`),
+    proposalId: cleanText(flight.proposalId),
+    logoUrl: alibabaCdnUrl(flight.airlineLogo),
     airline: cleanText(flight.airlineName, airlineCode),
     airlineCode,
     flightNumber: `${airlineCode}${flightNumber}`,
@@ -142,6 +150,7 @@ export async function searchAlibabaFlights(input: FlightSearchInput) {
       adult: input.adults,
       child: input.children,
       infant: input.infants,
+      ...(input.returnDate ? { returnDate: input.returnDate } : {}),
     },
   });
   const requestId = (started as Record<string, unknown>)?.requestId;
@@ -156,11 +165,12 @@ export async function searchAlibabaFlights(input: FlightSearchInput) {
     if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 1_500));
   }
 
-  const rawFlights = Array.isArray(result.departing) ? result.departing : [];
-  const flights = rawFlights
+  const normalizeRows = (rows: unknown) => (Array.isArray(rows) ? rows : [])
     .map(normalizeFlight)
     .filter((flight): flight is FlightOffer => flight !== null && flight.seatsLeft > 0)
     .sort((a, b) => a.priceToman - b.priceToman);
+  const flights = normalizeRows(result.departing);
+  const returning = input.returnDate ? normalizeRows(result.returning) : undefined;
 
   return {
     provider: "alibaba",
@@ -172,6 +182,7 @@ export async function searchAlibabaFlights(input: FlightSearchInput) {
     isCompleted: result.isCompleted === true,
     count: flights.length,
     flights,
+    ...(returning ? { returningCount: returning.length, returning } : {}),
     bookingUrl: alibabaBookingUrl(input),
   };
 }

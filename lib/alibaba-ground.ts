@@ -1,9 +1,11 @@
 import { alibabaJalaliDate, alibabaRequest } from "./alibaba-flights";
 import type { FlightSearchInput } from "./alibaba-flights";
 import { resolveIranianCity } from "./iran-cities";
+import { alibabaCdnUrl, alibabaTrainLogo } from "./alibaba-assets";
 
 export type GroundOffer = {
   id: string;
+  logoUrl: string | null;
   title: string;
   subtitle: string;
   departure: string;
@@ -40,6 +42,7 @@ function bookingUrl(input: FlightSearchInput, product: "train" | "bus"): string 
     departing: alibabaJalaliDate(input.date),
     ticketType: "Family",
     isExclusive: "false",
+    ...(input.returnDate ? { returning: alibabaJalaliDate(input.returnDate) } : {}),
   });
   const route = groundInput(input);
   return `https://www.alibaba.ir/${product}/${route.origin}-${route.destination}?${query.toString()}`;
@@ -55,26 +58,8 @@ async function poll(path: string): Promise<Record<string, unknown>> {
   return result;
 }
 
-export async function searchAlibabaTrains(input: FlightSearchInput) {
-  const route = groundInput(input);
-  const started = await alibabaRequest("v2/train/available", {
-    body: {
-      departureDate: input.date,
-      origin: route.origin,
-      destination: route.destination,
-      passengerCount: input.adults + input.children,
-      isExclusiveCompartment: false,
-      ticketType: "Family",
-    },
-  });
-  const requestId = (started as Record<string, unknown>)?.requestId;
-  if (typeof requestId !== "string" && typeof requestId !== "number") {
-    throw new Error("ALIBABA_MISSING_REQUEST_ID");
-  }
-  const result = await poll(`v2/train/available/${requestId}`);
-  if (result.isCompleted !== true) throw new Error("ALIBABA_SEARCH_INCOMPLETE");
-  const rows = Array.isArray(result.departing) ? result.departing : [];
-  const offers = rows.flatMap((value, index): GroundOffer[] => {
+function normalizeTrains(rows: unknown): GroundOffer[] {
+  return (Array.isArray(rows) ? rows : []).flatMap((value, index): GroundOffer[] => {
     if (!value || typeof value !== "object") return [];
     const train = value as Record<string, unknown>;
     const priceToman = toman(train.cost);
@@ -85,6 +70,7 @@ export async function searchAlibabaTrains(input: FlightSearchInput) {
     const trainNumber = text(train.trainNumber);
     return [{
       id: text(train.proposalId) || `${company}-${trainNumber}-${departure}-${index}`,
+      logoUrl: alibabaTrainLogo(train.logoSuffix),
       title: trainNumber ? `${company} · قطار ${trainNumber}` : company,
       subtitle: text(train.wagonName) || "گزارش‌دهنده علی‌بابا",
       departure,
@@ -96,7 +82,30 @@ export async function searchAlibabaTrains(input: FlightSearchInput) {
         train.nonRefundable === true ? "غیرقابل استرداد" : "قابل استرداد",
       ].filter(Boolean),
     }];
+  }).sort((a, b) => a.priceToman - b.priceToman);
+}
+
+export async function searchAlibabaTrains(input: FlightSearchInput) {
+  const route = groundInput(input);
+  const started = await alibabaRequest("v2/train/available", {
+    body: {
+      departureDate: input.date,
+      origin: route.origin,
+      destination: route.destination,
+      passengerCount: input.adults + input.children,
+      isExclusiveCompartment: false,
+    ticketType: "Family",
+    ...(input.returnDate ? { returnDate: input.returnDate } : {}),
+  },
   });
+  const requestId = (started as Record<string, unknown>)?.requestId;
+  if (typeof requestId !== "string" && typeof requestId !== "number") {
+    throw new Error("ALIBABA_MISSING_REQUEST_ID");
+  }
+  const result = await poll(`v2/train/available/${requestId}`);
+  if (result.isCompleted !== true) throw new Error("ALIBABA_SEARCH_INCOMPLETE");
+  const offers = normalizeTrains(result.departing);
+  const returningOffers = input.returnDate ? normalizeTrains(result.returning) : undefined;
 
   return {
     provider: "alibaba",
@@ -105,7 +114,8 @@ export async function searchAlibabaTrains(input: FlightSearchInput) {
     fetchedAt: new Date().toISOString(),
     isCompleted: result.isCompleted === true,
     count: offers.length,
-    offers: offers.sort((a, b) => a.priceToman - b.priceToman),
+    offers,
+    ...(returningOffers ? { returningCount: returningOffers.length, returningOffers } : {}),
     bookingUrl: bookingUrl(input, "train"),
   };
 }
@@ -127,7 +137,7 @@ async function busCityCode(code: string): Promise<string> {
   throw new Error("ALIBABA_BUS_CITY_NOT_FOUND");
 }
 
-export async function searchAlibabaBuses(input: FlightSearchInput) {
+async function searchBusOffers(input: FlightSearchInput): Promise<GroundOffer[]> {
   const route = groundInput(input);
   const [originCode, destinationCode] = await Promise.all([
     busCityCode(route.origin),
@@ -151,6 +161,7 @@ export async function searchAlibabaBuses(input: FlightSearchInput) {
     if (priceToman === null || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
     return [{
       id: text(bus.proposalId) || `${originCode}-${departure}-${index}`,
+      logoUrl: alibabaCdnUrl(bus.logoPath),
       title: text(bus.companyName) || "اتوبوس",
       subtitle: text(bus.busType) || "اتوبوس بین‌شهری",
       departure,
@@ -161,13 +172,28 @@ export async function searchAlibabaBuses(input: FlightSearchInput) {
     }];
   });
 
+  return offers.sort((a, b) => a.priceToman - b.priceToman);
+}
+
+export async function searchAlibabaBuses(input: FlightSearchInput) {
+  const offers = await searchBusOffers(input);
+  const returningOffers = input.returnDate
+    ? await searchBusOffers({
+        ...input,
+        origin: input.destination,
+        destination: input.origin,
+        date: input.returnDate,
+        returnDate: undefined,
+      })
+    : undefined;
   return {
     provider: "alibaba",
     mode: "bus",
     fetchedAt: new Date().toISOString(),
     isCompleted: true,
     count: offers.length,
-    offers: offers.sort((a, b) => a.priceToman - b.priceToman),
+    offers,
+    ...(returningOffers ? { returningCount: returningOffers.length, returningOffers } : {}),
     bookingUrl: bookingUrl(input, "bus"),
   };
 }

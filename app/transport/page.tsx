@@ -26,9 +26,12 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
-import JalaliDatePicker from "@/components/JalaliDatePicker";
+import CityCombobox from "@/components/CityCombobox";
+import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
+import PassengerSelector from "@/components/PassengerSelector";
+import ProviderLogo from "@/components/ProviderLogo";
 import { useTravel } from "../context/TravelContext";
-import { IRANIAN_CITIES, resolveIranianCity } from "@/lib/iran-cities";
+import { citiesForTransport, resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
 import { addDaysToIso, formatProviderDateTime, todayIso } from "@/lib/jalali";
 
 const FUEL_PRICE_PER_LITER = 3_000;
@@ -114,11 +117,14 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
 
 type LiveOffer = {
   id: string;
+  logoUrl?: string | null;
   title: string;
   subtitle: string;
   departure: string;
   arrival: string | null;
   priceToman: number;
+  childPriceToman?: number | null;
+  infantPriceToman?: number | null;
   seatsLeft: number;
   details: string[];
 };
@@ -130,7 +136,9 @@ type LiveSearchResponse = {
   fetchedAt?: string;
   bookingUrl?: string;
   flights?: Array<Record<string, unknown>>;
+  returning?: Array<Record<string, unknown>>;
   offers?: LiveOffer[];
+  returningOffers?: LiveOffer[];
 };
 
 type Selection = {
@@ -206,7 +214,10 @@ function TransportPageContent() {
   const { travelData, setTravelData, isHydrated } = useTravel();
   const [carId, setCarId] = useState("dena");
   const [searchMode, setSearchMode] = useState<Exclude<TransportId, "car">>("plane");
+  const [roundTrip, setRoundTrip] = useState(false);
   const [offers, setOffers] = useState<LiveOffer[]>([]);
+  const [returnOffers, setReturnOffers] = useState<LiveOffer[]>([]);
+  const [activeLeg, setActiveLeg] = useState<"outbound" | "return">("outbound");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [providerMeta, setProviderMeta] = useState<{ bookingUrl?: string; fetchedAt?: string }>({});
@@ -219,6 +230,7 @@ function TransportPageContent() {
 
   const originCity = resolveIranianCity(travelData.origin);
   const destinationCity = resolveIranianCity(travelData.destination);
+  const availableCities = useMemo(() => citiesForTransport(searchMode), [searchMode]);
   const passengers = travelData.travelers;
   const budget = travelData.budget * 1_000_000;
   const setPassengers = useCallback((value: number) => {
@@ -274,11 +286,7 @@ function TransportPageContent() {
 
   useEffect(() => {
     if (!isReady) return;
-    const currentCost = selection.vehicleId === "car"
-      ? carTotal
-      : selection.unitPrice
-        ? selection.unitPrice * passengers
-        : selection.cost;
+    const currentCost = selection.vehicleId === "car" ? carTotal : selection.cost;
     if (selection.cost !== currentCost) selectVehicle(selection.vehicleId, currentCost, selection);
   }, [carTotal, isReady, passengers, selectVehicle, selection]);
 
@@ -296,18 +304,34 @@ function TransportPageContent() {
   }, [selection, setTravelData]);
 
   useEffect(() => {
-    if (!isHydrated || travelData.departureDate) return;
+    if (!isHydrated) return;
+    if (travelData.returnDate) setRoundTrip(true);
+    if (travelData.departureDate) return;
     const departureDate = addDaysToIso(todayIso(), 7);
     setTravelData((current) => current.departureDate ? current : { ...current, departureDate });
-  }, [isHydrated, setTravelData, travelData.departureDate]);
+  }, [isHydrated, setTravelData, travelData.departureDate, travelData.returnDate]);
 
   useEffect(() => {
     setOffers([]);
+    setReturnOffers([]);
+    setActiveLeg("outbound");
     setProviderMeta({});
     setSearchError("");
-  }, [searchMode, travelData.departureDate, travelData.destination, travelData.origin]);
+  }, [roundTrip, searchMode, travelData.departureDate, travelData.returnDate, travelData.destination, travelData.origin]);
 
-  const changeJourney = useCallback((field: "origin" | "destination" | "departureDate", value: string) => {
+  useEffect(() => {
+    if (!isHydrated) return;
+    const validOrigin = !originCity || availableCities.some((city) => city.code === originCity.code);
+    const validDestination = !destinationCity || availableCities.some((city) => city.code === destinationCity.code);
+    if (validOrigin && validDestination) return;
+    setTravelData((current) => ({
+      ...current,
+      origin: validOrigin ? current.origin : "",
+      destination: validDestination ? current.destination : "",
+    }));
+  }, [availableCities, destinationCity, isHydrated, originCity, setTravelData]);
+
+  const changeJourney = useCallback((field: "origin" | "destination" | "departureDate" | "returnDate", value: string) => {
     if (selection.vehicleId !== "car") selectVehicle("car", carTotal);
     setTravelData((current) => ({ ...current, [field]: value }));
   }, [carTotal, selectVehicle, selection.vehicleId, setTravelData]);
@@ -325,6 +349,10 @@ function TransportPageContent() {
       setSearchError("ابتدا تاریخ حرکت را انتخاب کنید.");
       return;
     }
+    if (roundTrip && (!travelData.returnDate || travelData.returnDate < travelData.departureDate)) {
+      setSearchError("برای سفر رفت و برگشت، تاریخ برگشت معتبر را انتخاب کنید.");
+      return;
+    }
     setSearchLoading(true);
     setSearchError("");
     try {
@@ -336,9 +364,10 @@ function TransportPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: searchMode,
-          origin: originCity.code,
-          destination: destinationCity.code,
+          origin: transportCityCode(originCity, searchMode),
+          destination: transportCityCode(destinationCity, searchMode),
           date: travelData.departureDate,
+          returnDate: roundTrip ? travelData.returnDate : undefined,
           adults: travelData.travelers,
           children: travelData.children,
           infants: travelData.infants,
@@ -346,35 +375,82 @@ function TransportPageContent() {
       });
       const data = await response.json() as LiveSearchResponse;
       if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
-      const normalized: LiveOffer[] = searchMode === "plane"
-        ? (data.flights || []).map((value, index) => ({
-            id: String(value.id || index),
-            title: `${String(value.airline || "پرواز")} · ${String(value.flightNumber || "")}`,
-            subtitle: String(value.fareClass || "اکونومی"),
-            departure: String(value.departure || ""),
-            arrival: value.arrival ? String(value.arrival) : null,
-            priceToman: Number(value.priceToman),
-            seatsLeft: Number(value.seatsLeft),
-            details: [
-              value.aircraft ? String(value.aircraft) : "",
-              value.baggageKg ? `${String(value.baggageKg)} کیلوگرم بار` : "",
-            ].filter(Boolean),
-          })).filter((offer) => offer.priceToman > 0 && offer.departure)
-        : data.offers || [];
+      const normalizeFlights = (rows: Array<Record<string, unknown>> | undefined): LiveOffer[] => (rows || []).map((value, index) => ({
+        id: String(value.id || index),
+        logoUrl: typeof value.logoUrl === "string" ? value.logoUrl : null,
+        title: `${String(value.airline || "پرواز")} · ${String(value.flightNumber || "")}`,
+        subtitle: String(value.fareClass || "اکونومی"),
+        departure: String(value.departure || ""),
+        arrival: value.arrival ? String(value.arrival) : null,
+        priceToman: Number(value.priceToman),
+        childPriceToman: value.childPriceToman === null || value.childPriceToman === undefined ? null : Number(value.childPriceToman),
+        infantPriceToman: value.infantPriceToman === null || value.infantPriceToman === undefined ? null : Number(value.infantPriceToman),
+        seatsLeft: Number(value.seatsLeft),
+        details: [
+          value.aircraft ? String(value.aircraft) : "",
+          value.baggageKg ? `${String(value.baggageKg)} کیلوگرم بار` : "",
+        ].filter(Boolean),
+      })).filter((offer) => offer.priceToman > 0 && offer.departure);
+      const normalized = searchMode === "plane" ? normalizeFlights(data.flights) : data.offers || [];
+      const normalizedReturn = searchMode === "plane" ? normalizeFlights(data.returning) : data.returningOffers || [];
       setOffers(normalized);
+      setReturnOffers(normalizedReturn);
+      setActiveLeg("outbound");
       setProviderMeta({ bookingUrl: data.bookingUrl, fetchedAt: data.fetchedAt });
       if (!normalized.length) setSearchError("برای این مسیر و تاریخ، گزینه دارای صندلی و قیمت پیدا نشد.");
     } catch (error) {
       setOffers([]);
+      setReturnOffers([]);
       setSearchError(error instanceof Error ? error.message : "جستجو انجام نشد");
     } finally {
       setSearchLoading(false);
     }
-  }, [destinationCity, originCity, searchMode, travelData]);
+  }, [destinationCity, originCity, roundTrip, searchMode, travelData]);
 
   const selectedName = TRANSPORT_OPTIONS.find((option) => option.id === selection.vehicleId)?.name;
   const searchModeName = TRANSPORT_OPTIONS.find((option) => option.id === searchMode)?.name;
+  const visibleOffers = activeLeg === "return" ? returnOffers : offers;
   const budgetDifference = budget - selection.cost;
+
+  function verifiedOfferTotal(offer: LiveOffer): number | null {
+    if (travelData.children > 0 && !offer.childPriceToman) return null;
+    if (travelData.infants > 0 && !offer.infantPriceToman) return null;
+    return offer.priceToman * travelData.travelers
+      + (offer.childPriceToman || 0) * travelData.children
+      + (offer.infantPriceToman || 0) * travelData.infants;
+  }
+
+  function chooseLiveOffer(offer: LiveOffer) {
+    const total = verifiedOfferTotal(offer);
+    if (total === null) {
+      setSearchError("قیمت دقیق کودک یا نوزاد در پاسخ این سرویس موجود نیست؛ انتخاب قیمت کل انجام نشد.");
+      return;
+    }
+    const details = {
+      provider: "alibaba",
+      offerId: offer.id,
+      offerTitle: `${activeLeg === "return" ? "برگشت · " : ""}${offer.title}`,
+      unitPrice: offer.priceToman,
+      bookingUrl: providerMeta.bookingUrl,
+      fetchedAt: providerMeta.fetchedAt,
+    };
+    selectVehicle(searchMode, total, details);
+    setTravelData((current) => ({
+      ...current,
+      transport: {
+        vehicleId: searchMode,
+        cost: total,
+        ...details,
+        origin: current.origin,
+        destination: current.destination,
+        departureDate: current.departureDate,
+        returnDate: current.returnDate,
+        travelers: current.travelers,
+        children: current.children,
+        infants: current.infants,
+      },
+    }));
+  }
 
   return (
     <MotionConfig reducedMotion="user">
@@ -664,7 +740,7 @@ function TransportPageContent() {
             </motion.div>
           </section>
 
-          <section id="live-transport-search" className="glass mt-8 scroll-mt-6 overflow-hidden">
+          <section id="live-transport-search" className="glass mt-8 scroll-mt-6">
             <div className="border-b border-white/10 p-5 sm:p-7">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -677,45 +753,54 @@ function TransportPageContent() {
                 <span className="text-3xl" aria-hidden="true">{searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}</span>
               </div>
               <div className="glass-soft mt-6 p-4 sm:p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-cyan-300" />
-                  <b className="text-sm text-white">اول مبدا و مقصد را انتخاب کن</b>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-cyan-300" />
+                    <b className="text-sm text-white">مبدا و مقصد</b>
+                  </div>
+                  <span className="text-[10px] text-slate-500">جستجو با فارسی، لاتین یا کد شهر</span>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-bold text-slate-300">مبدا</span>
-                    <select
-                      value={travelData.origin}
-                      onChange={(event) => changeJourney("origin", event.target.value)}
-                      className="field min-h-12 cursor-pointer appearance-none bg-night-800 text-white"
-                    >
-                      <option value="" className="bg-night-800">انتخاب مبدا</option>
-                      {IRANIAN_CITIES.map((city) => (
-                        <option key={city.code} value={city.name} className="bg-night-800">{city.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-bold text-slate-300">مقصد</span>
-                    <select
-                      value={travelData.destination}
-                      onChange={(event) => changeJourney("destination", event.target.value)}
-                      className="field min-h-12 cursor-pointer appearance-none bg-night-800 text-white"
-                    >
-                      <option value="" className="bg-night-800">انتخاب مقصد</option>
-                      {IRANIAN_CITIES.map((city) => (
-                        <option key={city.code} value={city.name} className="bg-night-800">{city.name}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <CityCombobox
+                    label="مبدا"
+                    value={travelData.origin}
+                    cities={availableCities}
+                    placeholder="مثلاً تهران یا Tehran"
+                    onChange={(city) => changeJourney("origin", city.name)}
+                  />
+                  <CityCombobox
+                    label="مقصد"
+                    value={travelData.destination}
+                    cities={availableCities}
+                    placeholder="مثلاً مشهد یا MHD"
+                    onChange={(city) => changeJourney("destination", city.name)}
+                  />
                 </div>
               </div>
 
-              <div className="mt-5">
-                <JalaliDatePicker
-                  value={travelData.departureDate}
-                  min={todayIso()}
-                  onChange={(departureDate) => changeJourney("departureDate", departureDate)}
+              <div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+                <JalaliRangeCalendar
+                  departureDate={travelData.departureDate}
+                  returnDate={travelData.returnDate}
+                  roundTrip={roundTrip}
+                  onRoundTripChange={(value) => {
+                    setRoundTrip(value);
+                    if (!value) changeJourney("returnDate", "");
+                  }}
+                  onChange={(field, value) => changeJourney(field, value)}
+                />
+                <PassengerSelector
+                  adults={travelData.travelers}
+                  children={travelData.children}
+                  infants={travelData.infants}
+                  onChange={(field, value) => {
+                    if (selection.vehicleId !== "car") selectVehicle("car", carTotal);
+                    setTravelData((current) => ({
+                      ...current,
+                      [field]: value,
+                      infants: field === "travelers" ? Math.min(current.infants, value) : field === "infants" ? Math.min(value, current.travelers) : current.infants,
+                    }));
+                  }}
                 />
               </div>
 
@@ -757,15 +842,28 @@ function TransportPageContent() {
               </div>
             )}
 
+            {roundTrip && (offers.length > 0 || returnOffers.length > 0) && (
+              <div className="flex gap-2 border-b border-white/10 bg-white/[0.02] p-4">
+                <button type="button" onClick={() => setActiveLeg("outbound")} className={`rounded-xl px-4 py-2 text-xs font-bold ${activeLeg === "outbound" ? "bg-cyan-300 text-slate-950" : "bg-white/5 text-slate-300"}`}>
+                  رفت · {formatNumber(offers.length)} نتیجه
+                </button>
+                <button type="button" onClick={() => setActiveLeg("return")} className={`rounded-xl px-4 py-2 text-xs font-bold ${activeLeg === "return" ? "bg-cyan-300 text-slate-950" : "bg-white/5 text-slate-300"}`}>
+                  برگشت · {formatNumber(returnOffers.length)} نتیجه
+                </button>
+              </div>
+            )}
+
+            {roundTrip && activeLeg === "return" && !returnOffers.length && offers.length > 0 && (
+              <p className="m-5 rounded-2xl bg-white/5 p-4 text-xs text-slate-300">برای تاریخ برگشت، گزینه‌ای با قیمت و ظرفیت پیدا نشد.</p>
+            )}
+
             <div className="divide-y divide-white/5">
-              {offers.map((offer, index) => {
+              {visibleOffers.map((offer, index) => {
                 const isSelected = selection.vehicleId === searchMode && selection.offerId === offer.id;
                 return (
                   <div key={offer.id} className="flex flex-col gap-4 p-5 transition-colors hover:bg-white/[0.025] lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-4">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/5 text-xl">
-                        {searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}
-                      </span>
+                      <ProviderLogo src={offer.logoUrl} name={offer.title} mode={searchMode} />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <b className="text-sm text-white">{offer.title}</b>
@@ -783,43 +881,41 @@ function TransportPageContent() {
                       </div>
                       <div className="text-left">
                         <b className="block text-base font-black text-turquoise-200">{formatToman(offer.priceToman)}</b>
+                        <span className="mt-1 block text-[10px] text-slate-500">هر بزرگسال</span>
+                        {travelData.children > 0 && (
+                          <span className="mt-1 block text-[10px] text-slate-500">
+                            کودک: {offer.childPriceToman ? formatToman(offer.childPriceToman) : "قیمت در پاسخ نیست"}
+                          </span>
+                        )}
                         <span className="mt-1 block text-[10px] text-slate-500">
                           {offer.seatsLeft > 0 ? `${formatNumber(offer.seatsLeft)} صندلی باقی‌مانده` : "ظرفیت موجود"}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const details = {
-                            provider: "alibaba",
-                            offerId: offer.id,
-                            offerTitle: offer.title,
-                            unitPrice: offer.priceToman,
-                            bookingUrl: providerMeta.bookingUrl,
-                            fetchedAt: providerMeta.fetchedAt,
-                          };
-                          selectVehicle(searchMode, offer.priceToman * passengers, details);
-                          setTravelData((current) => ({
-                            ...current,
-                            transport: {
-                              vehicleId: searchMode,
-                              cost: offer.priceToman * passengers,
-                              ...details,
-                              origin: current.origin,
-                              destination: current.destination,
-                              departureDate: current.departureDate,
-                              travelers: current.travelers,
-                            },
-                          }));
-                        }}
-                        aria-pressed={isSelected}
-                        className={`min-h-10 rounded-xl px-4 text-xs font-bold transition ${
-                          isSelected ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                        }`}
-                      >
-                        {isSelected && <Check className="ml-1 inline h-4 w-4" />}
-                        {isSelected ? "انتخاب شده" : "انتخاب بلیت"}
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => chooseLiveOffer(offer)}
+                          aria-pressed={isSelected}
+                          className={`min-h-10 rounded-xl px-4 text-xs font-bold transition ${
+                            isSelected ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                          }`}
+                        >
+                          {isSelected && <Check className="ml-1 inline h-4 w-4" />}
+                          {isSelected ? "انتخاب شده" : "انتخاب برای سفرینو"}
+                        </button>
+                        {providerMeta.bookingUrl && (
+                          <a
+                            href={providerMeta.bookingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => chooseLiveOffer(offer)}
+                            className="btn-primary !min-h-10 !px-4 !py-2 !text-[11px]"
+                          >
+                            خرید این بلیت
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -831,11 +927,10 @@ function TransportPageContent() {
                 <Clock3 className="h-4 w-4 text-turquoise-300" />
                 {providerMeta.fetchedAt ? `دریافت اطلاعات: ${new Date(providerMeta.fetchedAt).toLocaleString("fa-IR")}` : "برای مشاهده نتایج واقعی جستجو کنید"}
               </p>
-              {providerMeta.bookingUrl && (
-                <a href={providerMeta.bookingUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary !min-h-10 !px-5 !py-2.5 !text-xs">
-                  خرید از علی‌بابا
-                  <ExternalLink className="h-4 w-4" />
-                </a>
+              {providerMeta.bookingUrl && visibleOffers.length > 0 && (
+                <p className="max-w-md text-[10px] leading-5 text-slate-500">
+                  با «خرید این بلیت»، همان مسیر و تاریخ در علی‌بابا باز می‌شود؛ نام شرکت و ساعت ردیف را با بلیت انتخابی تطبیق بده.
+                </p>
               )}
             </div>
           </section>

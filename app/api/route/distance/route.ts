@@ -13,6 +13,9 @@ export async function POST(request: NextRequest) {
     if (!origin || !destination || origin.code === destination.code) {
       return NextResponse.json({ success: false, error: "مبدأ یا مقصد برای مسیریابی معتبر نیست." }, { status: 400 });
     }
+    if (origin.latitude === undefined || origin.longitude === undefined || destination.latitude === undefined || destination.longitude === undefined) {
+      return NextResponse.json({ success: false, error: "مسیریابی جاده‌ای برای این شهر هنوز در دسترس نیست." }, { status: 404 });
+    }
 
     const cacheKey = `safarino:road-route:${origin.code}:${destination.code}`;
     const cached = await getProviderCache<Record<string, unknown>>(cacheKey);

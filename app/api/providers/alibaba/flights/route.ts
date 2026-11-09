@@ -28,11 +28,17 @@ function parseInput(body: unknown): FlightSearchInput | null {
   if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) return null;
   const today = new Date().toISOString().slice(0, 10);
   if (date < today) return null;
+  const returnDate = String(input.returnDate || "").trim();
+  if (returnDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(returnDate) || returnDate < date) return null;
+    const parsedReturn = new Date(`${returnDate}T00:00:00Z`);
+    if (Number.isNaN(parsedReturn.getTime()) || parsedReturn.toISOString().slice(0, 10) !== returnDate) return null;
+  }
 
   const adults = integer(input.adults, 1, 1, 9);
   const children = integer(input.children, 0, 0, 9);
   const infants = integer(input.infants, 0, 0, adults);
-  return { origin, destination, date, adults, children, infants };
+  return { origin, destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) };
 }
 
 function errorResponse(error: unknown) {

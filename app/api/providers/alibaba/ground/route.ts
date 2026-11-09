@@ -20,11 +20,17 @@ function parse(body: unknown): { input: FlightSearchInput; mode: "train" | "bus"
   const origin = String(value.origin || "").trim().toUpperCase();
   const destination = String(value.destination || "").trim().toUpperCase();
   const date = String(value.date || "").trim();
-  if (!mode || !/^[A-Z]{3,12}$/.test(origin) || !/^[A-Z]{3,12}$/.test(destination) || origin === destination) return null;
+  if (!mode || !/^[A-Z]{3,16}$/.test(origin) || !/^[A-Z]{3,16}$/.test(destination) || origin === destination) return null;
   if (!resolveIranianCity(origin) || !resolveIranianCity(destination)) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date || date < new Date().toISOString().slice(0, 10)) return null;
+  const returnDate = String(value.returnDate || "").trim();
+  if (returnDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(returnDate) || returnDate < date) return null;
+    const parsedReturn = new Date(`${returnDate}T00:00:00Z`);
+    if (Number.isNaN(parsedReturn.getTime()) || parsedReturn.toISOString().slice(0, 10) !== returnDate) return null;
+  }
   const adults = count(value.adults, 1, 1, 9);
   return {
     mode,
@@ -32,6 +38,7 @@ function parse(body: unknown): { input: FlightSearchInput; mode: "train" | "bus"
       origin,
       destination,
       date,
+      ...(returnDate ? { returnDate } : {}),
       adults,
       children: count(value.children, 0, 0, 9),
       infants: count(value.infants, 0, 0, adults),
