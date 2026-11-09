@@ -3,6 +3,9 @@ import { accommodationGuests, accommodationNights } from "./accommodation-types"
 import { publicProviderJson } from "./public-provider-http";
 import { finiteNumber, normalizeTerm, positiveNumber, record, rows, safeImageUrl, text } from "./accommodation-provider-utils";
 
+const OTAGHAK_PAGE_SIZE = 36;
+/** Extra result pages read on top of the first one. */
+const EXTRA_PAGES = 2;
 const API = "https://core.otaghak.com";
 const WEB = "https://www.otaghak.com";
 const IMAGES = "https://cdn.otaghak.com/otg-images-new/X500/";
@@ -58,7 +61,7 @@ export async function searchOtaghakAccommodation(input: AccommodationSearchInput
   const location = exact || locations[0];
   const cityCode = text(location?.cityCode);
   if (!cityCode) throw new Error("OTAGHAK_CITY_NOT_FOUND");
-  const payload = record(await publicProviderJson(`${API}/api/v3/RoomSearch/SearchRooms`, {
+  const fetchPage = async (skip: number) => record(await publicProviderJson(`${API}/api/v3/RoomSearch/SearchRooms`, {
     method: "POST",
     body: {
       cities: [cityCode],
@@ -68,13 +71,22 @@ export async function searchOtaghakAccommodation(input: AccommodationSearchInput
       person: accommodationGuests(input),
       sortingType: "MinPricePriority",
       aroundLocations: false,
-      skip: 0,
-      take: 36,
+      skip,
+      take: OTAGHAK_PAGE_SIZE,
     },
   }));
-  return {
-    offers: normalizeOtaghakRows(payload.rooms, input),
-    found: Math.max(0, Math.round(finiteNumber(payload.count) || 0)),
-    resolvedCity: text(location?.name) || input.city,
-  };
+
+  const first = await fetchPage(0);
+  const found = Math.max(0, Math.round(finiteNumber(first.count) || 0));
+  const offers = normalizeOtaghakRows(first.rooms, input);
+  const extraPages = Math.min(EXTRA_PAGES, Math.max(0, Math.ceil((found - offers.length) / OTAGHAK_PAGE_SIZE)));
+  const extra = await Promise.all(
+    Array.from({ length: extraPages }, (_, index) => fetchPage(OTAGHAK_PAGE_SIZE * (index + 1)).catch(() => null)),
+  );
+  const merged = new Map(offers.map((offer) => [offer.id, offer]));
+  for (const payload of extra) {
+    if (!payload) continue;
+    for (const offer of normalizeOtaghakRows(payload.rooms, input)) merged.set(offer.id, offer);
+  }
+  return { offers: Array.from(merged.values()), found, resolvedCity: text(location?.name) || input.city };
 }

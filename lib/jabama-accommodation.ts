@@ -5,6 +5,9 @@ import { finiteNumber, itemLabel, normalizeTerm, positiveNumber, record, rows, s
 import { jalaliFromGregorian } from "./jalali";
 
 const API = "https://gw.jabama.com";
+const JABAMA_PAGE_SIZE = 36;
+/** Extra result pages read on top of the first one. */
+const EXTRA_PAGES = 2;
 const WEB = "https://www.jabama.com";
 
 function unwrap(value: unknown): Record<string, unknown> {
@@ -97,22 +100,34 @@ async function resolveJabamaLocation(city: string): Promise<{ slug: string; name
 
 export async function searchJabamaAccommodation(input: AccommodationSearchInput): Promise<ProviderSearchResult> {
   const location = await resolveJabamaLocation(input.city);
-  const payload = unwrap(await publicProviderJson(`${API}/api/taraaz/v4/search/merchandising/legacy-plp/${location.slug}`, {
-    method: "POST",
-    query: { platform: "desktop", allowEmptyCity: "true", hasUnitRoom: "true", guarantees: "false" },
-    body: {
-      "page-size": 36,
-      "page-number": 1,
-      sort: "price",
-      "sort-direction": "false",
-      date: { start: compactDate(input.checkIn), end: compactDate(input.checkOut) },
-      capacity: accommodationGuests(input),
-    },
-  }));
-  if (record(payload.metadata).redirectCode) throw new Error("JABAMA_CITY_NOT_FOUND");
-  return {
-    offers: normalizeJabamaRows(payload.items, input),
-    found: Math.max(0, Math.round(finiteNumber(payload.total) || 0)),
-    resolvedCity: location.name,
+  const fetchPage = async (pageNumber: number) => {
+    const payload = unwrap(await publicProviderJson(`${API}/api/taraaz/v4/search/merchandising/legacy-plp/${location.slug}`, {
+      method: "POST",
+      query: { platform: "desktop", allowEmptyCity: "true", hasUnitRoom: "true", guarantees: "false" },
+      body: {
+        "page-size": JABAMA_PAGE_SIZE,
+        "page-number": pageNumber,
+        sort: "price",
+        "sort-direction": "false",
+        date: { start: compactDate(input.checkIn), end: compactDate(input.checkOut) },
+        capacity: accommodationGuests(input),
+      },
+    }));
+    if (record(payload.metadata).redirectCode) throw new Error("JABAMA_CITY_NOT_FOUND");
+    return payload;
   };
+
+  const first = await fetchPage(1);
+  const found = Math.max(0, Math.round(finiteNumber(first.total) || 0));
+  const offers = normalizeJabamaRows(first.items, input);
+  const extraPages = Math.min(EXTRA_PAGES, Math.max(0, Math.ceil((found - offers.length) / JABAMA_PAGE_SIZE)));
+  const extra = await Promise.all(
+    Array.from({ length: extraPages }, (_, index) => fetchPage(index + 2).catch(() => null)),
+  );
+  const merged = new Map(offers.map((offer) => [offer.id, offer]));
+  for (const payload of extra) {
+    if (!payload) continue;
+    for (const offer of normalizeJabamaRows(payload.items, input)) merged.set(offer.id, offer);
+  }
+  return { offers: Array.from(merged.values()), found, resolvedCity: location.name };
 }

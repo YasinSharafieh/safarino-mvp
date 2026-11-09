@@ -6,6 +6,9 @@ import { finiteNumber, normalizeTerm, positiveNumber, record, rows, safeImageUrl
 const API = "https://api.jajiga.com/api";
 const WEB = "https://www.jajiga.com";
 const PICTURES = "https://storage.jajiga.com/public/pictures/medium/";
+const JAJIGA_PAGE_SIZE = 30;
+/** Extra result pages read on top of the first one. */
+const EXTRA_PAGES = 2;
 
 export function normalizeJajigaRows(value: unknown, input: AccommodationSearchInput): AccommodationOffer[] {
   const nightCount = accommodationNights(input);
@@ -69,22 +72,33 @@ export async function searchJajigaAccommodation(input: AccommodationSearchInput)
   const location = exact || locations[0];
   const locationId = text(location?.id);
   if (!locationId) throw new Error("JAJIGA_CITY_NOT_FOUND");
-  const payload = record(await publicProviderJson(`${API}/search`, {
-    query: {
-      "locations[]": [locationId],
-      checkin: input.checkIn,
-      checkout: input.checkOut,
-      min_capacity: accommodationGuests(input),
-      order: "low_price",
-      page: 1,
-      per_page: 30,
-      "with[]": ["rooms"],
-    },
-  }));
-  const rooms = record(payload.rooms);
-  return {
-    offers: normalizeJajigaRows(rooms.items, input),
-    found: Math.max(0, Math.round(finiteNumber(record(rooms.pagination).total) || 0)),
-    resolvedCity: text(location?.label) || input.city,
+  const fetchPage = async (page: number) => {
+    const payload = record(await publicProviderJson(`${API}/search`, {
+      query: {
+        "locations[]": [locationId],
+        checkin: input.checkIn,
+        checkout: input.checkOut,
+        min_capacity: accommodationGuests(input),
+        order: "low_price",
+        page,
+        per_page: JAJIGA_PAGE_SIZE,
+        "with[]": ["rooms"],
+      },
+    }));
+    return record(payload.rooms);
   };
+
+  const first = await fetchPage(1);
+  const found = Math.max(0, Math.round(finiteNumber(record(first.pagination).total) || 0));
+  const offers = normalizeJajigaRows(first.items, input);
+  const extraPages = Math.min(EXTRA_PAGES, Math.max(0, Math.ceil((found - offers.length) / JAJIGA_PAGE_SIZE)));
+  const extra = await Promise.all(
+    Array.from({ length: extraPages }, (_, index) => fetchPage(index + 2).catch(() => null)),
+  );
+  const merged = new Map(offers.map((offer) => [offer.id, offer]));
+  for (const rooms of extra) {
+    if (!rooms) continue;
+    for (const offer of normalizeJajigaRows(rooms.items, input)) merged.set(offer.id, offer);
+  }
+  return { offers: Array.from(merged.values()), found, resolvedCity: text(location?.label) || input.city };
 }
