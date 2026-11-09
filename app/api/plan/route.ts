@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AiBudgetError,
+  reserveAiBudget,
+  settleAiBudget,
+  usageCostMicros,
+} from "../../../lib/ai-budget";
 
 export const runtime = "nodejs";
-// Dynamic POST handlers run only on a Node deployment; static export skips this API.
+export const dynamic = "force-dynamic";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_OPENROUTER_API_KEY = "";
-const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat";
-const FALLBACK_MODEL = "google/gemini-2.0-flash-001";
+const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
+const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
+const MAX_OUTPUT_TOKENS = 3000;
 
 type TravelInput = {
   origin: string;
@@ -167,36 +173,51 @@ function normalizePlan(raw: unknown, input: TravelInput) {
 }
 
 async function requestModel(model: string, input: TravelInput, apiKey: string) {
-  const response = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-      "X-Title": "Safarino AI Travel Planner",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      max_tokens: 3500,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: "تو یک برنامه‌ریز حرفه‌ای سفر و تحلیلگر بودجه هستی. فقط JSON معتبر و کاربردی به فارسی تولید می‌کنی.",
-        },
-        { role: "user", content: jsonPrompt(input) },
-      ],
-    }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(45_000),
-  });
+  const prompt = jsonPrompt(input);
+  const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
+  let actualMicros = 0;
 
-  if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
-  const payload = await response.json();
-  const content = payload?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
-  return normalizePlan(extractJson(content), input);
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+        "X-Title": "Safarino AI Travel Planner",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        response_format: { type: "json_object" },
+        usage: { include: true },
+        messages: [
+          {
+            role: "system",
+            content: "تو یک برنامه‌ریز حرفه‌ای سفر و تحلیلگر بودجه هستی. فقط JSON معتبر و کاربردی به فارسی تولید می‌کنی. هرگز قیمت زنده، ساعت بلیت یا موجودی اقامتگاه جعل نکن.",
+          },
+          { role: "user", content: prompt },
+        ],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
+    const payload = await response.json();
+    actualMicros = usageCostMicros(model, payload?.usage);
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
+
+    return {
+      plan: normalizePlan(extractJson(content), input),
+      usage: payload?.usage ?? null,
+      costMicros: actualMicros,
+    };
+  } finally {
+    await settleAiBudget(reservation, actualMicros);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -214,7 +235,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY || DEFAULT_OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       { success: false, error: "OPENROUTER_API_KEY روی سرور تنظیم نشده است." },
@@ -227,13 +248,24 @@ export async function POST(request: NextRequest) {
 
   for (const model of models) {
     try {
-      const plan = await requestModel(model, input, apiKey);
+      const result = await requestModel(model, input, apiKey);
       return NextResponse.json({
         success: true,
-        plan,
-        meta: { model, generatedAt: new Date().toISOString() },
+        plan: result.plan,
+        meta: {
+          model,
+          generatedAt: new Date().toISOString(),
+          usage: result.usage,
+          costUsd: result.costMicros / 1_000_000,
+        },
       });
     } catch (error) {
+      if (error instanceof AiBudgetError) {
+        return NextResponse.json(
+          { success: false, error: error.publicMessage },
+          { status: error.status },
+        );
+      }
       lastError = error instanceof Error ? error.message : lastError;
     }
   }
