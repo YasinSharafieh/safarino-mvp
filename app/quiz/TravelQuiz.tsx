@@ -396,17 +396,17 @@ export default function TravelQuiz({
     <MotionConfig reducedMotion="user">
       <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 sm:py-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#103f35_0%,#061a17_58%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_58%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
-            <span className="-top-20 right-0 h-80 w-80 animate-float bg-emerald-500/30" />
+            <span className="-top-20 right-0 h-80 w-80 animate-float bg-teal-500/30" />
             <span className="left-0 top-1/3 h-72 w-72 animate-float bg-turquoise-500/20 [animation-delay:1.5s]" />
           </div>
         </div>
 
         <header className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <a href="/" className="group flex items-center gap-2.5" aria-label="بازگشت به صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-700 text-slate-950 shadow-glow transition group-hover:scale-105">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
               <Plane className="h-5 w-5 -rotate-45" strokeWidth={2.6} />
             </span>
             <span className="flex flex-col leading-none">
@@ -424,7 +424,7 @@ export default function TravelQuiz({
 
         <section className="mx-auto max-w-3xl pb-8 pt-10 sm:pt-14">
           <div className="mb-8 text-center">
-            <span className="chip border-emerald-400/25 bg-emerald-400/10 !text-emerald-200">
+            <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
               <Sparkles className="h-3.5 w-3.5" />
               پیشنهاد مقصد در کمتر از یک دقیقه
             </span>
@@ -444,7 +444,7 @@ export default function TravelQuiz({
                     ? "نتیجهٔ کوییز آماده است"
                     : `سؤال ${faNumber(step + 1)} از ${faNumber(QUESTIONS.length)}`}
                 </span>
-                <b className="text-emerald-300">{faNumber(Math.round(progress))}٪</b>
+                <b className="text-cyan-300">{faNumber(Math.round(progress))}٪</b>
               </div>
               <div
                 className="h-2 overflow-hidden rounded-full bg-white/10"
@@ -455,7 +455,7 @@ export default function TravelQuiz({
                 aria-valuenow={Math.round(progress)}
               >
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-l from-emerald-300 via-teal-400 to-teal-300"
+                  className="h-full rounded-full bg-gradient-to-l from-cyan-300 via-sky-400 to-cyan-400"
                   animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.35, ease: "easeOut" }}
                 />
@@ -491,17 +491,17 @@ export default function TravelQuiz({
                           role="radio"
                           aria-checked={isSelected}
                           onClick={() => selectAnswer(question.id, option.id)}
-                          className={`group relative flex items-start gap-3 rounded-2xl border p-4 text-right outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-300/70 ${
+                          className={`group relative flex items-start gap-3 rounded-2xl border p-4 text-right outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/70 ${
                             isSelected
-                              ? "border-emerald-300/60 bg-emerald-300/10 shadow-glow"
+                              ? "border-cyan-300/60 bg-cyan-300/10 shadow-glow"
                               : "border-white/10 bg-white/[0.035] hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.07]"
                           }`}
                         >
                           <span
                             className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
                               isSelected
-                                ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-200"
-                                : "border-white/10 bg-white/5 text-slate-300 group-hover:text-emerald-200"
+                                ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-200"
+                                : "border-white/10 bg-white/5 text-slate-300 group-hover:text-cyan-200"
                             }`}
                           >
                             <Icon className="h-5 w-5" />
@@ -512,7 +512,7 @@ export default function TravelQuiz({
                           </span>
                           <span
                             className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition ${
-                              isSelected ? "border-emerald-300 bg-emerald-300 text-slate-950" : "border-white/20 text-transparent"
+                              isSelected ? "border-cyan-300 bg-cyan-300 text-slate-950" : "border-white/20 text-transparent"
                             }`}
                             aria-hidden="true"
                           >
@@ -570,7 +570,7 @@ export default function TravelQuiz({
 
                   <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_1.4fr]">
                     <div className="glass-soft flex items-center gap-3 p-4">
-                      <CalendarDays className="h-5 w-5 shrink-0 text-emerald-300" />
+                      <CalendarDays className="h-5 w-5 shrink-0 text-cyan-300" />
                       <div>
                         <span className="block text-[11px] text-slate-500">مدت پیشنهادی</span>
                         <b className="mt-1 block text-sm text-white">{result.duration}</b>
@@ -589,7 +589,7 @@ export default function TravelQuiz({
                     </div>
                   </div>
 
-                  <p className="mt-5 rounded-2xl border border-teal-400/15 bg-teal-400/5 p-3 text-center text-[11px] leading-6 text-slate-400">
+                  <p className="mt-5 rounded-2xl border border-sky-400/15 bg-sky-400/5 p-3 text-center text-[11px] leading-6 text-slate-400">
                     این نتیجه یک پیشنهاد اولیه بر اساس پاسخ‌های شماست؛ زمان و هزینهٔ نهایی پس از استعلام مشخص می‌شود.
                   </p>
 

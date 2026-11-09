@@ -75,8 +75,8 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     icon: Plane,
     duration: "۱ ساعت و ۳۰ دقیقه",
     price: 2_800_000,
-    accent: "from-teal-400/20 to-emerald-500/5",
-    iconTone: "bg-teal-400/10 text-teal-300 border-teal-400/20",
+    accent: "from-sky-400/20 to-teal-500/5",
+    iconTone: "bg-sky-400/10 text-sky-300 border-sky-400/20",
     link: { label: "مشاهده در علی‌بابا", href: "https://www.alibaba.ir/" },
   },
   {
@@ -96,8 +96,8 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     emoji: "🚗",
     icon: CarFront,
     duration: "حدود ۱۰ ساعت",
-    accent: "from-emerald-400/20 to-teal-500/5",
-    iconTone: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20",
+    accent: "from-cyan-400/20 to-sky-500/5",
+    iconTone: "bg-cyan-400/10 text-cyan-300 border-cyan-400/20",
   },
   {
     id: "bus",
@@ -106,8 +106,8 @@ const TRANSPORT_OPTIONS: TransportOption[] = [
     icon: Bus,
     duration: "۱۱ ساعت",
     price: 550_000,
-    accent: "from-emerald-400/20 to-teal-600/5",
-    iconTone: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20",
+    accent: "from-cyan-400/20 to-teal-500/5",
+    iconTone: "bg-cyan-400/10 text-cyan-300 border-cyan-400/20",
   },
 ];
 
@@ -201,18 +201,18 @@ function TransportPageContent() {
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#103f35_0%,#061a17_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
-            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-emerald-500/25" />
-            <span className="left-[2%] top-[32rem] h-80 w-80 animate-float bg-teal-500/20 [animation-delay:1.5s]" />
-            <span className="right-[30%] top-[75rem] h-72 w-72 animate-float bg-teal-600/15 [animation-delay:3s]" />
+            <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
+            <span className="left-[2%] top-[32rem] h-80 w-80 animate-float bg-sky-500/20 [animation-delay:1.5s]" />
+            <span className="right-[30%] top-[75rem] h-72 w-72 animate-float bg-teal-500/15 [animation-delay:3s]" />
           </div>
         </div>
 
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <a href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-700 text-slate-950 shadow-glow transition group-hover:scale-105">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
               <Plane className="h-5 w-5 -rotate-45" strokeWidth={2.6} />
             </span>
             <span className="flex flex-col leading-none">
@@ -236,10 +236,10 @@ function TransportPageContent() {
             transition={{ duration: 0.5 }}
             className="glass overflow-hidden p-5 shadow-card sm:p-7"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.12),transparent_45%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(6,182,212,0.12),transparent_45%)]" />
             <div className="relative grid items-center gap-6 lg:grid-cols-[1.5fr_1fr_auto]">
               <div>
-                <span className="chip border-emerald-400/25 bg-emerald-400/10 !text-emerald-200">
+                <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
                   <Sparkles className="h-3.5 w-3.5" />
                   مرحلهٔ دوم برنامه‌ریزی سفر
                 </span>
@@ -248,7 +248,7 @@ function TransportPageContent() {
                 </h1>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <MapPin className="h-4 w-4 text-emerald-300" />
+                    <MapPin className="h-4 w-4 text-cyan-300" />
                     <b className="text-sm text-white">تهران</b>
                     <ArrowLeft className="h-4 w-4 text-slate-500" />
                     <b className="text-sm text-white">مشهد</b>
@@ -268,7 +268,7 @@ function TransportPageContent() {
                       aria-pressed={budget === amount}
                       className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
                         budget === amount
-                          ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-200"
+                          ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-200"
                           : "border-white/10 bg-white/5 text-slate-400 hover:border-white/25 hover:text-white"
                       }`}
                     >
@@ -301,7 +301,7 @@ function TransportPageContent() {
                     هزینهٔ واقعی‌تر را با لحاظ‌کردن بنزین، استهلاک و عوارض محاسبه کنید.
                   </p>
                 </div>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
                   <CarFront className="h-6 w-6" />
                 </span>
               </div>
@@ -352,9 +352,9 @@ function TransportPageContent() {
 
               <div className="mt-6 space-y-3">
                 {[
-                  { label: "هزینهٔ بنزین", value: fuelCost, icon: Fuel, tone: "text-emerald-300" },
+                  { label: "هزینهٔ بنزین", value: fuelCost, icon: Fuel, tone: "text-cyan-300" },
                   { label: "هزینهٔ استهلاک", value: depreciationCost, icon: Wrench, tone: "text-rose-300" },
-                  { label: "عوارض آزادراهی", value: tollCost, icon: Route, tone: "text-teal-300" },
+                  { label: "عوارض آزادراهی", value: tollCost, icon: Route, tone: "text-sky-300" },
                 ].map((row) => {
                   const Icon = row.icon;
                   return (
@@ -369,10 +369,10 @@ function TransportPageContent() {
                 })}
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.07] p-4">
+              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.07] p-4">
                 <div>
                   <span className="text-[11px] text-slate-400">جمع کل سفر</span>
-                  <b className="mt-1 block text-lg font-black text-emerald-200">{formatToman(carTotal)}</b>
+                  <b className="mt-1 block text-lg font-black text-cyan-200">{formatToman(carTotal)}</b>
                 </div>
                 <div className="border-r border-white/10 pr-3">
                   <span className="text-[11px] text-slate-400">سهم هر سرنشین</span>
@@ -461,7 +461,7 @@ function TransportPageContent() {
                     viewport={{ once: true, margin: "-40px" }}
                     transition={{ duration: 0.4, delay: index * 0.07 }}
                     className={`glass group relative flex flex-col overflow-hidden p-5 transition duration-300 hover:-translate-y-1 ${
-                      isSelected ? "border-emerald-300/50 shadow-glow" : "hover:border-white/25"
+                      isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"
                     }`}
                   >
                     <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${option.accent} opacity-60`} />
@@ -481,7 +481,7 @@ function TransportPageContent() {
                         <span className="block text-[10px] text-slate-500">
                           {option.id === "car" ? "هزینهٔ محاسبه‌شدهٔ کل" : `هزینه برای ${formatNumber(passengers)} مسافر`}
                         </span>
-                        <b className="mt-1 block text-xl font-black text-emerald-200">{formatCompactToman(optionCost)}</b>
+                        <b className="mt-1 block text-xl font-black text-cyan-200">{formatCompactToman(optionCost)}</b>
                         {option.id !== "car" && (
                           <span className="mt-1 block text-[10px] text-slate-500">هر مسافر {formatToman(option.price ?? 0)}</span>
                         )}
@@ -494,8 +494,8 @@ function TransportPageContent() {
                           aria-pressed={isSelected}
                           className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
                             isSelected
-                              ? "bg-emerald-300 text-slate-950"
-                              : "border border-white/10 bg-white/5 text-white hover:border-emerald-300/40 hover:bg-white/10"
+                              ? "bg-cyan-300 text-slate-950"
+                              : "border border-white/10 bg-white/5 text-white hover:border-cyan-300/40 hover:bg-white/10"
                           }`}
                         >
                           {isSelected && <Check className="h-4 w-4" />}
