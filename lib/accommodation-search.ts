@@ -164,10 +164,9 @@ function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boo
     return a.stars === null || b.stars === null || Math.abs(a.stars - b.stars) <= 1;
   }
 
-  if (distance !== null) {
-    if (similarity >= 0.8 && distance <= 400) return true;
-    return loosePin && similarity >= 0.8 && distance <= 12_000;
-  }
+  // A different spelling only merges when both pins point at the same building; a provider that
+  // publishes no street address must never merge two hotels that merely share a word.
+  if (distance !== null) return similarity >= 0.8 && distance <= 400;
 
   // Different spellings with no coordinates need a near-identical name and the same star level.
   const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
