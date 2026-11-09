@@ -31,7 +31,17 @@ import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "../context/TravelContext";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
-type PlanItem = { time: string; title: string; description: string; type: ActivityType };
+type PlanItem = {
+  time: string;
+  title: string;
+  description: string;
+  type: ActivityType;
+  poiId?: string;
+  poiCategory?: string;
+  poiSourceUrl?: string | null;
+  poiWikipediaUrl?: string | null;
+  poiDistanceKm?: number;
+};
 type PlanDay = { day: number; title: string; items: PlanItem[] };
 type BudgetAnalysis = {
   totalBudget: number;
@@ -42,9 +52,31 @@ type BudgetAnalysis = {
   remaining: number;
   summary: string;
 };
+type PlanPoi = {
+  id: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distanceKm: number;
+  source: "openstreetmap" | "wikidata" | "wikipedia";
+  sourceUrl: string;
+  wikipediaUrl: string | null;
+};
+
+type PoiResponse = {
+  success: boolean;
+  city: string;
+  pois: PlanPoi[];
+  poisWithArticle: number;
+  sources: { openstreetmap: "ok" | "failed"; wikidata: "ok" | "failed"; wikipedia: "ok" | "failed" };
+  note: string;
+};
+
 type TravelPlan = {
   budgetAnalysis: BudgetAnalysis;
   days: PlanDay[];
+  poiUsage?: { used: number; droppedStops: number; filledStops: number; offered: number };
   recommendations: {
     weather: string;
     clothing: string;
@@ -67,38 +99,44 @@ const ACTIVITY_STYLES: Record<ActivityType, { icon: LucideIcon; tone: string; la
   activity: { icon: Sparkles, tone: "bg-sky-400/10 text-rose-300 border-sky-400/20", label: "تجربه" },
 };
 
-function localDay(day: number, destination: string): PlanDay {
-  const schedules: PlanItem[][] = [
-    [
-      { time: "۰۸:۰۰", title: "صبحانه و آماده‌سازی", description: "صبحانه در اقامتگاه و آماده‌شدن برای شروع روز اول.", type: "food" },
-      { time: "۰۹:۳۰", title: "بازدید از مرکز تاریخی", description: `آشنایی با مهم‌ترین جاذبه‌های مرکز ${destination} و عکاسی.`, type: "sightseeing" },
-      { time: "۱۲:۳۰", title: "ناهار در رستوران محلی", description: "تجربه غذای معروف مقصد در یک رستوران خوش‌قیمت.", type: "food" },
-      { time: "۱۵:۰۰", title: "استراحت کوتاه", description: "بازگشت به اقامتگاه و استراحت برای برنامه عصر.", type: "rest" },
-      { time: "۱۷:۰۰", title: "گشت در بازار", description: "خرید سوغات و تماشای رنگ‌ورنگ محلی.", type: "activity" },
-      { time: "۲۰:۰۰", title: "شام و پیاده‌روی", description: "پایان روز با شام سبک و پیاده‌روی آرام.", type: "food" },
-    ],
-    [
-      { time: "۰۸:۳۰", title: "صبحانه", description: "شروع پرانرژی روز دوم با صبحانه.", type: "food" },
-      { time: "۱۰:۰۰", title: "جاذبه‌های اطراف شهر", description: "حرکت به مقاصد طبیعی یا تاریخی نزدیک شهر.", type: "transport" },
-      { time: "۱۳:۰۰", title: "ناهار و استراحت", description: "ناهار در فضایی محلی و کمی استراحت.", type: "food" },
-      { time: "۱۶:۰۰", title: "تجربه ویژه مقصد", description: "زمان آزاد برای تفریح، عکاسی و تجربه محلی.", type: "sightseeing" },
-      { time: "۲۰:۰۰", title: "بازگشت و شام", description: "بازگشت به شهر و شام در رستوران پیشنهادی.", type: "food" },
-    ],
-    [
-      { time: "۰۹:۰۰", title: "صبحانه و جمع‌کردن وسایل", description: "آماده‌شدن برای روز پایانی و مرور برنامه.", type: "rest" },
-      { time: "۱۰:۳۰", title: "آخرین بازدیدها", description: "بازدید از جاذبه‌ای که در روزهای قبل جا مانده است.", type: "sightseeing" },
-      { time: "۱۳:۰۰", title: "ناهار", description: "ناهار سبک پیش از خرید و آماده‌شدن برای بازگشت.", type: "food" },
-      { time: "۱۵:۳۰", title: "خرید سوغات", description: "خرید هدیه و سوغات برای خانواده و دوستان.", type: "activity" },
-      { time: "۱۸:۰۰", title: "پایان سفر", description: "حرکت به سمت ترمینال یا شروع مسیر بازگشت.", type: "transport" },
-    ],
-  ];
-  return { day, title: `روز ${formatNumber(day)} · کشف ${destination}`, items: schedules[(day - 1) % schedules.length] };
+const LOCAL_TIMES = ["۰۹:۰۰", "۱۱:۳۰", "۱۵:۰۰", "۱۷:۳۰"];
+
+/** Offline plan: when real POIs are available they are the only places shown. */
+function localDays(destination: string, days: number, pois: PlanPoi[]): PlanDay[] {
+  const pool = [...pois];
+  return Array.from({ length: days }, (_, index) => {
+    const day = index + 1;
+    const stops = pool.splice(0, 2);
+    const items: PlanItem[] = [
+      { time: "۰۸:۰۰", title: "صبحانه و آماده‌سازی", description: "صبحانه در اقامتگاه و آماده‌شدن برای شروع روز.", type: "food" },
+      ...stops.map((poi, stopIndex) => ({
+        time: LOCAL_TIMES[stopIndex % LOCAL_TIMES.length],
+        title: poi.name,
+        description: `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ حدود ${new Intl.NumberFormat("fa-IR").format(poi.distanceKm)} کیلومتر از مرکز شهر فاصله دارد.`,
+        type: "sightseeing" as ActivityType,
+        poiId: poi.id,
+        poiCategory: poi.category,
+        poiSourceUrl: poi.wikipediaUrl || poi.sourceUrl,
+        poiWikipediaUrl: poi.wikipediaUrl,
+        poiDistanceKm: poi.distanceKm,
+      })),
+      { time: "۱۳:۳۰", title: "ناهار در رستوران محلی", description: "ناهار ساده و محلی نزدیک به همان محله؛ قیمت را همان‌جا کنترل کنید.", type: "food" },
+      { time: "۱۹:۳۰", title: "شام و پیاده‌روی", description: "پایان روز با شام سبک و پیاده‌روی آرام.", type: "food" },
+    ];
+    items.sort((a, b) => a.time.localeCompare(b.time, "fa"));
+    return {
+      day,
+      title: stops.length ? `روز ${formatNumber(day)} · ${stops.map((poi) => poi.name).join(" و ")}` : `روز ${formatNumber(day)} · گشت در ${destination}`,
+      items,
+    };
+  });
 }
 
-function createLocalPlan(destination: string, budget: number, days: number, transport = 3_200_000, accommodation = 4_950_000): TravelPlan {
-  const food = Math.round(budget * 0.16);
-  const activities = Math.round(budget * 0.1);
-  const remaining = Math.max(0, budget - transport - accommodation - food - activities);
+function createLocalPlan(destination: string, budget: number, days: number, transport = 0, accommodation = 0, pois: PlanPoi[] = []): TravelPlan {
+  const free = Math.max(0, budget - transport - accommodation);
+  const food = Math.round(free * 0.3);
+  const activities = Math.round(free * 0.2);
+  const remaining = Math.max(0, free - food - activities);
   return {
     budgetAnalysis: {
       totalBudget: budget,
@@ -107,14 +145,14 @@ function createLocalPlan(destination: string, budget: number, days: number, tran
       food,
       activities,
       remaining,
-      summary: "این برآورد اولیه است و پس از اتصال به سرویس AI، بر اساس اطلاعات دقیق‌تر بازتنظیم می‌شود.",
+      summary: "این نسخه بدون هوش مصنوعی و فقط بر پایهٔ انتخاب‌های واقعی شما (حمل‌ونقل و اقامت) و جاذبه‌های تأییدشدهٔ مقصد ساخته شده است.",
     },
-    days: Array.from({ length: days }, (_, index) => localDay(index + 1, destination)),
+    days: localDays(destination, days, pois),
     recommendations: {
-      weather: "هوای مشهد در روزهای آفتابی معمولاً خشک است؛ پیش‌بینی دقیق چند روز قبل از حرکت را بررسی کنید و آب کافی همراه داشته باشید.",
-      clothing: "کفش راحت برای پیاده‌روی، لباس مناسب فصل و یک لایه سبک برای خنکای شب انتخاب خوبی است.",
-      restaurants: ["رستوران‌های محلی اطراف بازار رضا", "غذاهای سنتی طرقبه و شاندیز", "کافه‌های آرام احمدآباد برای عصرانه"],
-      costSaving: ["خرید بلیت و رزرو اقامتگاه را زودتر انجام دهید.", "برای مسیرهای کوتاه از حمل‌ونقل عمومی استفاده کنید.", "بخشی از هزینه تفریح را برای تجربه‌های رایگان کنار بگذارید."],
+      weather: "پیش از حرکت، پیش‌بینی هوای مقصد را از منبع رسمی بررسی کنید.",
+      clothing: "کفش راحت برای پیاده‌روی، لباس مناسب فصل و یک لایه سبک برای شب.",
+      restaurants: ["رستوران‌های محلی نزدیک اقامتگاه", "غذاهای سنتی همان شهر", "کافه‌های محلی برای عصرانه"],
+      costSaving: ["رزرو اقامت و بلیت را زودتر انجام دهید.", "برای مسیرهای کوتاه از حمل‌ونقل عمومی استفاده کنید."],
     },
   };
 }
@@ -133,6 +171,8 @@ export default function PlanPage() {
   const [noticeTone, setNoticeTone] = useState<"info" | "success" | "warning">("info");
   const [transportDetails, setTransportDetails] = useState<Record<string, unknown>>({});
   const [accommodationDetails, setAccommodationDetails] = useState<Record<string, unknown>>({});
+  const [poiData, setPoiData] = useState<PoiResponse | null>(null);
+  const [poiLoading, setPoiLoading] = useState(false);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -182,9 +222,44 @@ export default function PlanPage() {
     } catch {
       // Shared context remains the source of truth when legacy storage is invalid.
     }
-    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost));
+    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, poiData?.pois ?? []));
     setActiveDay(0);
   }, [isHydrated, travelData]);
+
+  useEffect(() => {
+    const city = destination.trim();
+    if (!city) {
+      setPoiData(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setPoiLoading(true);
+    fetch("/api/providers/pois/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ city, limit: 24 }),
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((payload: PoiResponse) => {
+        if (cancelled) return;
+        setPoiData(payload);
+        setPlan((current) => current.poiUsage
+          ? current
+          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, payload.pois ?? []));
+      })
+      .catch(() => {
+        if (!cancelled) setPoiData({ success: false, city, pois: [], poisWithArticle: 0, sources: { openstreetmap: "failed", wikidata: "failed", wikipedia: "failed" }, note: "خواندن جاذبه‌های واقعی مقصد انجام نشد." });
+      })
+      .finally(() => {
+        if (!cancelled) setPoiLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [destination]);
 
   const selectedDay = plan.days[Math.min(activeDay, plan.days.length - 1)] ?? plan.days[0];
   const totalSpent = useMemo(() => {
@@ -210,6 +285,7 @@ export default function PlanPage() {
           travelers: travelData.travelers,
           transport: transportDetails,
           accommodation: accommodationDetails,
+          pois: (poiData?.pois ?? []).map((poi) => ({ id: poi.id, name: poi.name, category: poi.category, latitude: poi.latitude, longitude: poi.longitude, distanceKm: poi.distanceKm, sourceUrl: poi.sourceUrl, wikipediaUrl: poi.wikipediaUrl })),
           preferences: preferences.split(/[،,]/).map((item) => item.trim()).filter(Boolean),
         }),
       });
@@ -222,7 +298,7 @@ export default function PlanPage() {
       setNoticeTone("success");
       setNotice(`برنامه تازه با ${payload.meta?.model || "هوش مصنوعی"} ساخته شد.`);
     } catch {
-      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation));
+      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, poiData?.pois ?? []));
       setActiveDay(0);
       setNoticeTone("warning");
       setNotice("اتصال زنده به AI برقرار نشد؛ نسخه آفلاین ساخته شد. روی Netlify ایستا، مسیر API باید به یک سرویس سروری خارجی متصل شود.");
@@ -249,7 +325,15 @@ export default function PlanPage() {
   return (
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 print:bg-white print:p-0 print:text-black sm:px-6 lg:px-8">
-        <style>{`@media print { body { background: white !important; color: black !important; } .print-card { border: 1px solid #ddd !important; background: white !important; color: black !important; box-shadow: none !important; } .print-card * { color: black !important; text-shadow: none !important; } }`}</style>
+        <style>{`@page { size: A4; margin: 14mm 12mm; }
+@media print {
+  body { background: white !important; color: black !important; }
+  .print-card { border: 1px solid #ddd !important; background: white !important; color: black !important; box-shadow: none !important; break-inside: avoid; }
+  .print-card * { color: black !important; text-shadow: none !important; }
+  .print-only { display: block !important; }
+  .screen-only { display: none !important; }
+  a[href]::after { content: ""; }
+}`}</style>
         <div className="pointer-events-none absolute inset-0 -z-10 print:hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
@@ -340,6 +424,33 @@ export default function PlanPage() {
             </section>
           )}
 
+          <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="جاذبه‌های واقعی مقصد">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-xl font-black text-white"><MapPin className="h-5 w-5 text-cyan-300" />جاذبه‌های واقعی {destination}</h2>
+              <span className="text-[10px] text-slate-500">
+                {poiLoading ? "در حال خواندن منابع…" : `${formatNumber(poiData?.pois.length ?? 0)} جاذبه · ${formatNumber(poiData?.poisWithArticle ?? 0)} دارای مقالهٔ ویکی‌پدیا`}
+              </span>
+            </div>
+            {poiData?.pois.length ? (
+              <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {poiData.pois.map((poi) => (
+                  <a key={poi.id} href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex items-start justify-between gap-2 p-3 transition hover:bg-white/[0.07]">
+                    <span className="min-w-0">
+                      <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
+                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{formatNumber(poi.distanceKm)} کیلومتر از مرکز</span>
+                    </span>
+                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-3 text-[11px] leading-6 text-slate-300">
+                {poiLoading ? "در حال خواندن جاذبه‌ها از منابع عمومی…" : poiData?.note || "برای این مقصد جاذبهٔ تأییدشده‌ای پیدا نشد؛ هیچ جاذبهٔ ساختگی نمایش داده نمی‌شود."}
+              </p>
+            )}
+            {poiData && <p className="mt-3 text-[10px] leading-6 text-slate-500">{poiData.note} منابع: ویکی‌پدیا {poiData.sources.wikipedia === "ok" ? "✅" : "—"} · ویکی‌داده {poiData.sources.wikidata === "ok" ? "✅" : "—"} · OpenStreetMap {poiData.sources.openstreetmap === "ok" ? "✅" : "—"}</p>}
+          </section>
+
           <div className="mt-6 flex flex-col items-center gap-3 print:hidden">
             <button type="button" onClick={regenerate} disabled={loading || !origin.trim() || !destination.trim()} className="btn-primary w-full max-w-xl !py-4 text-sm disabled:cursor-wait disabled:opacity-60">
               {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
@@ -360,7 +471,7 @@ export default function PlanPage() {
             </div>
 
             <AnimatePresence mode="wait">
-              <motion.div key={selectedDay?.day ?? 0} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="glass print-card mt-4 p-5 sm:p-7">
+              <motion.div key={selectedDay?.day ?? 0} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="glass print-card mt-4 p-5 sm:p-7 print:hidden">
                 <h3 className="text-lg font-black text-white">{selectedDay?.title}</h3>
                 <div className="relative mt-6 space-y-4 before:absolute before:right-[23px] before:top-4 before:h-[calc(100%-32px)] before:w-px before:bg-white/10 sm:before:right-[27px]">
                   {selectedDay?.items.map((item, index) => {
@@ -373,6 +484,13 @@ export default function PlanPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-xs font-black text-cyan-200"><Clock3 className="h-3.5 w-3.5" />{item.time}</span><span className="text-[10px] text-slate-500">{style.label}</span></div>
                           <h4 className="mt-2 text-sm font-extrabold text-white">{item.title}</h4>
                           <p className="mt-1.5 text-xs leading-6 text-slate-400">{item.description}</p>
+                          {item.poiId && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                              {item.poiCategory && <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{item.poiCategory}</span>}
+                              {typeof item.poiDistanceKm === "number" && <span>{formatNumber(item.poiDistanceKm)} کیلومتر از مرکز</span>}
+                              {item.poiSourceUrl && <a href={item.poiSourceUrl} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-slate-400 underline decoration-dotted hover:text-cyan-200">منبع اطلاعات<ExternalLink className="h-3 w-3" /></a>}
+                            </div>
+                          )}
                         </div>
                       </motion.article>
                     );
@@ -380,6 +498,22 @@ export default function PlanPage() {
                 </div>
               </motion.div>
             </AnimatePresence>
+          </section>
+
+          <section className="print-only mt-8 hidden" aria-label="برنامه کامل چاپ">
+            <h2 className="text-2xl font-black text-white">برنامه کامل روزها</h2>
+            {plan.days.map((day) => (
+              <div key={`print-${day.day}`} className="print-card mt-4 rounded-xl border border-white/10 p-4">
+                <h3 className="text-base font-black">{day.title}</h3>
+                <ul className="mt-2 space-y-1.5">
+                  {day.items.map((item, index) => (
+                    <li key={`print-${day.day}-${index}`} className="text-[11px] leading-6">
+                      <b>{item.time}</b> · {item.title}{item.poiId ? " (جاذبهٔ تأییدشده در منبع عمومی)" : ""} — {item.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </section>
 
           <section className="glass print-card mt-8 p-5 sm:p-7">

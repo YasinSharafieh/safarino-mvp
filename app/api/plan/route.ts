@@ -5,6 +5,13 @@ import {
   settleAiBudget,
   usageCostMicros,
 } from "../../../lib/ai-budget";
+import {
+  assembleItinerary,
+  sanitizePois,
+  synchronizeBudget,
+  type PlanDay,
+  type PlanPoi,
+} from "../../../lib/plan-itinerary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +30,7 @@ type TravelInput = {
   transport: unknown;
   accommodation: unknown;
   preferences: string[];
+  pois: PlanPoi[];
 };
 
 function cleanText(value: unknown, fallback: string, maxLength = 300): string {
@@ -58,18 +66,24 @@ function parseInput(body: unknown): TravelInput | null {
     transport: input.transport ?? null,
     accommodation: input.accommodation ?? input.hotel ?? null,
     preferences: preferences.map((item) => item.slice(0, 80)),
+    pois: sanitizePois(input.pois),
   };
 }
 
 function jsonPrompt(input: TravelInput): string {
+  const poiList = input.pois.map((poi) => `${poi.id} :: ${poi.name} :: ${poi.category}`).join("\n");
   return `برای سفر زیر یک برنامه عملی و دقیق به فارسی بساز.
-اطلاعات سفر: ${JSON.stringify(input)}
+اطلاعات سفر: ${JSON.stringify({ ...input, pois: input.pois.map((poi) => poi.id) })}
+فهرست جاذبه‌های واقعی مقصد (شناسه :: نام :: دسته):
+${poiList || "برای این مقصد جاذبه‌ای در دسترس نیست"}
 قوانین:
 - پاسخ فقط یک شیء JSON معتبر و بدون Markdown باشد.
 - برنامه برای ${input.days} روز و ساعت‌به‌ساعت از حدود ۰۸:۰۰ تا ۲۲:۰۰ باشد.
 - هزینه‌ها به تومان، واقع‌گرایانه و مجموعشان حداکثر بودجه کاربر باشد.
 - هزینه حمل‌ونقل و اقامت ورودی را در تحلیل بودجه لحاظ کن.
 - نوع هر فعالیت فقط یکی از sightseeing، food، transport، rest یا activity باشد.
+- هر فعالیت sightseeing باید فقط از فهرست جاذبه‌های بالا انتخاب شود و کلید "poiId" آن دقیقاً همان شناسه باشد. هیچ مکان، جاذبه، موزه یا رستورانی که در این فهرست نیست از خودت نساز.
+- اگر شمار جاذبه‌ها کمتر از روزهای سفر است، روز را با استراحت، غذای محلی و پیاده‌روی در همان محله‌ها پر کن، نه با مکان ساختگی.
 ساختار دقیق خروجی:
 {
   "budgetAnalysis": {
@@ -88,7 +102,8 @@ function jsonPrompt(input: TravelInput): string {
       "time": "HH:MM",
       "title": "string",
       "description": "string",
-      "type": "sightseeing | food | transport | rest | activity"
+      "type": "sightseeing | food | transport | rest | activity",
+      "poiId": "شناسه جاذبه از فهرست (فقط برای sightseeing)"
     }]
   }],
   "recommendations": {
@@ -120,31 +135,42 @@ function normalizePlan(raw: unknown, input: TravelInput) {
   const rawDays = Array.isArray(root.days) ? root.days : [];
   if (!rawDays.length) throw new Error("AI response has no daily schedule");
 
-  const totalBudget = cleanNumber(budget.totalBudget, input.budget, 0, 1_000_000_000);
-  const transport = cleanNumber(budget.transport, 0, 0, totalBudget);
-  const accommodation = cleanNumber(budget.accommodation, 0, 0, totalBudget);
-  const food = cleanNumber(budget.food, 0, 0, totalBudget);
-  const activities = cleanNumber(budget.activities, 0, 0, totalBudget);
-  const remaining = Math.max(0, totalBudget - transport - accommodation - food - activities);
-
-  const days = rawDays.slice(0, input.days).map((rawDay, dayIndex) => {
+  const draftDays: PlanDay[] = rawDays.slice(0, input.days).map((rawDay, dayIndex) => {
     const day = (rawDay ?? {}) as Record<string, unknown>;
     const rawItems = Array.isArray(day.items) ? day.items : [];
     return {
       day: dayIndex + 1,
       title: cleanText(day.title, `روز ${dayIndex + 1} در ${input.destination}`, 120),
-      items: rawItems.slice(0, 12).map((rawItem) => {
+      items: rawItems.slice(0, 14).map((rawItem) => {
         const item = (rawItem ?? {}) as Record<string, unknown>;
-        const allowedTypes = ["sightseeing", "food", "transport", "rest", "activity"];
-        const type = allowedTypes.includes(String(item.type)) ? String(item.type) : "activity";
+        const allowedTypes = ["sightseeing", "food", "transport", "rest", "activity"] as const;
+        const type = allowedTypes.includes(String(item.type) as typeof allowedTypes[number]) ? String(item.type) as typeof allowedTypes[number] : "activity";
         return {
           time: cleanText(item.time, "۱۰:۰۰", 10),
-          title: cleanText(item.title, "بازدید و گشت‌وگذار", 140),
+          title: cleanText(item.title, "گشت‌وگذار", 140),
           description: cleanText(item.description, "زمان آزاد برای لذت بردن از سفر", 500),
           type,
+          poiId: typeof item.poiId === "string" ? item.poiId.slice(0, 120) : undefined,
         };
       }),
     };
+  });
+
+  const itinerary = assembleItinerary(draftDays, input.pois, input.days);
+  const selectionCost = (value: unknown): number => {
+    if (!value || typeof value !== "object") return 0;
+    const record = value as Record<string, unknown>;
+    if (record.status === "skipped") return 0;
+    const cost = Number(record.cost);
+    return Number.isFinite(cost) && cost > 0 ? Math.round(cost) : 0;
+  };
+
+  const budgetAnalysis = synchronizeBudget({
+    totalBudget: cleanNumber(budget.totalBudget, input.budget, 1_000_000, 1_000_000_000),
+    transportCost: selectionCost(input.transport),
+    accommodationCost: selectionCost(input.accommodation),
+    aiFood: cleanNumber(budget.food, 0, 0, 1_000_000_000),
+    aiActivities: cleanNumber(budget.activities, 0, 0, 1_000_000_000),
   });
 
   const stringList = (value: unknown) =>
@@ -153,21 +179,24 @@ function normalizePlan(raw: unknown, input: TravelInput) {
       : [];
 
   return {
-    budgetAnalysis: {
-      totalBudget,
-      transport,
-      accommodation,
-      food,
-      activities,
-      remaining,
-      summary: cleanText(budget.summary, "هزینه‌ها متناسب با بودجه شما برنامه‌ریزی شده است.", 600),
-    },
-    days,
-    recommendations: {
-      weather: cleanText(recommendations.weather, "پیش از سفر پیش‌بینی هوای مقصد را بررسی کنید.", 500),
-      clothing: cleanText(recommendations.clothing, "لباس راحت و کفش مناسب پیاده‌روی همراه داشته باشید.", 500),
-      restaurants: stringList(recommendations.restaurants),
-      costSaving: stringList(recommendations.costSaving),
+    plan: {
+      budgetAnalysis: {
+        ...budgetAnalysis,
+        summary: cleanText(budget.summary, "هزینه‌ها متناسب با بودجه و انتخاب‌های واقعی شما برنامه‌ریزی شده است.", 600),
+      },
+      days: itinerary.days,
+      recommendations: {
+        weather: cleanText(recommendations.weather, "پیش از سفر پیش‌بینی هوای مقصد را بررسی کنید.", 500),
+        clothing: cleanText(recommendations.clothing, "لباس راحت و کفش مناسب پیاده‌روی همراه داشته باشید.", 500),
+        restaurants: stringList(recommendations.restaurants),
+        costSaving: stringList(recommendations.costSaving),
+      },
+      poiUsage: {
+        used: itinerary.usedPois,
+        droppedStops: itinerary.droppedStops,
+        filledStops: itinerary.filledStops,
+        offered: input.pois.length,
+      },
     },
   };
 }
@@ -211,7 +240,7 @@ async function requestModel(model: string, input: TravelInput, apiKey: string) {
     if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
 
     return {
-      plan: normalizePlan(extractJson(content), input),
+      plan: normalizePlan(extractJson(content), input).plan,
       usage: payload?.usage ?? null,
       costMicros: actualMicros,
     };
