@@ -64,24 +64,42 @@ export function alibabaBookingUrl(input: FlightSearchInput): string {
 }
 
 export async function alibabaRequest(path: string, init?: { body?: unknown }): Promise<unknown> {
-  const response = await fetch(`${API_ROOT}/${path}`, {
-    method: init?.body ? "POST" : "GET",
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      "Content-Type": "application/json",
-      Origin: SITE_ROOT,
-      Referer: `${SITE_ROOT}/`,
-      "User-Agent": "Safarino/1.0 (+https://safarino-mvp.vercel.app)",
-    },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-    signal: AbortSignal.timeout(15_000),
-  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`${API_ROOT}/${path}`, {
+        method: init?.body ? "POST" : "GET",
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json",
+          Origin: SITE_ROOT,
+          Referer: `${SITE_ROOT}/`,
+          "User-Agent": "Safarino/1.0 (+https://safarino-mvp.vercel.app)",
+        },
+        body: init?.body ? JSON.stringify(init.body) : undefined,
+        cache: "no-store",
+        signal: AbortSignal.timeout(12_000),
+      });
 
-  if (!response.ok) throw new Error(`ALIBABA_HTTP_${response.status}`);
-  const payload = await response.json();
-  if (payload?.success === false) throw new Error("ALIBABA_SEARCH_REJECTED");
-  return payload?.result ?? payload;
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`ALIBABA_HTTP_${response.status}`);
+      }
+      const payload = await response.json();
+      if (payload?.success === false) throw new Error("ALIBABA_SEARCH_REJECTED");
+      return payload?.result ?? payload;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const permanentHttpError = /^ALIBABA_HTTP_(?!429|5\d\d)/.test(message);
+      const rejected = message === "ALIBABA_SEARCH_REJECTED";
+      if (attempt >= 2 || permanentHttpError || rejected) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  throw new Error("ALIBABA_REQUEST_FAILED");
 }
 
 function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
