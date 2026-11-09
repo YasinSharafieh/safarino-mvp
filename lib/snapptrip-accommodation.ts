@@ -1,7 +1,7 @@
 import type { AccommodationOffer, AccommodationSearchInput, ProviderSearchResult } from "./accommodation-types";
 import { accommodationNights } from "./accommodation-types";
 import { publicProviderJson } from "./public-provider-http";
-import { finiteNumber, itemLabel, normalizeTerm, positiveNumber, record, rows, safeImageUrl, text, toman } from "./accommodation-provider-utils";
+import { finiteNumber, normalizeTerm, positiveNumber, record, rows, safeImageUrl, text } from "./accommodation-provider-utils";
 
 const API = "https://hapi.snapptrip.com/hotel/api/v2";
 const WEB = "https://www.snapptrip.com";
@@ -22,94 +22,61 @@ function collection(payload: unknown, keys: string[]): Record<string, unknown>[]
 }
 
 function snapptripImage(hotel: Record<string, unknown>): string | null {
-  const thumbnail = record(hotel.thumbnail);
-  const raw = text(thumbnail.url) || text(hotel.image_url) || text(hotel.image);
-  if (!raw) return null;
-  const absolute = raw.startsWith("/") ? STORE + raw : raw;
-  try {
-    const host = new URL(absolute).hostname;
-    if (host !== "store.snapptrip.com" && host !== "cdnsnapptrip.com") return null;
-    return safeImageUrl(absolute, [host], host === "cdnsnapptrip.com" ? "/images/market/domestic-hotel/" : "/domestic-hotel/");
-  } catch {
-    return null;
-  }
+  const media = text(record(hotel.cover_media).media) || text(record(rows(hotel.galleries)[0]).media);
+  if (!media) return null;
+  const path = media.startsWith("/") ? media : `/${media}`;
+  return safeImageUrl(STORE + path, ["store.snapptrip.com"], "/domestic-hotel/");
 }
 
+/** Verified on the live public response: `fa_url` is the hotel slug and `city_url` the city slug. */
 function snapptripBookingUrl(hotel: Record<string, unknown>, fallbackCity: string): string | null {
-  const detail = record(hotel.hotelDetail);
-  const page = record(detail.hotelPageUrl);
-  const query = record(page.query);
-  const city = text(query.cityTitle) || fallbackCity;
-  const slug = text(query.hotelTitle) || text(hotel.slug);
+  const city = text(hotel.city_url) || text(hotel.city_title) || fallbackCity;
+  const slug = text(hotel.fa_url) || text(hotel.url);
   if (!slug || !city || slug.length > 300 || city.length > 80 || /[/?#]/.test(slug) || /[/?#]/.test(city)) return null;
   return `${WEB}/${encodeURIComponent("رزرو-هتل")}/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`;
-}
-
-function rawStayTotal(hotel: Record<string, unknown>): number | null {
-  const price = record(hotel.price);
-  const prices = record(hotel.prices);
-  const candidates = [
-    hotel.price_total,
-    hotel.total_price,
-    hotel.min_price,
-    hotel.minPrice,
-    price.local_price,
-    price.total,
-    price.total_price,
-    prices.local_price,
-    prices.total,
-    prices.total_price,
-  ];
-  for (const candidate of candidates) {
-    const value = positiveNumber(candidate);
-    if (value !== null) return value;
-  }
-  return null;
 }
 
 export function normalizeSnapptripRows(value: unknown, input: AccommodationSearchInput): AccommodationOffer[] {
   const nightCount = accommodationNights(input);
   return rows(value).flatMap((hotel): AccommodationOffer[] => {
-    if (hotel.is_available === false || text(hotel.is_available).toLowerCase() === "false") return [];
-    const id = text(hotel.id) || text(hotel.hotel_id) || text(record(hotel.hotelDetail).hotelId);
-    const detail = record(hotel.hotelDetail);
-    const name = text(hotel.title) || text(hotel.name) || text(detail.hotelTitle);
-    const totalRial = rawStayTotal(hotel);
-    const total = toman(totalRial);
+    if (hotel.is_available === false) return [];
+    const id = text(hotel.id);
+    const name = text(hotel.title);
+    // Cross-checked against Eghamat24 for the same hotel and dates: Snapptrip's public `price` is in Toman.
+    const total = positiveNumber(hotel.price) ?? positiveNumber(hotel.price_off);
     const bookingUrl = snapptripBookingUrl(hotel, input.city);
     if (!/^\d+$/.test(id) || !name || !total || !bookingUrl) return [];
     const reviews = record(hotel.reviews);
-    const location = record(hotel.location);
-    const locationArray = Array.isArray(hotel.location) ? hotel.location : [];
-    const latitude = finiteNumber(location.lat) ?? finiteNumber(locationArray[0]);
-    const longitude = finiteNumber(location.lng) ?? finiteNumber(locationArray[1]);
-    const stars = finiteNumber(hotel.stars) ?? finiteNumber(detail.stars);
-    const amenities = Array.isArray(hotel.amenities) ? hotel.amenities.map(itemLabel).filter(Boolean).slice(0, 4) : [];
-    const roomTitle = text(hotel.room_title) || text(hotel.roomTitle) || text(record(hotel.room).title);
+    const coordinates = Array.isArray(hotel.location) ? hotel.location : [];
+    const stars = finiteNumber(hotel.stars);
+    const before = positiveNumber(hotel.price_off);
+    const facilities = rows(hotel.facilities).map((item) => text(item.title)).filter(Boolean).slice(0, 4);
+    const badges = rows(hotel.badges).map((item) => text(item.title)).filter(Boolean).slice(0, 2);
+    const roomTitle = text(hotel.min_price_room_title);
     return [{
       id: `snapptrip-${id}`,
       providerPropertyId: id,
       kind: "hotel",
       name,
-      typeLabel: stars ? `هتل ${stars} ستاره` : "هتل",
-      location: text(hotel.address) || text(detail.address) || input.city,
+      typeLabel: text(hotel.accommodation_type) || (stars ? `هتل ${stars} ستاره` : "هتل"),
+      location: text(hotel.address) || input.city,
       imageUrl: snapptripImage(hotel),
-      rating: finiteNumber(reviews.ptp_ratings) ?? finiteNumber(hotel.user_score) ?? finiteNumber(hotel.rating),
-      reviewCount: Math.max(0, Math.round(finiteNumber(reviews.count) ?? finiteNumber(hotel.review_count) ?? 0)),
+      rating: finiteNumber(reviews.ptp_ratings) ?? finiteNumber(hotel.user_score),
+      reviewCount: Math.max(0, Math.round(finiteNumber(reviews.ptp_reviews) ?? finiteNumber(hotel.review_count) ?? 0)),
       stars,
-      priceTotalToman: total,
+      priceTotalToman: Math.round(total),
       pricePerNightToman: Math.round(total / nightCount),
-      priceBeforeDiscountToman: null,
+      priceBeforeDiscountToman: before && before > total ? Math.round(before) : null,
       discountPercent: Math.max(0, finiteNumber(hotel.discount_percent) || 0),
       priceIncludesVat: null,
-      priceNote: "مبلغ کل اعلام‌شده اسنپ‌تریپ برای تاریخ جستجو؛ اتاق، ظرفیت و مالیات نهایی را در صفحه رزرو کنترل کنید.",
+      priceNote: "مبلغ کل اعلام‌شده اسنپ‌تریپ برای تاریخ جستجو؛ مالیات و اتاق نهایی را در صفحه رزرو کنترل کنید.",
       bookingNote: "لینک دقیق همان هتل است؛ تاریخ و مسافران را در فرم رزرو اسنپ‌تریپ دوباره تأیید کنید.",
-      details: [roomTitle, "قیمت برای تاریخ جستجو"].filter(Boolean),
-      amenities,
+      details: [roomTitle ? `ارزان‌ترین اتاق: ${roomTitle}` : "", hotel.instant_book === true ? "رزرو آنی" : "", ...badges].filter(Boolean),
+      amenities: facilities,
       provider: "snapptrip",
       bookingUrl,
-      latitude,
-      longitude,
+      latitude: finiteNumber(coordinates[0]),
+      longitude: finiteNumber(coordinates[1]),
     }];
   });
 }
@@ -139,7 +106,7 @@ export async function searchSnapptripAccommodation(input: AccommodationSearchInp
   });
   const hotels = collection(payload, ["hotels", "items", "hotelsData"]);
   const body = record(payload);
-  const found = finiteNumber(body.total) ?? finiteNumber(record(body.data).total) ?? hotels.length;
+  const found = finiteNumber(body.total) ?? hotels.length;
   return {
     offers: normalizeSnapptripRows(hotels, input),
     found: Math.max(0, Math.round(found)),

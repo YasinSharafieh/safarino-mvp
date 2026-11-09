@@ -29,10 +29,32 @@ assert.equal(otaghak.priceTotalToman, 3_800_000);
 assert.equal(otaghak.imageUrl, "https://cdn.otaghak.com/otg-images-new/X500/photo.webp");
 assert.ok(otaghak.bookingUrl.includes("checkIn=2026-11-20"));
 
-const snapptrip = normalizeSnapptripRows([{ id: 60, title: "پارسیان آزادی", price_total: 27_930_000, is_available: true, stars: 5, thumbnail: { url: "/domestic-hotel/galleries/hotel/60/17924.jpeg" }, hotelDetail: { hotelPageUrl: { query: { cityTitle: "تهران", hotelTitle: "هتل-پارسیان-آزادی" } } }, location: { lat: 35.789872, lng: 51.389829 } }], { ...input, kind: "hotel", city: "تهران" })[0];
-assert.equal(snapptrip.priceTotalToman, 2_793_000);
-assert.equal(snapptrip.imageUrl, "https://store.snapptrip.com/domestic-hotel/galleries/hotel/60/17924.jpeg");
-assert.ok(decodeURIComponent(snapptrip.bookingUrl).endsWith("/رزرو-هتل/تهران/هتل-پارسیان-آزادی"));
+const snapptrip = normalizeSnapptripRows([{
+  id: 177,
+  title: "بین المللی گلدن پالاس",
+  accommodation_type: "هتل",
+  address: "مشهد، خیابان امام رضا (ع)، میدان بسیج",
+  price: 14910000,
+  price_off: 16000000,
+  discount_percent: 0,
+  stars: 5,
+  is_available: true,
+  instant_book: true,
+  cover_media: { media: "/domestic-hotel/galleries/hotel/177/33357.jpeg" },
+  reviews: { ptp_ratings: "4.300000", ptp_reviews: "496" },
+  fa_url: "هتل-بین-المللی-گلدن-پالاس",
+  city_url: "مشهد",
+  min_price_room_title: "یک تخته اکونومی",
+  facilities: [{ title: "اینترنت رایگان و نامحدود" }],
+  location: [36.272188, 59.602845],
+}], { ...input, kind: "hotel", city: "مشهد" })[0];
+assert.equal(snapptrip.priceTotalToman, 14_910_000, "Snapptrip price is Toman");
+assert.equal(snapptrip.pricePerNightToman, 7_455_000);
+assert.equal(snapptrip.imageUrl, "https://store.snapptrip.com/domestic-hotel/galleries/hotel/177/33357.jpeg");
+assert.equal(snapptrip.rating, 4.3);
+assert.equal(snapptrip.reviewCount, 496);
+assert.equal(decodeURIComponent(snapptrip.bookingUrl), "https://www.snapptrip.com/رزرو-هتل/مشهد/هتل-بین-المللی-گلدن-پالاس");
+assert.equal(snapptrip.latitude, 36.272188);
 
 const eghamat = normalizeEghamat24Rows([{ id: 1253, full_name: "هتل پارسیس مشهد", type: "hotel", star: "5", min_price: "40000000", original_image: "Mashhad-Parsis-66.jpg", uri: "/MashhadHotels/ParsisHotel.html", lat: 36.2896, lng: 59.6289 }], { ...input, kind: "hotel", city: "مشهد" })[0];
 assert.equal(eghamat.priceTotalToman, 4_000_000);
