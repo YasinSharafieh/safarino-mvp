@@ -114,9 +114,12 @@ async function busCityCode(code: string): Promise<string> {
   const filter = encodeURIComponent(`q={ct:'${code.toLowerCase()}'}`);
   const result = await alibabaRequest(`v1/bus/stations?filter=${filter}`) as Record<string, unknown>;
   const items = Array.isArray(result.items) ? result.items : [];
-  const first = items[0] as Record<string, unknown> | undefined;
-  const domainCode = first?.domainCode;
-  if (typeof domainCode !== "string" || !domainCode) throw new Error("ALIBABA_BUS_CITY_NOT_FOUND");
+  const station = items.find((value) => {
+    if (!value || typeof value !== "object") return false;
+    return Boolean(text((value as Record<string, unknown>).domainCode));
+  }) as Record<string, unknown> | undefined;
+  const domainCode = text(station?.domainCode);
+  if (!domainCode) throw new Error("ALIBABA_BUS_CITY_NOT_FOUND");
   return domainCode;
 }
 
