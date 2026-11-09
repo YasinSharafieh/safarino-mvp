@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import { useTravel } from "../context/TravelContext";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = { time: string; title: string; description: string; type: ActivityType };
@@ -115,49 +116,71 @@ function createLocalPlan(destination: string, budget: number, days: number, tran
 }
 
 export default function PlanPage() {
+  const { travelData, isHydrated } = useTravel();
   const [origin, setOrigin] = useState("تهران");
   const [destination, setDestination] = useState("مشهد");
   const [budget, setBudget] = useState(15_000_000);
   const [dayCount, setDayCount] = useState(3);
   const [preferences, setPreferences] = useState("فرهنگ و تاریخ، غذای محلی، سفر اقتصادی");
-  const [plan, setPlan] = useState<TravelPlan>(() => createLocalPlan("مشهد", 15_000_000, 3));
+  const [plan, setPlan] = useState<TravelPlan>(() => createLocalPlan("مشهد", 15_000_000, 3, 0, 0));
   const [activeDay, setActiveDay] = useState(0);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("برای دریافت برنامه اختصاصی، دکمه بازسازی هوشمند را بزنید.");
   const [noticeTone, setNoticeTone] = useState<"info" | "success" | "warning">("info");
-  const [transportDetails, setTransportDetails] = useState<Record<string, unknown>>({ vehicleId: "car", cost: 3_200_000 });
-  const [accommodationDetails, setAccommodationDetails] = useState<Record<string, unknown>>({ id: "pearl-suite", nights: 3 });
+  const [transportDetails, setTransportDetails] = useState<Record<string, unknown>>({});
+  const [accommodationDetails, setAccommodationDetails] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
-    let transportCost = 3_200_000;
-    let accommodationCost = 4_950_000;
-    try {
-      const transportRaw = window.localStorage.getItem("safarino-transport-selection-v1");
-      if (transportRaw) {
-        const transport = JSON.parse(transportRaw) as Record<string, unknown>;
-        setTransportDetails(transport);
-        if (typeof transport.cost === "number") transportCost = transport.cost;
+    if (!isHydrated) return;
+    const nextOrigin = travelData.origin || "تهران";
+    const nextDestination = travelData.destination || "مشهد";
+    const nextBudget = Math.max(1_000_000, travelData.budget * 1_000_000);
+    const nextDays = Math.max(1, Math.round(travelData.days || 3));
+    let transportCost = 0;
+    let accommodationCost = 0;
+    setOrigin(nextOrigin);
+    setDestination(nextDestination);
+    setBudget(nextBudget);
+    setDayCount(nextDays);
+
+    if (travelData.transport) {
+      setTransportDetails(travelData.transport);
+      if (typeof travelData.transport.cost === "number" && Number.isFinite(travelData.transport.cost)) {
+        transportCost = Math.max(0, travelData.transport.cost);
       }
-      const accommodationRaw = window.localStorage.getItem("safarino-accommodation-selection-v1");
-      if (accommodationRaw) {
-        const accommodation = JSON.parse(accommodationRaw) as Record<string, unknown>;
-        setAccommodationDetails(accommodation);
-        const nights = typeof accommodation.nights === "number" ? accommodation.nights : 3;
-        const prices: Record<string, number> = {
-          "golden-palace": 4_800_000,
-          "nene-agha": 1_650_000,
-          "silver-coast": 7_200_000,
-          "pearl-suite": 2_900_000,
-          "friend-hostel": 850_000,
-          "eram-garden": 3_500_000,
-        };
-        accommodationCost = (prices[String(accommodation.id)] ?? 1_650_000) * nights;
+    }
+    if (travelData.accommodation) {
+      setAccommodationDetails(travelData.accommodation);
+      if (travelData.accommodation.status === "selected" && typeof travelData.accommodation.cost === "number" && Number.isFinite(travelData.accommodation.cost)) {
+        accommodationCost = Math.max(0, travelData.accommodation.cost);
+      }
+    }
+
+    try {
+      if (!travelData.transport) {
+        const transportRaw = window.localStorage.getItem("safarino-transport-selection-v1");
+        if (transportRaw) {
+          const transport = JSON.parse(transportRaw) as Record<string, unknown>;
+          setTransportDetails(transport);
+          if (typeof transport.cost === "number" && Number.isFinite(transport.cost)) transportCost = Math.max(0, transport.cost);
+        }
+      }
+      if (!travelData.accommodation) {
+        const accommodationRaw = window.localStorage.getItem("safarino-accommodation-selection-v1");
+        if (accommodationRaw) {
+          const saved = JSON.parse(accommodationRaw) as Record<string, unknown>;
+          if (saved.status === "selected") {
+            setAccommodationDetails(saved);
+            if (typeof saved.cost === "number" && Number.isFinite(saved.cost)) accommodationCost = Math.max(0, saved.cost);
+          }
+        }
       }
     } catch {
-      // Default estimates remain available if local storage is invalid.
+      // Shared context remains the source of truth when legacy storage is invalid.
     }
-    setPlan(createLocalPlan("مشهد", 15_000_000, 3, transportCost, accommodationCost));
-  }, []);
+    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost));
+    setActiveDay(0);
+  }, [isHydrated, travelData]);
 
   const selectedDay = plan.days[Math.min(activeDay, plan.days.length - 1)] ?? plan.days[0];
   const totalSpent = useMemo(() => {
@@ -180,7 +203,7 @@ export default function PlanPage() {
           destination,
           budget,
           days: dayCount,
-          travelers: 2,
+          travelers: travelData.travelers,
           transport: transportDetails,
           accommodation: accommodationDetails,
           preferences: preferences.split(/[،,]/).map((item) => item.trim()).filter(Boolean),

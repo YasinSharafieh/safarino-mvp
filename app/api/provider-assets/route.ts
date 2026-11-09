@@ -5,12 +5,24 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get("src") || "";
-  if (!/^https:\/\/cdn\.alibaba\.ir\/static\/img\/[\w\-./%]+\.(?:png|jpe?g|webp)$/i.test(source)) {
+  let imageUrl: URL;
+  try {
+    imageUrl = new URL(source);
+  } catch {
+    return NextResponse.json({ success: false, error: "آدرس تصویر معتبر نیست." }, { status: 400 });
+  }
+  const allowedHost =
+    imageUrl.hostname === "cdn.alibaba.ir" && /^\/(?:static\/img|ostorage)\//.test(imageUrl.pathname) ||
+    imageUrl.hostname === "cdn.jabama.com" && imageUrl.pathname.startsWith("/image/");
+  if (
+    source.length > 4096 || imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password || imageUrl.port ||
+    !allowedHost || !/\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname)
+  ) {
     return NextResponse.json({ success: false, error: "آدرس تصویر معتبر نیست." }, { status: 400 });
   }
 
   try {
-    const response = await fetch(source, {
+    const response = await fetch(imageUrl.toString(), {
       headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,*/*" },
       signal: AbortSignal.timeout(12_000),
       next: { revalidate: 86_400 },

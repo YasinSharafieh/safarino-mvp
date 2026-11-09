@@ -21,11 +21,12 @@ type Props = {
   roundTrip: boolean;
   onRoundTripChange: (value: boolean) => void;
   onChange: (field: "departureDate" | "returnDate", isoDate: string) => void;
+  mode?: "journey" | "stay";
 };
 
 const WEEKDAYS = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 
-export default function JalaliRangeCalendar({ departureDate, returnDate, roundTrip, onRoundTripChange, onChange }: Props) {
+export default function JalaliRangeCalendar({ departureDate, returnDate, roundTrip, onRoundTripChange, onChange, mode = "journey" }: Props) {
   const initial = jalaliFromGregorian(departureDate || addDaysToIso(todayIso(), 7));
   const [activeField, setActiveField] = useState<Field | null>(null);
   const [view, setView] = useState({ year: initial.year, month: initial.month });
@@ -59,8 +60,9 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
       setError("تاریخ گذشته قابل انتخاب نیست.");
       return;
     }
-    if (activeField === "return" && departureDate && iso < departureDate) {
-      setError("تاریخ برگشت باید بعد از رفت یا برابر با آن باشد.");
+    const invalidReturn = mode === "stay" ? iso <= departureDate : iso < departureDate;
+    if (activeField === "return" && departureDate && invalidReturn) {
+      setError(mode === "stay" ? "تاریخ خروج باید بعد از تاریخ ورود باشد." : "تاریخ برگشت باید بعد از رفت یا برابر با آن باشد.");
       return;
     }
     onChange(activeField === "departure" ? "departureDate" : "returnDate", iso);
@@ -77,8 +79,8 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
   return (
     <div className="relative">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs font-bold text-slate-300">تاریخ سفر شمسی</span>
-        <div className="flex rounded-xl border border-white/10 bg-white/5 p-1">
+        <span className="text-xs font-bold text-slate-300">{mode === "stay" ? "تاریخ ورود و خروج شمسی" : "تاریخ سفر شمسی"}</span>
+        {mode === "journey" && <div className="flex rounded-xl border border-white/10 bg-white/5 p-1">
           <button
             type="button"
             onClick={() => onRoundTripChange(false)}
@@ -89,22 +91,22 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
             onClick={() => onRoundTripChange(true)}
             className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${roundTrip ? "bg-cyan-300 text-slate-950" : "text-slate-400"}`}
           >رفت و برگشت</button>
-        </div>
+        </div>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" onClick={() => open("departure")} className={`${inputClass} ${activeField === "departure" ? "!border-cyan-300/50" : ""}`}>
           <CalendarDays className="h-4 w-4 shrink-0 text-cyan-300" />
           <span>
-            <small className="block text-[10px] text-slate-500">تاریخ رفت</small>
-            <b className="text-xs text-white">{departureDate ? formatJalaliDate(departureDate) : "انتخاب تاریخ رفت"}</b>
+            <small className="block text-[10px] text-slate-500">{mode === "stay" ? "تاریخ ورود" : "تاریخ رفت"}</small>
+            <b className="text-xs text-white">{departureDate ? formatJalaliDate(departureDate) : mode === "stay" ? "انتخاب تاریخ ورود" : "انتخاب تاریخ رفت"}</b>
           </span>
         </button>
         <button type="button" disabled={!roundTrip} onClick={() => open("return")} className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-45 ${activeField === "return" ? "!border-cyan-300/50" : ""}`}>
           <CalendarDays className="h-4 w-4 shrink-0 text-cyan-300" />
           <span>
-            <small className="block text-[10px] text-slate-500">تاریخ برگشت</small>
-            <b className="text-xs text-white">{roundTrip ? returnDate ? formatJalaliDate(returnDate) : "انتخاب تاریخ برگشت" : "یک‌طرفه"}</b>
+            <small className="block text-[10px] text-slate-500">{mode === "stay" ? "تاریخ خروج" : "تاریخ برگشت"}</small>
+            <b className="text-xs text-white">{roundTrip ? returnDate ? formatJalaliDate(returnDate) : mode === "stay" ? "انتخاب تاریخ خروج" : "انتخاب تاریخ برگشت" : "یک‌طرفه"}</b>
           </span>
         </button>
       </div>
@@ -122,7 +124,7 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
             {Array.from({ length: days.count }, (_, index) => index + 1).map((day) => {
               const iso = gregorianFromJalali(view.year, view.month, day);
               const selected = iso === (activeField === "departure" ? departureDate : returnDate);
-              const disabled = iso < todayIso() || activeField === "return" && Boolean(departureDate) && iso < departureDate;
+              const disabled = iso < todayIso() || activeField === "return" && Boolean(departureDate) && (mode === "stay" ? iso <= departureDate : iso < departureDate);
               return (
                 <button
                   key={day}
@@ -135,7 +137,7 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
             })}
           </div>
           <p className={`mt-3 min-h-5 text-[11px] ${error ? "text-rose-300" : "text-slate-500"}`}>
-            {error || `انتخاب ${activeField === "departure" ? "تاریخ رفت" : "تاریخ برگشت"}`}
+            {error || `انتخاب ${activeField === "departure" ? mode === "stay" ? "تاریخ ورود" : "تاریخ رفت" : mode === "stay" ? "تاریخ خروج" : "تاریخ برگشت"}`}
           </p>
         </div>
       )}

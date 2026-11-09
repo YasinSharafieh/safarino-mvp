@@ -1,236 +1,320 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
   BedDouble,
-  CalendarDays,
-  CarFront,
+  Building2,
   Check,
   CircleAlert,
-  Coffee,
   ExternalLink,
   Hotel as HotelIcon,
   House,
+  LoaderCircle,
   MapPin,
   RotateCcw,
+  Search,
   SlidersHorizontal,
   Sparkles,
   Star,
   WalletCards,
-  Waves,
-  Wifi,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import AccommodationImage from "@/components/AccommodationImage";
+import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
+import PassengerSelector from "@/components/PassengerSelector";
+import { useTravel } from "../context/TravelContext";
+import type { AccommodationKind, AccommodationOffer } from "@/lib/alibaba-accommodation";
+import { IRANIAN_CITIES } from "@/lib/iran-cities";
+import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
 
-const TRANSPORT_STORAGE_KEY = "safarino-transport-selection-v1";
-const ACCOMMODATION_STORAGE_KEY = "safarino-accommodation-selection-v1";
-
+const STORAGE_KEY = "safarino-accommodation-selection-v1";
 const numberFormatter = new Intl.NumberFormat("fa-IR");
 const compactFormatter = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 });
 const formatNumber = (value: number) => numberFormatter.format(Math.round(value));
 const formatToman = (value: number) => `${formatNumber(value)} تومان`;
 const formatCompact = (value: number) => `${compactFormatter.format(value / 1_000_000)} میلیون تومان`;
 
-type StayType = "هتل" | "بوم‌گردی" | "ویلا" | "سوئیت" | "هاستل";
-type Amenity = "پارکینگ" | "صبحانه" | "WiFi" | "استخر";
-type Provider = "جاباما" | "اقامت۲۴";
-
-type Accommodation = {
-  id: string;
-  name: string;
-  type: StayType;
-  rating: number;
-  reviews: number;
-  price: number;
-  location: string;
-  image: string;
-  amenities: Amenity[];
-  provider: Provider;
-  providerUrl: string;
+type SearchResponse = {
+  success: boolean;
+  error?: string;
+  offers?: AccommodationOffer[];
+  found?: number;
+  city?: string;
+  fetchedAt?: string;
 };
 
-const ACCOMMODATIONS: Accommodation[] = [
-  {
-    id: "golden-palace",
-    name: "هتل قصر طلایی",
-    type: "هتل",
-    rating: 4.8,
-    reviews: 328,
-    price: 4_800_000,
-    location: "امام رضا، مشهد",
-    image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["پارکینگ", "صبحانه", "WiFi", "استخر"],
-    provider: "جاباما",
-    providerUrl: "https://www.jabama.com/",
-  },
-  {
-    id: "nene-agha",
-    name: "اقامتگاه بوم‌گردی ننه آقا",
-    type: "بوم‌گردی",
-    rating: 4.9,
-    reviews: 146,
-    price: 1_650_000,
-    location: "طرقبه، مشهد",
-    image: "https://images.unsplash.com/photo-1601918774946-25832a4be0d6?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["صبحانه", "WiFi"],
-    provider: "جاباما",
-    providerUrl: "https://www.jabama.com/",
-  },
-  {
-    id: "silver-coast",
-    name: "ویلا ساحل نقره‌ای",
-    type: "ویلا",
-    rating: 4.7,
-    reviews: 89,
-    price: 7_200_000,
-    location: "شاندیز، مشهد",
-    image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["پارکینگ", "WiFi", "استخر"],
-    provider: "اقامت۲۴",
-    providerUrl: "https://www.eghamat24.com/",
-  },
-  {
-    id: "pearl-suite",
-    name: "سوئیت مروارید",
-    type: "سوئیت",
-    rating: 4.6,
-    reviews: 214,
-    price: 2_900_000,
-    location: "احمدآباد، مشهد",
-    image: "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["پارکینگ", "صبحانه", "WiFi"],
-    provider: "اقامت۲۴",
-    providerUrl: "https://www.eghamat24.com/",
-  },
-  {
-    id: "friend-hostel",
-    name: "هاستل رفیق",
-    type: "هاستل",
-    rating: 4.4,
-    reviews: 402,
-    price: 850_000,
-    location: "پایین خیابان، مشهد",
-    image: "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["صبحانه", "WiFi"],
-    provider: "جاباما",
-    providerUrl: "https://www.jabama.com/",
-  },
-  {
-    id: "eram-garden",
-    name: "هتل باغ ارم",
-    type: "هتل",
-    rating: 4.5,
-    reviews: 267,
-    price: 3_500_000,
-    location: "وکیل‌آباد، مشهد",
-    image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=85",
-    amenities: ["پارکینگ", "صبحانه", "WiFi"],
-    provider: "اقامت۲۴",
-    providerUrl: "https://www.eghamat24.com/",
-  },
-];
+type Choice = "search" | "reserved" | "skipped";
 
-const STAY_TYPES: StayType[] = ["هتل", "بوم‌گردی", "ویلا", "سوئیت", "هاستل"];
-const AMENITIES: { label: Amenity; icon: LucideIcon }[] = [
-  { label: "پارکینگ", icon: CarFront },
-  { label: "صبحانه", icon: Coffee },
-  { label: "WiFi", icon: Wifi },
-  { label: "استخر", icon: Waves },
-];
+function savedStatus(value: Record<string, unknown> | null): Choice | null {
+  const status = value?.status;
+  if (status === "selected") return "search";
+  if (status === "reserved") return "reserved";
+  if (status === "skipped") return "skipped";
+  return null;
+}
 
 export default function AccommodationPage() {
-  const [hasReservation, setHasReservation] = useState(false);
-  const [maxNightlyPrice, setMaxNightlyPrice] = useState(10_000_000);
-  const [selectedTypes, setSelectedTypes] = useState<StayType[]>(STAY_TYPES);
-  const [requiredAmenities, setRequiredAmenities] = useState<Amenity[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [nights, setNights] = useState(3);
-  const [transportCost, setTransportCost] = useState(0);
-  const [totalBudget, setTotalBudget] = useState(15_000_000);
-  const [isReady, setIsReady] = useState(false);
+  const { travelData, setTravelData, isHydrated } = useTravel();
+  const initialized = useRef(false);
+  const restoredChildAges = useRef<number[] | null>(null);
+  const restoredInfantAges = useRef<number[] | null>(null);
+  const [kind, setKind] = useState<AccommodationKind>("hotel");
+  const [city, setCity] = useState("");
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [childAges, setChildAges] = useState<number[]>([]);
+  const [infantAges, setInfantAges] = useState<number[]>([]);
+  const [offers, setOffers] = useState<AccommodationOffer[]>([]);
+  const [found, setFound] = useState(0);
+  const [resolvedCity, setResolvedCity] = useState("");
+  const [fetchedAt, setFetchedAt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [legacyTransportCost, setLegacyTransportCost] = useState(0);
+  const [maxTotalPrice, setMaxTotalPrice] = useState(50_000_000);
+  const [minRating, setMinRating] = useState(0);
+  const [minStars, setMinStars] = useState(0);
+  const [stayType, setStayType] = useState("all");
+  const [amenity, setAmenity] = useState("all");
+  const [sort, setSort] = useState<"price" | "rating">("price");
+  const [budgetOnly, setBudgetOnly] = useState(false);
 
-  useEffect(() => {
-    try {
-      const transport = window.localStorage.getItem(TRANSPORT_STORAGE_KEY);
-      if (transport) {
-        const parsed = JSON.parse(transport) as { cost?: number };
-        if (typeof parsed.cost === "number" && Number.isFinite(parsed.cost)) {
-          setTransportCost(Math.max(0, parsed.cost));
-        }
-      }
-
-      const accommodation = window.localStorage.getItem(ACCOMMODATION_STORAGE_KEY);
-      if (accommodation) {
-        const parsed = JSON.parse(accommodation) as { id?: string; nights?: number };
-        if (ACCOMMODATIONS.some((item) => item.id === parsed.id)) setSelectedId(parsed.id ?? null);
-        if (typeof parsed.nights === "number" && parsed.nights >= 1 && parsed.nights <= 7) {
-          setNights(Math.round(parsed.nights));
-        }
-      }
-    } catch {
-      window.localStorage.removeItem(ACCOMMODATION_STORAGE_KEY);
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isReady) return;
-    try {
-      if (selectedId) {
-        window.localStorage.setItem(ACCOMMODATION_STORAGE_KEY, JSON.stringify({ id: selectedId, nights }));
-      } else {
-        window.localStorage.removeItem(ACCOMMODATION_STORAGE_KEY);
-      }
-    } catch {
-      // Filtering and selection still work when browser storage is unavailable.
-    }
-  }, [isReady, nights, selectedId]);
-
-  const selectedAccommodation = ACCOMMODATIONS.find((item) => item.id === selectedId);
-  const accommodationCost = !hasReservation && selectedAccommodation ? selectedAccommodation.price * nights : 0;
+  const accommodation = travelData.accommodation;
+  const choice = savedStatus(accommodation);
+  const selected = accommodation?.status === "selected" ? accommodation : null;
+  const selectedId = selected ? String(selected.id || "") : "";
+  const totalBudget = travelData.budget * 1_000_000;
+  const contextTransportCost = Number(travelData.transport?.cost);
+  const transportCost = Number.isFinite(contextTransportCost) && contextTransportCost >= 0 ? contextTransportCost : legacyTransportCost;
+  const accommodationCost = selected ? Math.max(0, Number(selected.cost) || 0) : 0;
   const totalSpent = transportCost + accommodationCost;
-  const budgetRatio = totalSpent / totalBudget;
-  const budgetPercent = Math.round(budgetRatio * 100);
   const remainingBudget = totalBudget - totalSpent;
-  const budgetTone = budgetRatio > 1 ? "red" : budgetRatio > 0.75 ? "yellow" : "green";
+  const beforeAccommodation = totalBudget - transportCost;
+  const budgetPercent = Math.round((totalSpent / Math.max(totalBudget, 1)) * 100);
+  const nights = checkIn && checkOut && checkOut > checkIn
+    ? Math.round((Date.parse(`${checkOut}T00:00:00Z`) - Date.parse(`${checkIn}T00:00:00Z`)) / 86_400_000)
+    : 0;
 
-  const filteredAccommodations = useMemo(
-    () =>
-      ACCOMMODATIONS.filter(
-        (item) =>
-          item.price <= maxNightlyPrice &&
-          selectedTypes.includes(item.type) &&
-          requiredAmenities.every((amenity) => item.amenities.includes(amenity)),
-      ),
-    [maxNightlyPrice, requiredAmenities, selectedTypes],
-  );
+  useEffect(() => {
+    if (!isHydrated || initialized.current) return;
+    initialized.current = true;
+    const saved = travelData.accommodation;
+    const arrival = travelData.departureDate || addDaysToIso(todayIso(), 7);
+    const departure = travelData.returnDate > arrival ? travelData.returnDate : addDaysToIso(arrival, Math.max(1, travelData.days || 3));
+    setCity(travelData.destination || "");
+    setCheckIn(arrival);
+    setCheckOut(departure);
+    if (saved?.status === "selected") {
+      if (saved.kind === "stay" || saved.kind === "hotel") setKind(saved.kind);
+      if (typeof saved.city === "string") setCity(saved.city);
+      if (typeof saved.checkIn === "string") setCheckIn(saved.checkIn);
+      if (typeof saved.checkOut === "string") setCheckOut(saved.checkOut);
+      if (Array.isArray(saved.childAges)) {
+        restoredChildAges.current = saved.childAges.map(Number).filter(Number.isFinite);
+        setChildAges(restoredChildAges.current);
+      }
+      if (Array.isArray(saved.infantAges)) {
+        restoredInfantAges.current = saved.infantAges.map(Number).filter(Number.isFinite);
+        setInfantAges(restoredInfantAges.current);
+      }
+    }
+    try {
+      const transportRaw = window.localStorage.getItem("safarino-transport-selection-v1");
+      if (transportRaw) {
+        const transport = JSON.parse(transportRaw) as { cost?: number };
+        if (typeof transport.cost === "number" && Number.isFinite(transport.cost)) setLegacyTransportCost(Math.max(0, transport.cost));
+      }
+      const savedRaw = window.localStorage.getItem(STORAGE_KEY);
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw) as Record<string, unknown>;
+        if (parsed.status !== "selected") window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [isHydrated, travelData]);
 
-  const toggleType = (type: StayType) => {
-    setSelectedTypes((current) =>
-      current.includes(type) ? current.filter((item) => item !== type) : [...current, type],
-    );
-  };
+  useEffect(() => {
+    setChildAges((current) => {
+      const restored = restoredChildAges.current;
+      restoredChildAges.current = null;
+      return Array.from({ length: travelData.children }, (_, index) => restored?.[index] ?? current[index] ?? 8);
+    });
+  }, [travelData.children]);
 
-  const toggleAmenity = (amenity: Amenity) => {
-    setRequiredAmenities((current) =>
-      current.includes(amenity) ? current.filter((item) => item !== amenity) : [...current, amenity],
-    );
-  };
+  useEffect(() => {
+    setInfantAges((current) => {
+      const restored = restoredInfantAges.current;
+      restoredInfantAges.current = null;
+      return Array.from({ length: travelData.infants }, (_, index) => restored?.[index] ?? current[index] ?? 0);
+    });
+  }, [travelData.infants]);
 
-  const resetFilters = () => {
-    setMaxNightlyPrice(10_000_000);
-    setSelectedTypes(STAY_TYPES);
-    setRequiredAmenities([]);
-  };
+  function clearSelection() {
+    setTravelData((current) => ({ ...current, accommodation: null }));
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* In-memory state remains usable. */ }
+  }
 
-  const progressColor =
-    budgetTone === "red" ? "bg-rose-500" : budgetTone === "yellow" ? "bg-cyan-400" : "bg-emerald-400";
+  function resetResultsForCoreChange() {
+    setOffers([]);
+    setFound(0);
+    setError("");
+    setFetchedAt("");
+    if (selected) clearSelection();
+  }
+
+  function changeKind(value: AccommodationKind) {
+    setKind(value);
+    resetResultsForCoreChange();
+  }
+
+  function changeCity(value: string) {
+    setCity(value);
+    if (value !== city) resetResultsForCoreChange();
+  }
+
+  function changeDate(field: "departureDate" | "returnDate", value: string) {
+    let nextIn = checkIn;
+    let nextOut = checkOut;
+    if (field === "departureDate") {
+      nextIn = value;
+      if (!nextOut || nextOut <= value) nextOut = addDaysToIso(value, Math.max(1, nights || travelData.days || 1));
+      setCheckIn(value);
+      setCheckOut(nextOut);
+    } else {
+      nextOut = value;
+      setCheckOut(value);
+    }
+    if (nextIn && nextOut > nextIn) {
+      const count = Math.round((Date.parse(`${nextOut}T00:00:00Z`) - Date.parse(`${nextIn}T00:00:00Z`)) / 86_400_000);
+      setTravelData((current) => ({ ...current, days: count }));
+    }
+    resetResultsForCoreChange();
+  }
+
+  function changePassengers(field: "travelers" | "children" | "infants", value: number) {
+    setTravelData((current) => ({ ...current, [field]: value }));
+    resetResultsForCoreChange();
+  }
+
+  function chooseStatus(status: "reserved" | "skipped") {
+    setTravelData((current) => ({
+      ...current,
+      accommodation: { status, cost: 0, checkIn, checkOut, nights, city },
+    }));
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* Ignore unavailable storage. */ }
+  }
+
+  function returnToSearch() {
+    if (choice === "reserved" || choice === "skipped") clearSelection();
+  }
+
+  function selectOffer(offer: AccommodationOffer, selectionFetchedAt = fetchedAt) {
+    const selection = {
+      status: "selected",
+      id: offer.id,
+      kind,
+      name: offer.name,
+      typeLabel: offer.typeLabel,
+      cost: offer.priceTotalToman,
+      pricePerNightToman: offer.pricePerNightToman,
+      city,
+      checkIn,
+      checkOut,
+      nights,
+      adults: travelData.travelers,
+      children: travelData.children,
+      infants: travelData.infants,
+      childAges,
+      infantAges,
+      bookingUrl: offer.bookingUrl,
+      imageUrl: offer.imageUrl,
+      provider: offer.provider,
+      fetchedAt: selectionFetchedAt,
+    };
+    setTravelData((current) => ({ ...current, accommodation: selection, days: nights }));
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(selection)); } catch { /* Context still preserves it. */ }
+  }
+
+  async function searchAccommodation() {
+    if (!city.trim()) {
+      setError("مقصد اقامت را وارد کنید.");
+      return;
+    }
+    if (!checkIn || !checkOut || nights < 1 || nights > 30) {
+      setError("تاریخ ورود و خروج معتبر با فاصلهٔ ۱ تا ۳۰ شب انتخاب کنید.");
+      return;
+    }
+    if (kind === "hotel" && travelData.travelers > 6) {
+      setError("جستجوی هتل در این نسخه برای حداکثر ۶ بزرگسال در یک اتاق است؛ برای گروه بزرگ‌تر، اقامتگاه را امتحان کنید.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/providers/alibaba/accommodation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, city: city.trim(), checkIn, checkOut, adults: travelData.travelers, childAges, infantAges }),
+      });
+      const data = await response.json() as SearchResponse;
+      if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
+      const nextOffers = data.offers || [];
+      setOffers(nextOffers);
+      setFound(Math.max(0, Number(data.found) || 0));
+      setResolvedCity(data.city || city);
+      setFetchedAt(data.fetchedAt || new Date().toISOString());
+      setTravelData((current) => ({ ...current, days: nights }));
+      if (selectedId) {
+        const refreshed = nextOffers.find((offer) => offer.id === selectedId);
+        if (refreshed) selectOffer(refreshed, data.fetchedAt || new Date().toISOString());
+        else clearSelection();
+      }
+    } catch (caught) {
+      setOffers([]);
+      setFound(0);
+      setError(caught instanceof Error ? caught.message : "جستجوی اقامت انجام نشد");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filteredOffers = useMemo(() => {
+    const filtered = offers.filter((offer) => {
+      if (offer.priceTotalToman > maxTotalPrice) return false;
+      if (budgetOnly && offer.priceTotalToman > Math.max(0, beforeAccommodation)) return false;
+      if (minRating && (offer.rating || 0) < minRating) return false;
+      if (kind === "hotel" && minStars && (offer.stars || 0) < minStars) return false;
+      if (kind === "stay" && stayType !== "all" && offer.typeLabel !== stayType) return false;
+      if (amenity !== "all") {
+        const text = [...offer.details, ...offer.amenities].join(" ").toLowerCase();
+        const terms: Record<string, RegExp> = {
+          breakfast: /صبحانه/,
+          wifi: /wifi|اینترنت|بي‌سیم|بی‌سیم/i,
+          pool: /استخر/,
+          parking: /پارکینگ/,
+        };
+        if (!terms[amenity]?.test(text)) return false;
+      }
+      return true;
+    });
+    return filtered.sort((a, b) => sort === "price"
+      ? a.priceTotalToman - b.priceTotalToman
+      : (b.rating || 0) - (a.rating || 0) || b.reviewCount - a.reviewCount);
+  }, [amenity, beforeAccommodation, budgetOnly, kind, maxTotalPrice, minRating, minStars, offers, sort, stayType]);
+
+  function resetFilters() {
+    setMaxTotalPrice(50_000_000);
+    setMinRating(0);
+    setMinStars(0);
+    setStayType("all");
+    setAmenity("all");
+    setBudgetOnly(false);
+    setSort("price");
+  }
 
   return (
     <MotionConfig reducedMotion="user">
@@ -247,115 +331,48 @@ export default function AccommodationPage() {
 
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <a href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
-              <BedDouble className="h-5 w-5" />
-            </span>
-            <span className="flex flex-col leading-none">
-              <b className="text-lg font-black text-white">سفرینو</b>
-              <small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small>
-            </span>
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105"><BedDouble className="h-5 w-5" /></span>
+            <span className="flex flex-col leading-none"><b className="text-lg font-black text-white">سفرینو</b><small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small></span>
           </a>
-          <a href="/transport" className="btn-ghost !px-4 !py-2.5 text-xs">
-            <ArrowRight className="h-4 w-4" />
-            <span className="hidden sm:inline">بازگشت به حمل‌ونقل</span>
-            <span className="sm:hidden">مرحلهٔ قبل</span>
-          </a>
+          <a href="/transport" className="btn-ghost !px-4 !py-2.5 text-xs"><ArrowRight className="h-4 w-4" /><span className="hidden sm:inline">بازگشت به حمل‌ونقل</span><span className="sm:hidden">مرحلهٔ قبل</span></a>
         </header>
-
         <TravelSteps current={3} />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass overflow-hidden p-5 shadow-card sm:p-7"
-          >
+          <motion.section initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="glass overflow-hidden p-5 shadow-card sm:p-7">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(6,182,212,0.13),transparent_45%)]" />
             <div className="relative">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    مرحلهٔ سوم برنامه‌ریزی سفر
-                  </span>
-                  <h1 className="mt-4 text-2xl font-black leading-tight text-white sm:text-4xl">
-                    جایی برای <span className="gradient-text">استراحت و خاطره‌سازی</span>
-                  </h1>
-                  <p className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                    <MapPin className="h-4 w-4 text-cyan-300" />
-                    مقصد: مشهد · اقامت {formatNumber(nights)} شب
-                  </p>
+                  <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200"><Sparkles className="h-3.5 w-3.5" />اطلاعات زندهٔ اقامت از علی‌بابا</span>
+                  <h1 className="mt-4 text-2xl font-black leading-tight text-white sm:text-4xl">جایی برای <span className="gradient-text">استراحت و خاطره‌سازی</span></h1>
+                  <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-6 text-slate-400"><MapPin className="h-4 w-4 text-cyan-300" />مقصد: {city || travelData.destination || "انتخاب نشده"}{nights > 0 && ` · اقامت ${formatNumber(nights)} شب`} · {formatNumber(travelData.travelers + travelData.children + travelData.infants)} مسافر</p>
                 </div>
-
                 <label className="glass-soft block w-full p-4 lg:max-w-xs">
-                  <span className="flex items-center justify-between gap-3 text-xs text-slate-300">
-                    <span>بودجهٔ کل سفر</span>
-                    <b className="text-cyan-200">{formatCompact(totalBudget)}</b>
-                  </span>
-                  <input
-                    dir="ltr"
-                    type="range"
-                    min="5000000"
-                    max="40000000"
-                    step="1000000"
-                    value={totalBudget}
-                    onChange={(event) => setTotalBudget(Number(event.target.value))}
-                    className="mt-4 w-full cursor-pointer accent-cyan-400"
-                    aria-label="بودجه کل سفر"
-                  />
+                  <span className="flex items-center justify-between gap-3 text-xs text-slate-300"><span>بودجهٔ کل سفر</span><b className="text-cyan-200">{formatCompact(totalBudget)}</b></span>
+                  <input dir="ltr" type="range" min="5000000" max="100000000" step="1000000" value={totalBudget} onChange={(event) => setTravelData((current) => ({ ...current, budget: Number(event.target.value) / 1_000_000 }))} className="mt-4 w-full cursor-pointer accent-cyan-400" aria-label="بودجه کل سفر" />
                 </label>
               </div>
 
               <div className="mt-7 rounded-2xl border border-white/10 bg-night-900/50 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-xs font-bold text-white">
-                    <WalletCards className="h-4 w-4 text-turquoise-300" />
-                    نشانگر زندهٔ بودجه
-                  </span>
-                  <span className={`text-xs font-black ${budgetTone === "red" ? "text-rose-300" : budgetTone === "yellow" ? "text-cyan-300" : "text-emerald-300"}`}>
-                    {formatNumber(budgetPercent)}٪ از بودجه
-                  </span>
+                  <span className="flex items-center gap-2 text-xs font-bold text-white"><WalletCards className="h-4 w-4 text-turquoise-300" />بودجهٔ یکپارچهٔ حمل‌ونقل و اقامت</span>
+                  <span className={`text-xs font-black ${remainingBudget < 0 ? "text-rose-300" : "text-emerald-300"}`}>{formatNumber(budgetPercent)}٪ از بودجه</span>
                 </div>
-                <div
-                  className="mt-4 h-3 overflow-hidden rounded-full bg-white/10"
-                  role="progressbar"
-                  aria-label="هزینه حمل‌ونقل و اقامت نسبت به بودجه"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.min(budgetPercent, 100)}
-                >
-                  <motion.div
-                    className={`h-full rounded-full ${progressColor}`}
-                    animate={{ width: `${Math.min(budgetRatio * 100, 100)}%` }}
-                    transition={{ duration: 0.35 }}
-                  />
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="هزینه حمل‌ونقل و اقامت نسبت به بودجه" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(budgetPercent, 100)}>
+                  <motion.div className={`h-full rounded-full ${remainingBudget < 0 ? "bg-rose-500" : "bg-emerald-400"}`} animate={{ width: `${Math.min(budgetPercent, 100)}%` }} />
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-                  <div className="rounded-xl bg-white/[0.035] p-3">
-                    <span className="block text-[10px] text-slate-500">حمل‌ونقل</span>
-                    <b className="mt-1 block text-xs text-white">{formatToman(transportCost)}</b>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.035] p-3">
-                    <span className="block text-[10px] text-slate-500">اقامت</span>
-                    <b className="mt-1 block text-xs text-white">{formatToman(accommodationCost)}</b>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.035] p-3">
-                    <span className="block text-[10px] text-slate-500">مجموع هزینه</span>
-                    <b className="mt-1 block text-xs text-white">{formatToman(totalSpent)}</b>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.035] p-3">
-                    <span className="block text-[10px] text-slate-500">{remainingBudget >= 0 ? "باقی‌مانده" : "بیشتر از بودجه"}</span>
-                    <b className={`mt-1 block text-xs ${remainingBudget >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                      {formatToman(Math.abs(remainingBudget))}
-                    </b>
-                  </div>
+                  {[
+                    ["حمل‌ونقل", transportCost],
+                    ["اقامت", accommodationCost],
+                    ["مجموع هزینه", totalSpent],
+                    [remainingBudget >= 0 ? "باقی‌مانده" : "بیشتر از بودجه", Math.abs(remainingBudget)],
+                  ].map(([label, value], index) => (
+                    <div key={String(label)} className="rounded-xl bg-white/[0.035] p-3"><span className="block text-[10px] text-slate-500">{label}</span><b className={`mt-1 block text-xs ${index === 3 ? remainingBudget >= 0 ? "text-emerald-300" : "text-rose-300" : "text-white"}`}>{formatToman(Number(value))}</b></div>
+                  ))}
                 </div>
-                {budgetRatio > 1 && (
-                  <p className="mt-3 flex items-center gap-2 text-[11px] text-rose-300">
-                    <CircleAlert className="h-4 w-4 shrink-0" />
-                    هزینه‌ها از بودجه بیشتر شده است؛ اقامتگاه اقتصادی‌تری انتخاب کنید یا بودجه را افزایش دهید.
-                  </p>
-                )}
+                {remainingBudget < 0 && <p className="mt-3 flex items-center gap-2 text-[11px] text-rose-300"><CircleAlert className="h-4 w-4 shrink-0" />هزینه‌ها از بودجه بیشتر شده؛ اقامت اقتصادی‌تری انتخاب کنید یا بودجه را افزایش دهید.</p>}
               </div>
             </div>
           </motion.section>
@@ -363,279 +380,111 @@ export default function AccommodationPage() {
           <section className="mt-8 text-center">
             <h2 className="text-xl font-black text-white sm:text-2xl">برای اقامت در این سفر چه برنامه‌ای داری؟</h2>
             <div className="mx-auto mt-5 inline-flex max-w-full flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-1.5 sm:flex-row">
-              {[
-                { value: true, label: "از قبل جا رزرو کردم" },
-                { value: false, label: "نیاز به اقامتگاه دارم" },
-              ].map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => setHasReservation(option.value)}
-                  aria-pressed={hasReservation === option.value}
-                  className={`rounded-xl px-5 py-3 text-xs font-bold transition ${
-                    hasReservation === option.value
-                      ? "bg-gradient-to-l from-cyan-400 to-sky-500 text-slate-950 shadow-glow"
-                      : "text-slate-400 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  {option.label}
-                </button>
+              {([
+                { value: "search" as const, label: "جستجوی اقامتگاه" },
+                { value: "reserved" as const, label: "از قبل رزرو کردم" },
+                { value: "skipped" as const, label: "بدون اقامتگاه" },
+              ]).map((option) => (
+                <button key={option.value} type="button" onClick={() => option.value === "search" ? returnToSearch() : chooseStatus(option.value)} aria-pressed={choice === option.value} className={`rounded-xl px-5 py-3 text-xs font-bold transition ${choice === option.value ? "bg-gradient-to-l from-cyan-400 to-sky-500 text-slate-950 shadow-glow" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>{option.label}</button>
               ))}
             </div>
           </section>
 
           <AnimatePresence mode="wait">
-            {hasReservation ? (
-              <motion.section
-                key="reserved"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="glass mx-auto mt-8 max-w-3xl p-8 text-center sm:p-12"
-              >
-                <span className="mx-auto grid h-16 w-16 place-items-center rounded-3xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
-                  <Check className="h-7 w-7" />
-                </span>
-                <h2 className="mt-5 text-2xl font-black text-white">اقامتگاهت آماده است!</h2>
-                <p className="mx-auto mt-3 max-w-lg text-sm leading-8 text-slate-400">
-                  هزینهٔ اقامت به محاسبات این مرحله اضافه نمی‌شود. هزینهٔ حمل‌ونقل همچنان در بودجه لحاظ شده و می‌توانی مستقیم به ساخت برنامه بروی.
-                </p>
-                <button type="button" onClick={() => setHasReservation(false)} className="btn-ghost mt-6 !py-2.5 text-xs">
-                  مشاهدهٔ پیشنهادهای اقامتگاه
-                </button>
+            {choice === "reserved" || choice === "skipped" ? (
+              <motion.section key={choice} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="glass mx-auto mt-8 max-w-3xl p-8 text-center sm:p-12">
+                <span className="mx-auto grid h-16 w-16 place-items-center rounded-3xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300"><Check className="h-7 w-7" /></span>
+                <h2 className="mt-5 text-2xl font-black text-white">{choice === "reserved" ? "اقامتگاهت آماده است" : "این سفر بدون رزرو اقامتگاه ادامه دارد"}</h2>
+                <p className="mx-auto mt-3 max-w-lg text-sm leading-8 text-slate-400">هزینهٔ اقامت صفر ثبت شد و هزینهٔ حمل‌ونقل همچنان در بودجه لحاظ می‌شود. این تصمیم هنگام بازگشت به مراحل قبل حفظ خواهد شد.</p>
+                <button type="button" onClick={returnToSearch} className="btn-ghost mt-6 !py-2.5 text-xs">جستجوی اقامتگاه</button>
               </motion.section>
             ) : (
-              <motion.div
-                key="accommodations"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="mt-10 grid items-start gap-6 lg:grid-cols-[280px_1fr]"
-              >
-                <aside className="glass p-5 lg:sticky lg:top-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="flex items-center gap-2 text-base font-black text-white">
-                      <SlidersHorizontal className="h-5 w-5 text-cyan-300" />
-                      فیلترهای هوشمند
-                    </h2>
-                    <button type="button" onClick={resetFilters} className="text-[10px] text-slate-500 transition hover:text-cyan-300">
-                      پاک‌کردن
-                    </button>
-                  </div>
-
-                  <div className="mt-6 border-b border-white/5 pb-6">
-                    <label className="flex items-center justify-between gap-2 text-xs font-bold text-slate-300">
-                      <span>حداکثر قیمت هر شب</span>
-                      <b className="text-cyan-200">{formatCompact(maxNightlyPrice)}</b>
-                    </label>
-                    <input
-                      dir="ltr"
-                      type="range"
-                      min="500000"
-                      max="10000000"
-                      step="250000"
-                      value={maxNightlyPrice}
-                      onChange={(event) => setMaxNightlyPrice(Number(event.target.value))}
-                      className="mt-4 w-full cursor-pointer accent-cyan-400"
-                      aria-label="حداکثر بودجه هر شب"
-                    />
-                    <div className="mt-2 flex justify-between text-[10px] text-slate-600">
-                      <span>۱۰ میلیون</span>
-                      <span>۵۰۰ هزار</span>
+              <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <section className="glass relative z-30 mt-8 p-5 sm:p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><h2 className="text-lg font-black text-white">جستجوی دقیق اقامت</h2><p className="mt-1 text-[11px] text-slate-500">قیمت نمایش‌داده‌شده برای کل اقامت و همان تاریخ و مسافران است.</p></div>
+                    <div className="flex rounded-xl border border-white/10 bg-white/5 p-1">
+                      <button type="button" onClick={() => changeKind("hotel")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${kind === "hotel" ? "bg-cyan-300 text-slate-950" : "text-slate-400"}`}><HotelIcon className="h-4 w-4" />هتل</button>
+                      <button type="button" onClick={() => changeKind("stay")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${kind === "stay" ? "bg-cyan-300 text-slate-950" : "text-slate-400"}`}><House className="h-4 w-4" />ویلا و اقامتگاه</button>
                     </div>
                   </div>
 
-                  <fieldset className="mt-6 border-b border-white/5 pb-6">
-                    <legend className="text-xs font-bold text-slate-300">نوع اقامتگاه</legend>
-                    <div className="mt-4 space-y-3">
-                      {STAY_TYPES.map((type) => (
-                        <label key={type} className="flex cursor-pointer items-center justify-between gap-3 text-xs text-slate-400 transition hover:text-white">
-                          <span className="flex items-center gap-2">
-                            {type === "هتل" ? <HotelIcon className="h-4 w-4 text-slate-500" /> : <House className="h-4 w-4 text-slate-500" />}
-                            {type}
-                          </span>
-                          <input
-                            type="checkbox"
-                            checked={selectedTypes.includes(type)}
-                            onChange={() => toggleType(type)}
-                            className="h-4 w-4 cursor-pointer accent-cyan-400"
-                          />
-                        </label>
-                      ))}
+                  <div className="relative z-40 mt-5 grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+                    <div className="glass-soft p-4">
+                      <label className="block"><span className="mb-2 block text-xs font-bold text-slate-300">مقصد اقامت</span><span className="flex min-h-14 items-center gap-2 rounded-2xl border border-white/10 bg-night-800/90 px-3 focus-within:border-cyan-300/50"><MapPin className="h-4 w-4 text-cyan-300" /><input value={city} onChange={(event) => changeCity(event.target.value)} list="accommodation-cities" placeholder="مثلاً مشهد، ماسوله یا رامسر" className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500" /></span></label>
+                      <datalist id="accommodation-cities">{IRANIAN_CITIES.map((item) => <option key={item.code} value={item.name}>{item.englishName || item.code}</option>)}</datalist>
+                      <p className="mt-2 text-[10px] leading-5 text-slate-500">برای ویلا و بوم‌گردی می‌توانی نام روستا یا شهرهای نزدیک را هم بنویسی.</p>
                     </div>
-                  </fieldset>
-
-                  <fieldset className="mt-6">
-                    <legend className="text-xs font-bold text-slate-300">امکانات ضروری</legend>
-                    <div className="mt-4 space-y-3">
-                      {AMENITIES.map((amenity) => {
-                        const Icon = amenity.icon;
-                        return (
-                          <label key={amenity.label} className="flex cursor-pointer items-center justify-between gap-3 text-xs text-slate-400 transition hover:text-white">
-                            <span className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 text-slate-500" />
-                              {amenity.label}
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={requiredAmenities.includes(amenity.label)}
-                              onChange={() => toggleAmenity(amenity.label)}
-                              className="h-4 w-4 cursor-pointer accent-cyan-400"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-
-                  <label className="mt-6 block rounded-2xl bg-white/[0.035] p-4">
-                    <span className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                      <CalendarDays className="h-4 w-4 text-turquoise-300" />
-                      تعداد شب
-                    </span>
-                    <select value={nights} onChange={(event) => setNights(Number(event.target.value))} className="field mt-3 cursor-pointer bg-night-800">
-                      {[1, 2, 3, 4, 5, 6, 7].map((count) => (
-                        <option key={count} value={count} className="bg-night-800">{formatNumber(count)} شب</option>
-                      ))}
-                    </select>
-                  </label>
-                </aside>
-
-                <section>
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-xl font-black text-white">اقامتگاه‌های پیشنهادی</h2>
-                      <p className="mt-1 text-xs text-slate-500">{formatNumber(filteredAccommodations.length)} نتیجه مطابق فیلترهای شما</p>
-                    </div>
-                    {selectedAccommodation && (
-                      <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200">
-                        <Check className="h-3.5 w-3.5" />
-                        {selectedAccommodation.name} انتخاب شده است
-                      </span>
-                    )}
+                    <div className="glass-soft relative z-30 p-4"><PassengerSelector adults={travelData.travelers} children={travelData.children} infants={travelData.infants} onChange={changePassengers} /></div>
                   </div>
 
-                  {filteredAccommodations.length > 0 ? (
-                    <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                      <AnimatePresence mode="popLayout">
-                        {filteredAccommodations.map((item, index) => {
-                          const isSelected = selectedId === item.id;
-                          return (
-                            <motion.article
-                              layout
-                              key={item.id}
-                              initial={{ opacity: 0, y: 22 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              transition={{ duration: 0.35, delay: index * 0.05 }}
-                              className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"}`}
-                            >
-                              <div className="relative h-52 overflow-hidden">
-                                <Image
-                                  src={item.image}
-                                  alt={item.name}
-                                  fill
-                                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                                  className="object-cover transition duration-700 group-hover:scale-105"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-night-950/90 via-transparent to-night-950/20" />
-                                <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/65 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{item.type}</span>
-                                <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/65 px-2.5 py-1 text-[11px] font-black text-cyan-300 backdrop-blur-md">
-                                  <Star className="h-3.5 w-3.5 fill-cyan-300" />
-                                  {compactFormatter.format(item.rating)}
-                                </span>
-                                <div className="absolute bottom-3 right-3 left-3">
-                                  <h3 className="text-base font-black leading-7 text-white">{item.name}</h3>
-                                  <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
-                                    <MapPin className="h-3 w-3" />
-                                    {item.location}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-1 flex-col p-4">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div>
-                                    <b className="text-lg font-black text-cyan-200">{formatCompact(item.price)}</b>
-                                    <span className="block text-[10px] text-slate-500">برای هر شب</span>
-                                  </div>
-                                  <span className="text-[10px] text-slate-500">{formatNumber(item.reviews)} نظر</span>
-                                </div>
-                                <div className="mt-4 flex flex-wrap gap-1.5">
-                                  {item.amenities.map((amenity) => (
-                                    <span key={amenity} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] text-slate-300">{amenity}</span>
-                                  ))}
-                                </div>
-                                <div className="mt-auto space-y-2 pt-5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedId(isSelected ? null : item.id)}
-                                    aria-pressed={isSelected}
-                                    className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
-                                      isSelected ? "bg-emerald-400 text-slate-950" : "btn-primary w-full !py-2.5"
-                                    }`}
-                                  >
-                                    {isSelected && <Check className="h-4 w-4" />}
-                                    {isSelected ? "انتخاب شد؛ برای لغو کلیک کنید" : "رزرو و انتخاب"}
-                                  </button>
-                                  <a
-                                    href={item.providerUrl}
-                                    target="_blank"
-                                    rel="noreferrer noopener"
-                                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[10px] text-slate-400 transition hover:bg-white/5 hover:text-white"
-                                  >
-                                    مشاهده در {item.provider}
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </div>
-                              </div>
-                            </motion.article>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </motion.div>
-                  ) : (
-                    <div className="glass p-10 text-center">
-                      <SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" />
-                      <h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3>
-                      <p className="mt-2 text-xs text-slate-500">بودجه را افزایش دهید یا چند فیلتر را بردارید.</p>
-                      <button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs">
-                        <RotateCcw className="h-4 w-4" />
-                        پاک‌کردن فیلترها
-                      </button>
+                  <div className="relative z-20 mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+                    <div className="glass-soft p-4"><JalaliRangeCalendar mode="stay" departureDate={checkIn} returnDate={checkOut} roundTrip onRoundTripChange={() => undefined} onChange={changeDate} /></div>
+                    <div className="glass-soft p-4">
+                      <span className="text-xs font-bold text-slate-300">سن کودکان و نوزادان</span>
+                      {!travelData.children && !travelData.infants ? <p className="mt-4 rounded-xl bg-white/[0.035] p-3 text-[11px] leading-6 text-slate-400">کودک یا نوزادی ثبت نشده است. در صورت اضافه‌کردن، سن برای قیمت‌گذاری دقیق هتل ارسال می‌شود.</p> : (
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          {childAges.map((age, index) => <label key={`child-${index}`} className="text-[10px] text-slate-400">کودک {formatNumber(index + 1)}<select value={age} onChange={(event) => { setChildAges((current) => current.map((value, i) => i === index ? Number(event.target.value) : value)); resetResultsForCoreChange(); }} className="field mt-1 !py-2 text-xs">{Array.from({ length: 10 }, (_, i) => i + 2).map((value) => <option key={value} value={value}>{formatNumber(value)} سال</option>)}</select></label>)}
+                          {infantAges.map((age, index) => <label key={`infant-${index}`} className="text-[10px] text-slate-400">نوزاد {formatNumber(index + 1)}<select value={age} onChange={(event) => { setInfantAges((current) => current.map((value, i) => i === index ? Number(event.target.value) : value)); resetResultsForCoreChange(); }} className="field mt-1 !py-2 text-xs">{[0, 1].map((value) => <option key={value} value={value}>{value === 0 ? "کمتر از ۱ سال" : "۱ سال"}</option>)}</select></label>)}
+                        </div>
+                      )}
+                      <p className="mt-3 text-[10px] leading-5 text-slate-500">{checkIn && checkOut ? `${formatJalaliDate(checkIn)} تا ${formatJalaliDate(checkOut)} · ${formatNumber(nights)} شب` : "تاریخ‌ها را انتخاب کنید"}</p>
                     </div>
-                  )}
+                  </div>
+
+                  <button type="button" onClick={searchAccommodation} disabled={loading || !isHydrated} className="btn-primary mt-5 w-full disabled:cursor-wait disabled:opacity-60">{loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}{loading ? "در حال دریافت قیمت‌های واقعی…" : `جستجوی ${kind === "hotel" ? "هتل" : "ویلا و اقامتگاه"}`}</button>
+                  {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-rose-400/15 bg-rose-400/5 p-3 text-xs leading-6 text-rose-200"><CircleAlert className="mt-1 h-4 w-4 shrink-0" />{error}</p>}
                 </section>
+
+                {selected && (
+                  <section className="glass mt-6 flex flex-col gap-4 border-emerald-400/25 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div><span className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Check className="h-4 w-4" />اقامتگاه در برنامهٔ سفر ذخیره شده</span><h3 className="mt-2 text-lg font-black text-white">{String(selected.name)}</h3><p className="mt-1 text-[11px] text-slate-400">{formatNumber(Number(selected.nights) || 0)} شب · {formatToman(Number(selected.cost) || 0)}</p></div>
+                    <div className="flex flex-wrap gap-2"><a href={String(selected.bookingUrl || "#")} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-2.5 text-xs">مشاهده و رزرو<ExternalLink className="h-3.5 w-3.5" /></a><button type="button" onClick={clearSelection} className="btn-ghost !py-2.5 text-xs">لغو انتخاب</button></div>
+                  </section>
+                )}
+
+                <div className="mt-8 grid items-start gap-6 lg:grid-cols-[280px_1fr]">
+                  <aside className="glass p-5 lg:sticky lg:top-5">
+                    <div className="flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-base font-black text-white"><SlidersHorizontal className="h-5 w-5 text-cyan-300" />فیلترها</h2><button type="button" onClick={resetFilters} className="text-[10px] text-slate-500 hover:text-cyan-300">پاک‌کردن</button></div>
+                    <label className="mt-6 block border-b border-white/5 pb-6"><span className="flex items-center justify-between gap-2 text-xs font-bold text-slate-300"><span>حداکثر قیمت کل</span><b className="text-cyan-200">{formatCompact(maxTotalPrice)}</b></span><input dir="ltr" type="range" min="1000000" max="100000000" step="1000000" value={maxTotalPrice} onChange={(event) => setMaxTotalPrice(Number(event.target.value))} className="mt-4 w-full accent-cyan-400" aria-label="حداکثر قیمت کل اقامت" /></label>
+                    <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-3"><input type="checkbox" checked={budgetOnly} onChange={(event) => setBudgetOnly(event.target.checked)} className="mt-1 h-4 w-4 accent-cyan-400" /><span><b className="block text-[11px] text-cyan-100">فقط داخل بودجهٔ باقی‌مانده</b><small className="mt-1 block text-[10px] leading-5 text-slate-500">سقف: {formatToman(Math.max(0, beforeAccommodation))}</small></span></label>
+                    <label className="mt-5 block text-xs font-bold text-slate-300">حداقل امتیاز مسافران<select value={minRating} onChange={(event) => setMinRating(Number(event.target.value))} className="field mt-2 !py-2.5 text-xs"><option value="0">همه امتیازها</option><option value="3">۳ به بالا</option><option value="4">۴ به بالا</option><option value="4.5">۴٫۵ به بالا</option></select></label>
+                    {kind === "hotel" ? <>
+                      <label className="mt-5 block text-xs font-bold text-slate-300">حداقل ستاره هتل<select value={minStars} onChange={(event) => setMinStars(Number(event.target.value))} className="field mt-2 !py-2.5 text-xs"><option value="0">همه هتل‌ها</option>{[2, 3, 4, 5].map((value) => <option key={value} value={value}>{formatNumber(value)} ستاره به بالا</option>)}</select></label>
+                      <label className="mt-5 block text-xs font-bold text-slate-300">امکانات<select value={amenity} onChange={(event) => setAmenity(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option><option value="breakfast">صبحانه</option><option value="wifi">اینترنت / WiFi</option><option value="pool">استخر</option><option value="parking">پارکینگ</option></select></label>
+                    </> : <label className="mt-5 block text-xs font-bold text-slate-300">نوع اقامتگاه<select value={stayType} onChange={(event) => setStayType(event.target.value)} className="field mt-2 !py-2.5 text-xs"><option value="all">همه</option>{["ویلا", "سوئیت", "آپارتمان", "کلبه", "خانه سنتی", "بوم‌گردی", "مجتمع اقامتگاهی", "هاستل"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
+                    <label className="mt-5 block text-xs font-bold text-slate-300">مرتب‌سازی<select value={sort} onChange={(event) => setSort(event.target.value as "price" | "rating")} className="field mt-2 !py-2.5 text-xs"><option value="price">ارزان‌ترین قیمت کل</option><option value="rating">بالاترین امتیاز</option></select></label>
+                  </aside>
+
+                  <section>
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{offers.length ? `${formatNumber(filteredOffers.length)} نتیجه از ${formatNumber(offers.length)} اقامتگاه دریافت‌شده${found > offers.length ? ` · ${formatNumber(found)} مورد در provider` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+
+                    {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredOffers.length ? (
+                      <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <AnimatePresence mode="popLayout">{filteredOffers.map((offer, index) => {
+                          const isSelected = selectedId === offer.id;
+                          return <motion.article layout key={offer.id} initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.35, delay: Math.min(index, 8) * 0.04 }} className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"}`}>
+                            <div className="relative h-52 overflow-hidden"><AccommodationImage src={offer.imageUrl} alt={offer.name} /><div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-night-950/95 via-transparent to-night-950/20" /><span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{offer.typeLabel}</span>{offer.rating ? <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/70 px-2.5 py-1 text-[11px] font-black text-cyan-300 backdrop-blur-md"><Star className="h-3.5 w-3.5 fill-cyan-300" />{compactFormatter.format(offer.rating)}</span> : null}<div className="absolute bottom-3 right-3 left-3"><h3 className="text-base font-black leading-7 text-white">{offer.name}</h3><p className="mt-1 flex items-center gap-1 text-[10px] text-slate-300"><MapPin className="h-3 w-3 shrink-0" />{offer.location}</p></div></div>
+                            <div className="flex flex-1 flex-col p-4">
+                              <div className="flex items-start justify-between gap-3"><div>{offer.priceBeforeDiscountToman && <span className="block text-[10px] text-slate-500 line-through">{formatToman(offer.priceBeforeDiscountToman)}</span>}<b className="text-lg font-black text-cyan-200">{formatToman(offer.priceTotalToman)}</b><span className="mt-1 block text-[10px] text-slate-500">قیمت کل {formatNumber(nights)} شب{kind === "stay" ? " · با مالیات" : ""}</span><span className="mt-1 block text-[10px] text-cyan-300/70">میانگین هر شب {formatToman(offer.pricePerNightToman)}</span></div><span className="shrink-0 text-[10px] text-slate-500">{offer.reviewCount ? `${formatNumber(offer.reviewCount)} نظر` : "بدون نظر ثبت‌شده"}</span></div>
+                              <div className="mt-4 flex flex-wrap gap-1.5">{[...offer.details, ...offer.amenities].slice(0, 5).map((detail, detailIndex) => <span key={`${detail}-${detailIndex}`} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] leading-4 text-slate-300">{detail}</span>)}</div>
+                              <div className="mt-auto space-y-2 pt-5"><button type="button" onClick={() => isSelected ? clearSelection() : selectOffer(offer)} aria-pressed={isSelected} className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${isSelected ? "bg-emerald-400 text-slate-950" : "btn-primary w-full !py-2.5"}`}>{isSelected && <Check className="h-4 w-4" />}{isSelected ? "انتخاب شد؛ برای لغو کلیک کنید" : "انتخاب برای سفرینو"}</button><a href={offer.bookingUrl} target="_blank" rel="noreferrer noopener" className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-[10px] font-bold text-slate-300 transition hover:bg-white/5 hover:text-white">مشاهده و رزرو در علی‌بابا<ExternalLink className="h-3 w-3" /></a><p className="text-center text-[9px] leading-5 text-slate-500">{kind === "hotel" ? "همان هتل با تاریخ و مسافران این جستجو باز می‌شود." : "صفحهٔ همان آگهی؛ تاریخ و مسافران را پیش از پرداخت دوباره کنترل کنید."}</p></div>
+                            </div>
+                          </motion.article>;
+                        })}</AnimatePresence>
+                      </motion.div>
+                    ) : offers.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}
+                  </section>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="glass relative mt-10 overflow-hidden p-6 text-center sm:p-9"
-          >
+          <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="glass relative mt-10 overflow-hidden p-6 text-center sm:p-9">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(6,182,212,0.18),transparent_60%)]" />
-            <div className="relative">
-              <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
-                <Sparkles className="h-3.5 w-3.5" />
-                همه‌چیز برای برنامهٔ نهایی آماده است
-              </span>
-              <h2 className="mt-4 text-2xl font-black text-white">حالا نوبت چیدن سفر رؤیایی توست</h2>
-              <p className="mx-auto mt-3 max-w-xl text-xs leading-7 text-slate-400">
-                مسیر، حمل‌ونقل و اقامتگاه انتخاب شد؛ در مرحلهٔ بعد هوش مصنوعی سفرینو برنامهٔ روزبه‌روز سفر را می‌سازد.
-              </p>
-              <a href="/plan" className="btn-primary mx-auto mt-7 w-full max-w-xl !px-8 !py-4 text-sm shadow-glow sm:text-base">
-                <Sparkles className="h-5 w-5" />
-                ساخت برنامه سفر با هوش مصنوعی
-                <ArrowLeft className="h-5 w-5" />
-              </a>
-              {selectedAccommodation && !hasReservation && (
-                <p className="mt-4 text-[11px] text-emerald-300">
-                  {selectedAccommodation.name} برای {formatNumber(nights)} شب · {formatToman(accommodationCost)}
-                </p>
-              )}
+            <div className="relative"><span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200"><Sparkles className="h-3.5 w-3.5" />حمل‌ونقل و اقامت در یک وضعیت مشترک</span><h2 className="mt-4 text-2xl font-black text-white">آماده برای برنامهٔ نهایی سفر</h2><p className="mx-auto mt-3 max-w-xl text-xs leading-7 text-slate-400">انتخاب اقامت یا ردکردن این مرحله ذخیره می‌شود و هزینهٔ واقعی آن به برنامه و بودجهٔ مرحلهٔ بعد منتقل خواهد شد.</p>
+              {choice ? <a href="/plan" className="btn-primary mx-auto mt-7 w-full max-w-xl !px-8 !py-4 text-sm shadow-glow sm:text-base"><Sparkles className="h-5 w-5" />ادامه به برنامهٔ سفر<ArrowLeft className="h-5 w-5" /></a> : <p className="mx-auto mt-7 max-w-xl rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-6 text-slate-400">برای ادامه، یک اقامتگاه انتخاب کن یا یکی از گزینه‌های «از قبل رزرو کردم» و «بدون اقامتگاه» را ثبت کن.</p>}
+              {selected && <p className="mt-4 text-[11px] text-emerald-300">{String(selected.name)} · {formatToman(Number(selected.cost) || 0)}</p>}
             </div>
           </motion.section>
         </div>
