@@ -177,10 +177,10 @@ async function searchHotels(input: AccommodationSearchInput) {
     limit: 60,
   };
   let result: Record<string, unknown> = {};
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
     result = record(await alibabaRequest(`v1/hotel/result?${new URLSearchParams(place).toString()}`, { body }));
     if ((finiteNumber(result.progress) ?? 100) >= 100) break;
-    if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 1_500));
   }
   if ((finiteNumber(result.progress) ?? 0) < 100) throw new Error("ALIBABA_HOTEL_SEARCH_INCOMPLETE");
   const context = { input, cityId: city.cityId, countryCode: city.countryCode, sessionId };
