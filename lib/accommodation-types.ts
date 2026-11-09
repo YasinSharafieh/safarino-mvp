@@ -109,7 +109,7 @@ export const STAY_TYPE_FILTERS: { key: string; label: string }[] = [
 
 const STAY_TYPE_PATTERNS: [string, RegExp][] = [
   ["villa", /ویلا/],
-  ["suite", /سو[ئیي]?یت|سویت|اتاق دو تخته|اتاق یک تخته|اتاق/],
+  ["suite", /سو[ئیي]?یت|سویت|اتاق دو تخته|اتاق یک تخته/],
   ["apartment", /آپارتمان|اپارتمان/],
   ["cottage", /کلبه/],
   ["traditional", /سنتی/],
