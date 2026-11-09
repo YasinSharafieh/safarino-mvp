@@ -32,7 +32,46 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({ mode: "train", origin: "THR", destination: "MHD", date, adults: 2, children: 0, infants: 0 }),
   }).then(async (response) => ({ status: response.status, body: (await response.text()).slice(0, 300) })).catch((error) => ({ status: 0, body: String(error) }));
 
+  const variants = [
+    pageUrl,
+    `${pageUrl}?date=2026-11-20`,
+    `${pageUrl}?date=1405-08-29`,
+    `${pageUrl}?goingDate=2026-11-20`,
+    `${pageUrl}/2026-11-20`,
+  ];
+  const variantResults = await Promise.all(variants.map(async (url) => {
+    try {
+      const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Safarino/1.0)", Accept: "text/html" }, cache: "no-store" });
+      const text = await response.text();
+      const data = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(text);
+      let length = null;
+      let dates: string[] = [];
+      try {
+        const props = data ? (JSON.parse(data[1]) as { props?: { pageProps?: { available?: unknown[] } } }).props?.pageProps : null;
+        length = Array.isArray(props?.available) ? props!.available!.length : null;
+        dates = Array.isArray(props?.available) ? Array.from(new Set((props!.available as { goingExitDate?: string }[]).map((row) => row.goingExitDate ?? ""))).slice(0, 3) : [];
+      } catch { length = -1; }
+      return { url: url.replace("https://www.fadaktrains.com", ""), status: response.status, available: length, dates };
+    } catch (error) {
+      return { url, status: 0, error: String(error) };
+    }
+  }));
+
+  const chunks = Array.from(new Set((html.match(/\/_next\/static\/chunks\/[a-zA-Z0-9._\-]+\.js/g) ?? []))).slice(0, 8);
+  const chunkHits: string[] = [];
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const response = await fetch(`https://www.fadaktrains.com${chunk}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const code = await response.text();
+      for (const match of code.match(/["'`](\/api\/[a-zA-Z0-9/_\-\.]+)["'`]/g) ?? []) chunkHits.push(match.replace(/["'`]/g, ""));
+      for (const match of code.match(/https?:\/\/[a-zA-Z0-9.\-]*(api|gw)[a-zA-Z0-9.\-]*/g) ?? []) chunkHits.push(match);
+    } catch {}
+  }));
+
   return NextResponse.json({
+    variantResults,
+    chunkHits: Array.from(new Set(chunkHits)).slice(0, 30),
     apiPaths,
     fadakHosts,
     legacyGround,
