@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchAlibabaFlights } from "../../../../../lib/alibaba-flights";
 import { searchAlibabaTrains, searchAlibabaBuses } from "../../../../../lib/alibaba-ground";
 import { searchSafar724Buses } from "../../../../../lib/safar724-bus";
-import { searchFadakTrains } from "../../../../../lib/fadak-train";
 import {
   dedupeTransportOffers,
   PROVIDER_LABELS,
@@ -195,25 +194,6 @@ export async function POST(request: NextRequest) {
       statuses.push({
         provider: "safar724",
         label: PROVIDER_LABELS.safar724,
-        status: result.status,
-        count: result.offers.length,
-        found: result.offers.length,
-        message: result.message,
-      });
-    })());
-  }
-
-  if (mode === "train") {
-    tasks.push((async () => {
-      const result = await searchFadakTrains(origin, destination, date);
-      bundles.push(result.offers);
-      if (returnDate) {
-        const back = await searchFadakTrains(destination, origin, returnDate);
-        returningBundles.push(back.offers);
-      }
-      statuses.push({
-        provider: "fadak",
-        label: PROVIDER_LABELS.fadak,
         status: result.status,
         count: result.offers.length,
         found: result.offers.length,

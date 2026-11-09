@@ -125,21 +125,35 @@ type LiveOffer = {
   priceToman: number;
   childPriceToman?: number | null;
   infantPriceToman?: number | null;
-  seatsLeft: number;
+  seatsLeft: number | null;
   details: string[];
+  provider?: "alibaba" | "safar724";
+  bookingUrl?: string;
+  bookingNote?: string;
+};
+
+type ProviderStatus = {
+  provider: "alibaba" | "safar724";
+  label: string;
+  status: "ok" | "unsupported" | "failed";
+  count: number;
+  found: number;
+  message?: string;
 };
 
 type LiveSearchResponse = {
   success: boolean;
   error?: string;
-  provider?: string;
+  mode?: "plane" | "train" | "bus";
   fetchedAt?: string;
-  bookingUrl?: string;
-  flights?: Array<Record<string, unknown>>;
-  returning?: Array<Record<string, unknown>>;
   offers?: LiveOffer[];
   returningOffers?: LiveOffer[];
+  duplicateCount?: number;
+  providerStatuses?: ProviderStatus[];
 };
+
+const TRANSPORT_PROVIDER_LABELS: Record<string, string> = { alibaba: "علی‌بابا", safar724: "سفر۷۲۴" };
+const TRANSPORT_PROVIDER_MARKS: Record<string, string> = { alibaba: "ع", safar724: "۷۲۴" };
 
 type Selection = {
   vehicleId: TransportId;
@@ -221,6 +235,8 @@ function TransportPageContent() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [providerMeta, setProviderMeta] = useState<{ bookingUrl?: string; fetchedAt?: string }>({});
+  const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([]);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [distanceError, setDistanceError] = useState("");
   const [fuelPrice, setFuelPrice] = useState(FUEL_PRICE_PER_LITER);
@@ -355,11 +371,9 @@ function TransportPageContent() {
     }
     setSearchLoading(true);
     setSearchError("");
+    setProviderStatuses([]);
     try {
-      const endpoint = searchMode === "plane"
-        ? "/api/providers/alibaba/flights"
-        : "/api/providers/alibaba/ground";
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/providers/transport/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -375,29 +389,36 @@ function TransportPageContent() {
       });
       const data = await response.json() as LiveSearchResponse;
       if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
-      const normalizeFlights = (rows: Array<Record<string, unknown>> | undefined): LiveOffer[] => (rows || []).map((value, index) => ({
-        id: String(value.id || index),
-        logoUrl: typeof value.logoUrl === "string" ? value.logoUrl : null,
-        title: `${String(value.airline || "پرواز")} · ${String(value.flightNumber || "")}`,
-        subtitle: String(value.fareClass || "اکونومی"),
-        departure: String(value.departure || ""),
-        arrival: value.arrival ? String(value.arrival) : null,
-        priceToman: Number(value.priceToman),
-        childPriceToman: value.childPriceToman === null || value.childPriceToman === undefined ? null : Number(value.childPriceToman),
-        infantPriceToman: value.infantPriceToman === null || value.infantPriceToman === undefined ? null : Number(value.infantPriceToman),
-        seatsLeft: Number(value.seatsLeft),
-        details: [
-          value.aircraft ? String(value.aircraft) : "",
-          value.baggageKg ? `${String(value.baggageKg)} کیلوگرم بار` : "",
-        ].filter(Boolean),
-      })).filter((offer) => offer.priceToman > 0 && offer.departure);
-      const normalized = searchMode === "plane" ? normalizeFlights(data.flights) : data.offers || [];
-      const normalizedReturn = searchMode === "plane" ? normalizeFlights(data.returning) : data.returningOffers || [];
+      const normalized: LiveOffer[] = (data.offers || []).map((offer) => ({
+        ...offer,
+        logoUrl: offer.logoUrl ?? null,
+        arrival: offer.arrival ?? null,
+        childPriceToman: offer.childPriceToman ?? null,
+        infantPriceToman: offer.infantPriceToman ?? null,
+        seatsLeft: typeof offer.seatsLeft === "number" ? offer.seatsLeft : null,
+        details: Array.isArray(offer.details) ? offer.details : [],
+      }));
+      const normalizedReturn: LiveOffer[] = (data.returningOffers || []).map((offer) => ({
+        ...offer,
+        logoUrl: offer.logoUrl ?? null,
+        arrival: offer.arrival ?? null,
+        childPriceToman: offer.childPriceToman ?? null,
+        infantPriceToman: offer.infantPriceToman ?? null,
+        seatsLeft: typeof offer.seatsLeft === "number" ? offer.seatsLeft : null,
+        details: Array.isArray(offer.details) ? offer.details : [],
+      }));
       setOffers(normalized);
       setReturnOffers(normalizedReturn);
+      setProviderStatuses(data.providerStatuses || []);
+      setDuplicateCount(data.duplicateCount || 0);
       setActiveLeg("outbound");
-      setProviderMeta({ bookingUrl: data.bookingUrl, fetchedAt: data.fetchedAt });
-      if (!normalized.length) setSearchError("برای این مسیر و تاریخ، گزینه دارای صندلی و قیمت پیدا نشد.");
+      setProviderMeta({ fetchedAt: data.fetchedAt });
+      if (!normalized.length) {
+        const working = (data.providerStatuses || []).filter((status) => status.status === "ok");
+        setSearchError(working.length
+          ? "برای این مسیر و تاریخ، گزینه‌ای با صندلی و قیمت پیدا نشد."
+          : "هیچ منبعی برای این مسیر پاسخ نداد؛ جزئیات هر منبع پایین‌تر آمده است.");
+      }
     } catch (error) {
       setOffers([]);
       setReturnOffers([]);
@@ -427,11 +448,12 @@ function TransportPageContent() {
       return;
     }
     const details = {
-      provider: "alibaba",
+      provider: offer.provider || "alibaba",
+      providerLabel: TRANSPORT_PROVIDER_LABELS[offer.provider || "alibaba"],
       offerId: offer.id,
       offerTitle: `${activeLeg === "return" ? "برگشت · " : ""}${offer.title}`,
       unitPrice: offer.priceToman,
-      bookingUrl: providerMeta.bookingUrl,
+      bookingUrl: offer.bookingUrl || providerMeta.bookingUrl,
       fetchedAt: providerMeta.fetchedAt,
     };
     selectVehicle(searchMode, total, details);
@@ -836,6 +858,18 @@ function TransportPageContent() {
               </button>
             </div>
 
+            {providerStatuses.length > 0 && (
+              <div className="flex flex-wrap gap-2 border-b border-white/10 bg-white/[0.02] p-4" aria-label="وضعیت منابع بلیت">
+                {providerStatuses.map((status) => (
+                  <span key={status.provider} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold ${status.status === "ok" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-cyan-400/20 bg-cyan-400/5 text-slate-400"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${status.status === "ok" ? "bg-emerald-300" : "bg-slate-500"}`} />
+                    {status.label}
+                    <b className="text-white">{status.status === "ok" ? `${formatNumber(status.count)} بلیت` : status.message || "در دسترس نیست"}</b>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {searchError && (
               <div className="m-5 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-xs leading-6 text-rose-100">
                 {searchError}
@@ -867,6 +901,12 @@ function TransportPageContent() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <b className="text-sm text-white">{offer.title}</b>
+                          {offer.provider && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-slate-300">
+                              <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-cyan-400/20 text-[7px] text-cyan-200">{TRANSPORT_PROVIDER_MARKS[offer.provider]}</span>
+                              {TRANSPORT_PROVIDER_LABELS[offer.provider]}
+                            </span>
+                          )}
                           {index === 0 && <span className="badge-turquoise !py-0.5 !text-[9px]">ارزان‌ترین</span>}
                         </div>
                         <span className="mt-1 block text-[11px] text-slate-400">{offer.subtitle}</span>
@@ -888,7 +928,7 @@ function TransportPageContent() {
                           </span>
                         )}
                         <span className="mt-1 block text-[10px] text-slate-500">
-                          {offer.seatsLeft > 0 ? `${formatNumber(offer.seatsLeft)} صندلی باقی‌مانده` : "ظرفیت موجود"}
+                          {typeof offer.seatsLeft === "number" && offer.seatsLeft > 0 ? `${formatNumber(offer.seatsLeft)} صندلی باقی‌مانده` : "ظرفیت در فهرست منبع ذکر نشده"}
                         </span>
                       </div>
                       <div className="flex flex-col gap-2">
@@ -903,15 +943,15 @@ function TransportPageContent() {
                           {isSelected && <Check className="ml-1 inline h-4 w-4" />}
                           {isSelected ? "انتخاب شده" : "انتخاب برای سفرینو"}
                         </button>
-                        {providerMeta.bookingUrl && (
+                        {(offer.bookingUrl || providerMeta.bookingUrl) && (
                           <a
-                            href={providerMeta.bookingUrl}
+                            href={offer.bookingUrl || providerMeta.bookingUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => chooseLiveOffer(offer)}
                             className="btn-primary !min-h-10 !px-4 !py-2 !text-[11px]"
                           >
-                            خرید این بلیت
+                            خرید از {TRANSPORT_PROVIDER_LABELS[offer.provider || "alibaba"]}
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
                         )}
@@ -927,9 +967,10 @@ function TransportPageContent() {
                 <Clock3 className="h-4 w-4 text-turquoise-300" />
                 {providerMeta.fetchedAt ? `دریافت اطلاعات: ${new Date(providerMeta.fetchedAt).toLocaleString("fa-IR")}` : "برای مشاهده نتایج واقعی جستجو کنید"}
               </p>
-              {providerMeta.bookingUrl && visibleOffers.length > 0 && (
+              {visibleOffers.length > 0 && (
                 <p className="max-w-md text-[10px] leading-5 text-slate-500">
-                  با «خرید این بلیت»، همان مسیر و تاریخ در علی‌بابا باز می‌شود؛ نام شرکت و ساعت ردیف را با بلیت انتخابی تطبیق بده.
+                  هر بلیت لینک خرید همان منبع را دارد؛ نام شرکت و ساعت ردیف را با بلیت انتخابی تطبیق بده.
+                  {duplicateCount > 0 ? ` ${formatNumber(duplicateCount)} پیشنهاد تکراری بین منابع ادغام شد.` : ""}
                 </p>
               )}
             </div>

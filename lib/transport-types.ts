@@ -2,7 +2,7 @@ import { IRANIAN_CITIES } from "./iran-cities";
 import { alibabaJalaliDate } from "./alibaba-flights";
 
 export type TransportMode = "plane" | "train" | "bus";
-export type TransportProviderId = "alibaba" | "safar724" | "fadak";
+export type TransportProviderId = "alibaba" | "safar724";
 
 export type TransportOffer = {
   id: string;
@@ -51,7 +51,6 @@ export type TransportSearchResult = {
 export const PROVIDER_LABELS: Record<TransportProviderId, string> = {
   alibaba: "علی‌بابا",
   safar724: "سفر۷۲۴",
-  fadak: "قطارهای فدک",
 };
 
 /** English slug per provider; each provider spells Iranian cities differently. */
