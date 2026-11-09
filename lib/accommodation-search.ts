@@ -14,6 +14,7 @@ import { searchOtaghakAccommodation } from "./otaghak-accommodation";
 import { searchSnapptripAccommodation } from "./snapptrip-accommodation";
 import { searchEghamat24Accommodation } from "./eghamat24-accommodation";
 import { normalizeTerm } from "./accommodation-provider-utils";
+import { IRANIAN_CITIES } from "./iran-cities";
 
 type Searcher = (input: AccommodationSearchInput) => Promise<ProviderSearchResult>;
 
@@ -54,10 +55,13 @@ function fold(value: string): string {
     .trim();
 }
 
+/** Known Iranian city names that appear anywhere in the address, so "میدان آستانه" is not a city. */
+const CITY_NAME_SET = new Set(IRANIAN_CITIES.map((city) => normalizeTerm(city.name)).filter((name) => name.length >= 3));
+
 function cityTokens(offer: AccommodationOffer): string[] {
-  return fold(offer.location.split("،")[0] || "")
+  return fold(offer.location)
     .split(" ")
-    .filter(Boolean);
+    .filter((token) => CITY_NAME_SET.has(token));
 }
 
 /** Name words that actually identify the property, with the city and trading words removed. */
@@ -110,17 +114,15 @@ function sharedInventory(a: AccommodationOffer, b: AccommodationOffer): boolean 
 }
 
 /**
- * Providers format the address differently ("مشهد، خیابان…" vs "آدرس: مشهد- …"), so a strict
- * string comparison rejects the same city. Two cards count as one city when their addresses
- * share a place word or one address contains the other.
+ * Providers format the address differently ("مشهد، خیابان…" vs "آدرس: مشهد- …"), so raw string
+ * comparison is unreliable. Two cards share a city when they name at least one of the same
+ * Iranian cities; when an address names no known city, the other one decides.
  */
 function sameCity(a: AccommodationOffer, b: AccommodationOffer): boolean {
-  const left = fold(a.location);
-  const right = fold(b.location);
-  if (!left || !right) return true;
-  if (left.includes(right) || right.includes(left)) return true;
-  const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
-  return right.split(" ").some((token) => token.length >= 3 && leftTokens.has(token));
+  const left = cityTokens(a);
+  const right = cityTokens(b);
+  if (!left.length || !right.length) return true;
+  return left.some((token) => right.includes(token));
 }
 
 function starsCompatible(a: AccommodationOffer, b: AccommodationOffer): boolean {
