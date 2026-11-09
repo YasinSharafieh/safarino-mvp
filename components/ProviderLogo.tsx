@@ -5,18 +5,30 @@ import { Bus, Plane, TrainFront } from "lucide-react";
 
 export default function ProviderLogo({ src, name, mode }: { src?: string | null; name: string; mode: "plane" | "train" | "bus" }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [src]);
   const Icon = mode === "plane" ? Plane : mode === "train" ? TrainFront : Bus;
+  const proxiedSource = src ? `/api/provider-assets?src=${encodeURIComponent(src)}` : null;
 
   return (
-    <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-white p-1.5">
-      {src && !failed ? (
+    <span className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-white p-1.5">
+      {proxiedSource && !failed && (
         // Provider CDN URLs are normalized and restricted to cdn.alibaba.ir on the server.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={`لوگوی ${name}`} width={48} height={48} onError={() => setFailed(true)} className="h-full w-full object-contain" />
-      ) : (
-        <Icon className="h-6 w-6 text-slate-700" />
+        <img
+          src={proxiedSource}
+          alt={`لوگوی ${name}`}
+          width={48}
+          height={48}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={`h-full w-full object-contain transition-opacity ${loaded ? "opacity-100" : "absolute opacity-0"}`}
+        />
       )}
+      {(!proxiedSource || failed || !loaded) && <Icon className="h-6 w-6 text-slate-700" aria-hidden="true" />}
     </span>
   );
 }
