@@ -129,6 +129,8 @@ const OPERATOR_NOISE = new Set([
   "راه", "آهن", "حمل", "نقل", "مسافری", "مسافربری", "بین", "شهری", "بینشهری", "سریع",
   "سهامی", "خاص", "عام", "درجه", "آژانس", "مسافر",
   "ترابری", "ریلی", "خط", "co", "company", "bus", "train", "express",
+  "شماره", "پایانه", "ترمینال", "پایانه‌های", "جنوب", "شمال", "شرق", "غرب", "مرکزی",
+  "بیهقی", "امام", "رضا", "آزادی", "صادقیه", "المللی", "بین‌المللی",
 ]);
 
 function operatorTokens(value: string): string[] {
@@ -151,14 +153,30 @@ function jaccard(a: string[], b: string[]): number {
  * providers. They count as the same company when the distinctive words overlap enough,
  * and a purely numeric token match (train/flight numbers) never proves identity alone.
  */
+/** One word being the start of the other ("پیما" / "پیماایران") still names the same company. */
+function tokenMatches(left: string, right: string): boolean {
+  if (left === right) return true;
+  if (left.length < 4 || right.length < 4) return false;
+  return left.startsWith(right) || right.startsWith(left);
+}
+
 function sameOperatorName(a: string, b: string): boolean {
   const left = operatorTokens(a);
   const right = operatorTokens(b);
   if (!left.length || !right.length) return foldText(a) === foldText(b);
   if (left.join(" ") === right.join(" ")) return true;
-  const shared = left.filter((token) => right.includes(token) && !/^\d+$/.test(token) && token.length >= 3);
-  if (!shared.length) return false;
-  return jaccard(left, right) >= 0.6;
+
+  const distinctive = (token: string) => token.length >= 3 && !/^\d+$/.test(token);
+  const sharedLeft = left.filter((token) => distinctive(token) && right.some((other) => tokenMatches(token, other)));
+  const sharedRight = right.filter((token) => distinctive(token) && left.some((other) => tokenMatches(token, other)));
+  // Two independent words must agree; a single shared word is not proof across providers.
+  if (sharedLeft.length < 2 || sharedRight.length < 2) return false;
+
+  const containment = Math.min(sharedLeft.length / left.length, sharedRight.length / right.length);
+  const union = new Set([...left, ...right]).size;
+  const overlap = Math.max(jaccard(left, right), containment);
+  void union;
+  return overlap >= 0.5;
 }
 
 function departureMinutes(value: string): number | null {

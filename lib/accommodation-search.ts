@@ -129,18 +129,20 @@ function verifiedNameLocation(a: AccommodationOffer, b: AccommodationOffer): boo
   const exactName = comparableName(a) === comparableName(b);
   const similarity = nameSimilarity(a, b);
 
-  // With coordinates, the two cards must also sit at the same place (allowing a small pin drift).
-  if (distance !== null) {
-    if (exactName && distance <= 400) return true;
-    return similarity >= 0.8 && distance <= 400;
+  // An identical distinctive name in the same city is the same property even when one provider
+  // publishes no map pin. A two-star gap means they are different buildings that share a name.
+  if (exactName) {
+    if (a.stars !== null && b.stars !== null && Math.abs(a.stars - b.stars) >= 2) return false;
+    if (distance !== null && distance > 2_000) return false;
+    return true;
   }
 
-  // Without coordinates on either side a name is not proof on its own: both cards must also
-  // publish the same star rating, otherwise two different places with a generic name merge.
+  // Different spellings still merge when both pins show the same building.
+  if (distance !== null) return similarity >= 0.8 && distance <= 400;
+
+  // With no coordinates at all only a near-identical name plus the same star rating is accepted.
   const ratedBoth = a.stars !== null && b.stars !== null && a.stars === b.stars;
-  if (!ratedBoth) return false;
-  if (exactName) return true;
-  return similarity >= 0.9;
+  return ratedBoth && similarity >= 0.9;
 }
 
 function compatible(a: AccommodationOffer, b: AccommodationOffer): "shared_inventory" | "verified_name_location" | null {

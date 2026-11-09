@@ -81,11 +81,19 @@ assert.equal(shared[0].matchReason, "shared_inventory");
 assert.equal(shared[0].offers[0].provider, "jabama");
 assert.ok(shared[0].offers.every((item) => item.bookingUrl.includes(item.provider === "alibaba" ? "alibaba.ir" : "jabama.com")));
 
-const noLocationProof = deduplicateAccommodationOffers([
-  offer({ id: "a", latitude: null, longitude: null }),
-  offer({ id: "b", provider: "otaghak", providerPropertyId: "b", latitude: null, longitude: null }),
+// Policy: an identical distinctive name in the same city is the same property (one provider may
+// simply not publish a map pin), but a merely similar name without coordinates must stay apart.
+const identicalNameNoPin = deduplicateAccommodationOffers([
+  offer({ id: "a", name: "ویلا نمونه", latitude: null, longitude: null, stars: null }),
+  offer({ id: "b", provider: "otaghak", providerPropertyId: "b", name: "ویلا نمونه", latitude: null, longitude: null, stars: null }),
 ]);
-assert.equal(noLocationProof.length, 2, "Name alone must never merge properties");
+assert.equal(identicalNameNoPin.length, 1, "Identical name in the same city merges even without a pin");
+
+const similarNameNoPin = deduplicateAccommodationOffers([
+  offer({ id: "c", name: "ویلا نمونه ساحلی", latitude: null, longitude: null, stars: null }),
+  offer({ id: "d", provider: "otaghak", providerPropertyId: "d", name: "ویلا نمونه جنگلی", latitude: null, longitude: null, stars: null }),
+]);
+assert.equal(similarNameNoPin.length, 2, "A similar but different name without a pin must not merge");
 
 const close = deduplicateAccommodationOffers([
   offer({ id: "a", name: "هتل الماس ۲ مشهد", location: "مشهد" }),

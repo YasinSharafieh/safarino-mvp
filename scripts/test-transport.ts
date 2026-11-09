@@ -69,4 +69,15 @@ const spelling = dedupeTransportOffers([
 ]);
 assert.equal(spelling.offers.length, 1, "Arabic-letter and digit spellings of one company collapse");
 
+// Real-world misses seen on live data: terminal suffix, Arabic spellings and a shortened word.
+const live = dedupeTransportOffers([
+  mk("g1", "alibaba", "شرکت گیتی نورد تعاونی شماره ۱۲ - پایانه جنوب", "2026-11-20T06:00:00", 990_000),
+  mk("g2", "safar724", "تعاونی 12 گیتی نورد", "2026-11-20T06:00:00", 990_000),
+  mk("g3", "alibaba", "شرکت گیتی پیما ایران پایانه غرب", "2026-11-20T17:00:00", 1_400_000),
+  mk("g4", "safar724", "بین‌المللی گیتی پیما", "2026-11-20T17:00:00", 1_430_000),
+  mk("g5", "safar724", "تعاونی ۱۴ پارسیان", "2026-11-20T06:00:00", 990_000),
+]);
+assert.equal(live.offers.length, 3, "same companies merge, a different company at the same minute stays");
+assert.equal(live.removed, 2);
+
 console.log("Transport provider parsing and deduplication tests passed.");
