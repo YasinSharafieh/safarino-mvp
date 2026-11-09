@@ -332,7 +332,6 @@ export default function PlanPage() {
   .print-card * { color: black !important; text-shadow: none !important; }
   .print-only { display: block !important; }
   .screen-only { display: none !important; }
-  a[href]::after { content: ""; }
 }`}</style>
         <div className="pointer-events-none absolute inset-0 -z-10 print:hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
