@@ -162,6 +162,7 @@ type Selection = {
   offerId?: string;
   offerTitle?: string;
   provider?: string;
+  providerLabel?: string;
   bookingUrl?: string;
   fetchedAt?: string;
 };
@@ -204,14 +205,16 @@ function TransportProvider({ children }: { children: ReactNode }) {
     }
   }, [isReady, selection]);
 
+  const selectVehicle = useCallback(
+    (vehicleId: TransportId, cost: number, details?: Partial<Selection>) => {
+      setSelection(details ? { ...details, vehicleId, cost } : { vehicleId, cost });
+    },
+    [],
+  );
+
   const value = useMemo(
-    () => ({
-      selection,
-      isReady,
-      selectVehicle: (vehicleId: TransportId, cost: number, details?: Partial<Selection>) =>
-        setSelection({ vehicleId, cost, ...details }),
-    }),
-    [isReady, selection],
+    () => ({ selection, isReady, selectVehicle }),
+    [isReady, selection, selectVehicle],
   );
 
   return <TransportContext.Provider value={value}>{children}</TransportContext.Provider>;
@@ -301,10 +304,10 @@ function TransportPageContent() {
   }, [destinationCity, isHydrated, originCity]);
 
   useEffect(() => {
-    if (!isReady) return;
-    const currentCost = selection.vehicleId === "car" ? carTotal : selection.cost;
-    if (selection.cost !== currentCost) selectVehicle(selection.vehicleId, currentCost, selection);
-  }, [carTotal, isReady, passengers, selectVehicle, selection]);
+    if (!isReady || selection.vehicleId !== "car") return;
+    if (!Number.isFinite(carTotal)) return;
+    if (selection.cost !== carTotal) selectVehicle("car", carTotal);
+  }, [carTotal, isReady, selectVehicle, selection.cost, selection.vehicleId]);
 
   useEffect(() => {
     setTravelData((current) => ({
