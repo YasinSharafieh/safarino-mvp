@@ -752,7 +752,7 @@ function TransportPageContent() {
                 </div>
                 <span className="text-3xl" aria-hidden="true">{searchMode === "plane" ? "✈️" : searchMode === "train" ? "🚂" : "🚌"}</span>
               </div>
-              <div className="glass-soft mt-6 p-4 sm:p-5">
+              <div className="glass-soft relative z-40 mt-6 p-4 sm:p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-cyan-300" />
@@ -778,7 +778,7 @@ function TransportPageContent() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+              <div className="relative z-30 mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
                 <JalaliRangeCalendar
                   departureDate={travelData.departureDate}
                   returnDate={travelData.returnDate}
