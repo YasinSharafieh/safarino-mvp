@@ -367,6 +367,20 @@ export default function PlanPage() {
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-slate-400">بودجه، زمان و سلیقه تو؛ تبدیل به یک برنامه روزبه‌روز و قابل اجرا.</p>
           </section>
 
+          <section className="print-only mt-6 hidden print-card rounded-xl border border-white/10 p-4" aria-label="خلاصه سفر">
+            <h2 className="text-base font-black">خلاصه سفر</h2>
+            <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] leading-6">
+              <span>مسیر: {origin} به {destination}</span>
+              <span>تعداد روز: {formatNumber(dayCount)}</span>
+              <span>تاریخ حرکت: {travelData.departureDate ? formatJalaliDate(travelData.departureDate) : "ثبت‌نشده"}</span>
+              <span>تاریخ بازگشت: {travelData.returnDate ? formatJalaliDate(travelData.returnDate) : "ثبت‌نشده"}</span>
+              <span>مسافران: {formatNumber(travelData.travelers || 1)} بزرگسال{travelData.children ? ` · ${formatNumber(travelData.children)} کودک` : ""}{travelData.infants ? ` · ${formatNumber(travelData.infants)} نوزاد` : ""}</span>
+              <span>بودجه کل: {formatToman(plan.budgetAnalysis.totalBudget)}</span>
+              <span>حمل‌ونقل انتخاب‌شده: {plan.budgetAnalysis.transport ? formatToman(plan.budgetAnalysis.transport) : "انتخاب نشده"}{typeof transportDetails.label === "string" ? ` (${transportDetails.label})` : ""}</span>
+              <span>اقامت انتخاب‌شده: {plan.budgetAnalysis.accommodation ? `${String(accommodationDetails.name ?? "")} · ${formatToman(plan.budgetAnalysis.accommodation)}` : "بدون اقامتگاه"}</span>
+            </div>
+          </section>
+
           <section className="glass mt-8 grid gap-3 p-4 print:hidden sm:grid-cols-2 lg:grid-cols-5">
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مبدأ</span><input value={origin} onChange={(event) => setOrigin(event.target.value)} className="field !py-2.5" /></label>
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مقصد</span><input value={destination} onChange={(event) => setDestination(event.target.value)} className="field !py-2.5" /></label>
@@ -507,7 +521,7 @@ export default function PlanPage() {
                 <ul className="mt-2 space-y-1.5">
                   {day.items.map((item, index) => (
                     <li key={`print-${day.day}-${index}`} className="text-[11px] leading-6">
-                      <b>{item.time}</b> · {item.title}{item.poiId ? " (جاذبهٔ تأییدشده در منبع عمومی)" : ""} — {item.description}
+                      <b>{item.time}</b> · {item.title}{item.poiId ? " (جاذبهٔ تأییدشده در منبع عمومی)" : ""}{item.description && !item.description.startsWith(item.title) ? ` — ${item.description}` : ""}
                     </li>
                   ))}
                 </ul>
