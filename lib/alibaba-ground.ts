@@ -111,16 +111,20 @@ export async function searchAlibabaTrains(input: FlightSearchInput) {
 }
 
 async function busCityCode(code: string): Promise<string> {
-  const filter = encodeURIComponent(`q={ct:'${code.toLowerCase()}'}`);
-  const result = await alibabaRequest(`v1/bus/stations?filter=${filter}`) as Record<string, unknown>;
-  const items = Array.isArray(result.items) ? result.items : [];
-  const station = items.find((value) => {
-    if (!value || typeof value !== "object") return false;
-    return Boolean(text((value as Record<string, unknown>).domainCode));
-  }) as Record<string, unknown> | undefined;
-  const domainCode = text(station?.domainCode);
-  if (!domainCode) throw new Error("ALIBABA_BUS_CITY_NOT_FOUND");
-  return domainCode;
+  const city = resolveIranianCity(code);
+  const terms = [code.toLowerCase(), city?.name].filter((value): value is string => Boolean(value));
+  for (const term of Array.from(new Set(terms))) {
+    const filter = encodeURIComponent(`q={ct:'${term}'}`);
+    const result = await alibabaRequest(`v1/bus/stations?filter=${filter}`) as Record<string, unknown>;
+    const items = Array.isArray(result.items) ? result.items : [];
+    const station = items.find((value) => {
+      if (!value || typeof value !== "object") return false;
+      return Boolean(text((value as Record<string, unknown>).domainCode));
+    }) as Record<string, unknown> | undefined;
+    const domainCode = text(station?.domainCode);
+    if (domainCode) return domainCode;
+  }
+  throw new Error("ALIBABA_BUS_CITY_NOT_FOUND");
 }
 
 export async function searchAlibabaBuses(input: FlightSearchInput) {
