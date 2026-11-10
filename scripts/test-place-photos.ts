@@ -27,7 +27,7 @@ function check(label: string, ok: boolean, extra = "") {
   check("map fallback keeps the exact coordinates", mapUrl.includes("lat=36.29720") && mapUrl.includes("lng=59.60670"));
 
   console.log("Every place gets a picture");
-  const places = await attachPlaceImages([
+  const places = await attachPlaceImages<{ id: string; name: string; latitude: number; longitude: number; imageKind?: "photo" | "map" | "none"; imageUrl?: string | null }>([
     { id: "a", name: "مسجد گوهرشاد", latitude: 36.2878, longitude: 59.6153 },
     { id: "b", name: "جای-نامعلوم-سفرینو", latitude: 36.3, longitude: 59.6 },
   ]);
