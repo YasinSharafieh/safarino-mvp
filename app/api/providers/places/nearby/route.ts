@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchCityPois, type PoiWithMeta } from "../../../../../lib/poi-search";
 import { computePoiDistances, engineLabel as distanceEngineLabel, type DistanceTarget } from "../../../../../lib/poi-distance";
-import { neshanAvailable, neshanConfigured, neshanSearch, resolveNeshanKey, type NeshanPlace } from "../../../../../lib/neshan";
+import {
+  NESHAN_PLACE_LAYERS,
+  neshanAvailable,
+  neshanNearby,
+  neshanReverse,
+  resolveNeshanKey,
+  type NeshanPlace,
+} from "../../../../../lib/neshan";
+import { placePhoto, neshanStaticMapUrl } from "../../../../../lib/place-photos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-/** Real attraction searches Neshan is asked for around the chosen property. */
-const NESHAN_TERMS = ["جاذبه گردشگری", "موزه", "بازار", "پارک"];
 
 type NearbyPlace = {
   id: string;
@@ -23,10 +28,14 @@ type NearbyPlace = {
   sourceLabel: string;
   sourceUrl: string;
   wikipediaUrl: string | null;
+  /** Real photo of this place, or a real Neshan map image of its exact spot. */
+  imageUrl: string | null;
+  imageKind: "photo" | "map" | "none";
+  imageLabel: string;
+  imageCreditUrl: string | null;
 };
 
 function nameKey(name: string): string {
-  // Keep Persian/Arabic letters and digits only; the build target predates \p{L}.
   const lettersOnly = name
     .replace(/\u064a/g, "\u06cc")
     .replace(/\u0643/g, "\u06a9")
@@ -48,10 +57,43 @@ function fromPoi(poi: PoiWithMeta): NearbyPlace {
     sourceLabel: poi.source === "wikidata" ? "ویکی‌داده" : poi.source === "wikipedia" ? "ویکی‌پدیای فارسی" : "OpenStreetMap",
     sourceUrl: poi.sourceUrl,
     wikipediaUrl: poi.wikipediaUrl || null,
+    imageUrl: null,
+    imageKind: "none",
+    imageLabel: "",
+    imageCreditUrl: null,
   };
 }
 
-function fromNeshan(place: NeshanPlace): NearbyPlace {
+function fromNeshanNearby(place: {
+  id: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distanceMeters: number;
+  durationSeconds: number;
+}): NearbyPlace {
+  return {
+    id: place.id,
+    name: place.name,
+    category: place.category,
+    address: "",
+    latitude: place.latitude,
+    longitude: place.longitude,
+    distanceKm: place.distanceMeters > 0 ? Math.round(place.distanceMeters / 100) / 10 : null,
+    durationMinutes: place.durationSeconds > 0 ? Math.max(1, Math.round(place.durationSeconds / 60)) : null,
+    distanceEngine: "نشان",
+    sourceLabel: "نشان",
+    sourceUrl: `https://neshan.org/maps/@${place.latitude},${place.longitude},16z`,
+    wikipediaUrl: null,
+    imageUrl: null,
+    imageKind: "none",
+    imageLabel: "",
+    imageCreditUrl: null,
+  };
+}
+
+function fromNeshanSearch(place: NeshanPlace): NearbyPlace {
   return {
     id: place.id,
     name: place.name,
@@ -65,16 +107,24 @@ function fromNeshan(place: NeshanPlace): NearbyPlace {
     sourceLabel: "نشان",
     sourceUrl: place.sourceUrl,
     wikipediaUrl: null,
+    imageUrl: null,
+    imageKind: "none",
+    imageLabel: "",
+    imageCreditUrl: null,
   };
 }
 
 /**
- * Places around the chosen accommodation plus the real distance to each one.
- * Places come from OpenStreetMap / Wikidata / Persian Wikipedia (always) and
- * from Neshan (when its key is configured). Distance comes from Neshan's
- * traffic-aware matrix, then OpenStreetMap routing, then a labelled
- * straight-line estimate. Nothing is invented and no number is presented
- * without saying which engine produced it.
+ * Places around the chosen accommodation, each with a real picture and a real
+ * distance.
+ *
+ * Places: Neshan's own "nearby" results (when that service is enabled for the
+ * key) merged with OpenStreetMap / Wikidata / Persian Wikipedia.
+ * Pictures: the place's own Wikipedia/Wikimedia photo; if there is none, a real
+ * Neshan map image of that exact coordinate, labelled as a map — never a made-up
+ * photo.
+ * Distance: Neshan's traffic-aware matrix, then OpenStreetMap routing, then a
+ * clearly labelled straight line.
  */
 export async function POST(request: NextRequest) {
   let city = "";
@@ -84,52 +134,64 @@ export async function POST(request: NextRequest) {
       latitude?: unknown;
       longitude?: unknown;
       limit?: unknown;
+      neshanApiKey?: unknown;
     };
     city = typeof body.city === "string" ? body.city.trim().slice(0, 80) : "";
     const latitude = Number(body.latitude);
     const longitude = Number(body.longitude);
     const limit = typeof body.limit === "number" && Number.isFinite(body.limit) ? Math.min(24, Math.max(4, Math.round(body.limit))) : 12;
-    const requestKey = resolveNeshanKey((body as { neshanApiKey?: unknown }).neshanApiKey);
-    const neshanReady = neshanAvailable(requestKey);
     if (!city) return NextResponse.json({ success: false, error: "نام مقصد را وارد کنید." }, { status: 400 });
+
+    const requestKey = resolveNeshanKey(body.neshanApiKey);
+    const neshanReady = neshanAvailable(requestKey);
+    const hasOrigin = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0;
 
     const poiResult = await searchCityPois(city, 30);
     const places: NearbyPlace[] = poiResult.pois.map(fromPoi);
     const seen = new Set<string>();
     places.forEach((place) => seen.add(nameKey(place.name)));
 
-    let neshanSearchNote = neshanReady ? "" : "بدون کلید نشان؛ فقط منابع آزاد استفاده شد.";
+    // Neshan's own places, when the service answers.
+    const neshanNotes: string[] = [];
     if (neshanReady) {
-      const statuses: string[] = [];
-      for (const term of NESHAN_TERMS) {
-        const found = await neshanSearch(term, { latitude: latitude || poiResult.latitude || 0, longitude: longitude || poiResult.longitude || 0 }, { key: requestKey });
+      let added = 0;
+      let firstFailure = "";
+      for (const definition of NESHAN_PLACE_LAYERS) {
+        const found = await neshanNearby(
+          { latitude: hasOrigin ? latitude : poiResult.latitude || 0, longitude: hasOrigin ? longitude : poiResult.longitude || 0 },
+          definition.layer,
+          5_000,
+          { key: requestKey },
+        );
         if (found.status !== "ok") {
-          statuses.push(found.status);
+          if (!firstFailure) firstFailure = found.status;
           continue;
         }
         found.places.forEach((place) => {
           const key = nameKey(place.name);
           if (!key || seen.has(key)) return;
           seen.add(key);
-          places.push(fromNeshan(place));
+          places.push(fromNeshanNearby(place));
+          added += 1;
         });
       }
-      const uniqueStatuses = Array.from(new Set(statuses));
-      neshanSearchNote = uniqueStatuses.length ? `جستجوی نشان برای این بخش فعال نشد (${uniqueStatuses.join(", ")}).` : "";
+      if (!added && firstFailure) {
+        neshanNotes.push(
+          firstFailure === "service_disabled"
+            ? "سرویس «مکان‌های نزدیک» نشان برای این کلید فعال نیست؛ برای فعال‌سازی از پنل نشان تیکت بزنید. تا آن زمان مکان‌ها از ویکی‌داده/ویکی‌پدیا/OpenStreetMap می‌آید و فاصله‌شان با نشان حساب می‌شود."
+            : `سرویس مکان‌های نزدیک نشان پاسخ نداد (${firstFailure}).`,
+        );
+      }
     }
 
     const targets: DistanceTarget[] = places.map((place) => ({ id: place.id, latitude: place.latitude, longitude: place.longitude }));
-    const hasOrigin =
-      Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0;
-
-    const distance = hasOrigin
-      ? await computePoiDistances({ latitude, longitude }, targets, { neshanKey: requestKey })
-      : null;
+    const distance = hasOrigin ? await computePoiDistances({ latitude, longitude }, targets, { neshanKey: requestKey }) : null;
 
     if (distance) {
       const byId = new Map<string, { distanceKm: number; durationMinutes: number | null }>();
       distance.entries.forEach((entry) => byId.set(entry.id, { distanceKm: entry.distanceKm, durationMinutes: entry.durationMinutes }));
       places.forEach((place) => {
+        if (place.distanceKm !== null && place.distanceEngine === "نشان") return; // Neshan already measured it
         const entry = byId.get(place.id);
         if (!entry) return;
         place.distanceKm = entry.distanceKm;
@@ -143,6 +205,34 @@ export async function POST(request: NextRequest) {
     withDistance.sort((a, b) => (a.distanceKm as number) - (b.distanceKm as number));
     const ordered = [...withDistance, ...withoutDistance].slice(0, limit);
 
+    // Real pictures, in parallel, from each place's own article or item.
+    await Promise.all(
+      ordered.map(async (place) => {
+        const photo = await placePhoto({
+          wikipediaUrl: place.wikipediaUrl,
+          wikidataId: place.sourceUrl.includes("wikidata.org")
+            ? (place.sourceUrl.match(/Q\d+/) || [""])[0]
+            : null,
+          name: place.name,
+        });
+        if (photo) {
+          place.imageUrl = `/api/provider-assets?src=${encodeURIComponent(photo.url)}`;
+          place.imageKind = "photo";
+          place.imageLabel = photo.label;
+          place.imageCreditUrl = photo.creditUrl;
+          return;
+        }
+        if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude)) {
+          place.imageUrl = neshanStaticMapUrl({ latitude: place.latitude, longitude: place.longitude });
+          place.imageKind = "map";
+          place.imageLabel = "نقشهٔ نشان برای همین نقطه";
+          place.imageCreditUrl = place.sourceUrl;
+        }
+      }),
+    );
+
+    const reverse = hasOrigin ? await neshanReverse({ latitude, longitude }, { key: requestKey }) : null;
+
     const note = distance
       ? distance.note
       : "برای محاسبهٔ فاصله، اول یک اقامتگاه را انتخاب کنید.";
@@ -151,11 +241,12 @@ export async function POST(request: NextRequest) {
       success: true,
       city: poiResult.city || city,
       origin: hasOrigin ? { latitude, longitude } : null,
+      originArea: reverse,
       places: ordered,
       engine: distance?.engine || null,
       engineLabel: distance ? distanceEngineLabel(distance.engine) : null,
-      neshanConfigured: neshanConfigured(),
-      neshanSearchNote,
+      neshanConfigured: neshanReady,
+      neshanNearbyNote: neshanNotes.join(" "),
       poiSources: poiResult.sources,
       poiNote: poiResult.note,
       note,

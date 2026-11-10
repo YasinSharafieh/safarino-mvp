@@ -232,3 +232,109 @@ export async function neshanSearch(
     return { status: "failed" };
   }
 }
+
+/** Neshan "Nearby Search" layers that show tourist places, with Persian labels. */
+export const NESHAN_PLACE_LAYERS: { layer: string; label: string }[] = [
+  { layer: "interests", label: "مکان دیدنی" },
+  { layer: "historical", label: "مکان تاریخی" },
+  { layer: "natural_feature", label: "جاذبه طبیعی" },
+  { layer: "garden", label: "باغ" },
+  { layer: "park", label: "بوستان" },
+  { layer: "shopping_mall", label: "بازار و مرکز خرید" },
+];
+
+export type NeshanNearbyPlace = {
+  id: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  /** Driving distance in metres, exactly as Neshan computed it. */
+  distanceMeters: number;
+  /** Driving time in seconds, exactly as Neshan computed it. */
+  durationSeconds: number;
+  poiHash: string;
+};
+
+export type NeshanNearbyResult =
+  | { status: "ok"; places: NeshanNearbyPlace[] }
+  | { status: Exclude<NeshanStatus, "ok"> };
+
+/**
+ * Places of one category around a point, straight from Neshan, including
+ * Neshan's own driving distance and time. The service has to be enabled for
+ * the key in the Neshan panel; until then this answers `service_disabled` and
+ * the caller keeps using the open sources.
+ */
+export async function neshanNearby(
+  center: NeshanCoords,
+  layer: string,
+  radiusMeters = 4_000,
+  options: { key?: string; timeoutMs?: number } = {},
+): Promise<NeshanNearbyResult> {
+  const key = resolveNeshanKey(options.key);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  if (!key) return { status: "not_configured" };
+  if (!validCoords(center)) return { status: "invalid" };
+  const radius = Math.min(10_000, Math.max(200, Math.round(radiusMeters)));
+  try {
+    const response = await fetch(
+      `${API_BASE}/v1/nearby?location=${encodeURIComponent(pair(center))}&layer=${encodeURIComponent(layer)}&searchRadius=${radius}`,
+      { headers: { "Api-Key": key, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(timeoutMs) },
+    );
+    if (!response.ok) return { status: neshanStatusFromHttp(response.status) };
+    const payload = (await response.json()) as {
+      layerPoints?: {
+        layer?: { farsiTitle?: string; slug?: string };
+        nearestPoints?: { name?: string; location?: { latitude?: number; longitude?: number }; distance?: number; duration?: number; poiHash?: string }[];
+      };
+    };
+    const label = payload?.layerPoints?.layer?.farsiTitle || layer;
+    const places: NeshanNearbyPlace[] = [];
+    (payload?.layerPoints?.nearestPoints || []).forEach((point, index) => {
+      const latitude = Number(point?.location?.latitude);
+      const longitude = Number(point?.location?.longitude);
+      const name = typeof point?.name === "string" ? point.name.trim() : "";
+      if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      places.push({
+        id: `neshan-nearby-${latitude.toFixed(5)}-${longitude.toFixed(5)}-${index}`,
+        name,
+        category: label,
+        latitude,
+        longitude,
+        distanceMeters: Number.isFinite(Number(point?.distance)) ? Number(point?.distance) : 0,
+        durationSeconds: Number.isFinite(Number(point?.duration)) ? Number(point?.duration) : 0,
+        poiHash: typeof point?.poiHash === "string" ? point.poiHash : "",
+      });
+    });
+    return { status: "ok", places };
+  } catch {
+    return { status: "failed" };
+  }
+}
+
+export type NeshanReverse = { city: string; neighbourhood: string; state: string; formatted: string };
+
+/** Reverse geocoding: which district and city a pin really belongs to. */
+export async function neshanReverse(point: NeshanCoords, options: { key?: string; timeoutMs?: number } = {}): Promise<NeshanReverse | null> {
+  const key = resolveNeshanKey(options.key);
+  if (!key || !validCoords(point)) return null;
+  try {
+    const response = await fetch(
+      `${API_BASE}/v5/reverse?lat=${point.latitude.toFixed(5)}&lng=${point.longitude.toFixed(5)}`,
+      { headers: { "Api-Key": key, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(options.timeoutMs ?? 8_000) },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { city?: string; neighbourhood?: string; state?: string; formatted_address?: string };
+    const reverse: NeshanReverse = {
+      city: payload.city || "",
+      neighbourhood: payload.neighbourhood || "",
+      state: payload.state || "",
+      formatted: payload.formatted_address || [payload.state, payload.city, payload.neighbourhood].filter(Boolean).join("، "),
+    };
+    if (!reverse.city && !reverse.neighbourhood && !reverse.state) return null;
+    return reverse;
+  } catch {
+    return null;
+  }
+}

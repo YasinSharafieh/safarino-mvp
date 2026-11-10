@@ -15,6 +15,7 @@ import {
   Coffee,
   Download,
   ExternalLink,
+  ImageIcon,
   Lightbulb,
   LoaderCircle,
   MapPin,
@@ -69,6 +70,7 @@ type PlanPoi = {
 };
 
 type PlanPoiWithStay = PlanPoi & { fromStayKm?: number | null; fromStayMinutes?: number | null };
+type PoiPicture = { imageUrl?: string | null; imageKind?: "photo" | "map" | "none"; imageLabel?: string; imageCreditUrl?: string | null };
 
 type PoiDistanceResponse = {
   success: boolean;
@@ -586,7 +588,19 @@ export default function PlanPage() {
                     <li key={poi.id}>
                       <a href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex flex-wrap items-center justify-between gap-3 p-3 transition hover:bg-white/[0.07]">
                         <span className="flex min-w-0 items-center gap-3">
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cyan-400/15 text-[11px] font-black text-cyan-200">{formatNumber(index + 1)}</span>
+                          <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+                            {(poi as PlanPoiWithStay & PoiPicture).imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={(poi as PlanPoiWithStay & PoiPicture).imageUrl as string}
+                                alt={(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" ? `نقشهٔ موقعیت ${poi.name}` : poi.name}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="grid h-full w-full place-items-center rounded-full bg-cyan-400/15 text-[11px] font-black text-cyan-200">{formatNumber(index + 1)}</span>
+                            )}
+                          </span>
                           <span className="min-w-0">
                             <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
                             <span className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{poi.wikipediaUrl ? "دارای مقالهٔ ویکی‌پدیا" : "از نقشهٔ عمومی"}</span>
@@ -626,12 +640,36 @@ export default function PlanPage() {
             {poiData?.pois.length ? (
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {enrichedPois.map((poi) => (
-                  <a key={poi.id} href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex items-start justify-between gap-2 p-3 transition hover:bg-white/[0.07]">
-                    <span className="min-w-0">
-                      <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
-                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{typeof poi.fromStayKm === "number" ? `${formatKm(poi.fromStayKm)} کیلومتر از اقامتگاه شما` : `${formatKm(poi.distanceKm)} کیلومتر از مرکز`}</span>
+                  <a key={poi.id} href={(poi as PlanPoiWithStay & PoiPicture).imageCreditUrl || poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group overflow-hidden transition hover:bg-white/[0.07]">
+                    <span className="relative block h-28 w-full overflow-hidden bg-slate-900/70">
+                      {(poi as PlanPoiWithStay & PoiPicture).imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={(poi as PlanPoiWithStay & PoiPicture).imageUrl as string}
+                          alt={(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" ? `نقشهٔ موقعیت ${poi.name}` : poi.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                        />
+                      ) : (
+                        <span className="grid h-full w-full place-items-center text-slate-600"><ImageIcon className="h-5 w-5" /></span>
+                      )}
+                      {(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" && (
+                        <span className="absolute bottom-1 left-1 rounded-md bg-slate-950/80 px-1.5 py-0.5 text-[8px] font-bold text-cyan-200">نقشه</span>
+                      )}
+                      <span className="absolute top-1 right-1 rounded-md bg-slate-950/70 px-1.5 py-0.5 text-[8px] font-bold text-slate-200">
+                        {typeof poi.fromStayKm === "number" ? `${formatKm(poi.fromStayKm)} کیلومتر` : `${formatKm(poi.distanceKm)} کیلومتر`}
+                      </span>
                     </span>
-                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
+                    <span className="flex items-center justify-between gap-2 p-3">
+                      <span className="min-w-0">
+                        <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                          <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>
+                          <span>{typeof poi.fromStayKm === "number" ? "از اقامتگاه شما" : "از مرکز شهر"}</span>
+                        </span>
+                      </span>
+                      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
+                    </span>
                   </a>
                 ))}
               </div>

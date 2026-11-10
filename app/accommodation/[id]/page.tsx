@@ -14,6 +14,7 @@ import {
   CircleAlert,
   ExternalLink,
   Images,
+  ImageIcon,
   LoaderCircle,
   MapPin,
   MapPinned,
@@ -101,9 +102,14 @@ type NearbyPlace = {
   longitude: number;
   distanceKm: number | null;
   durationMinutes: number | null;
+  distanceEngine?: string;
   sourceLabel: string;
   sourceUrl: string;
   wikipediaUrl: string | null;
+  imageUrl?: string | null;
+  imageKind?: "photo" | "map" | "none";
+  imageLabel?: string;
+  imageCreditUrl?: string | null;
 };
 
 export default function AccommodationDetailPage() {
@@ -122,7 +128,7 @@ export default function AccommodationDetailPage() {
   const [saved, setSaved] = useState(false);
   const [statuses, setStatuses] = useState<ProviderSearchStatus[]>([]);
   const [nearby, setNearby] = useState<NearbyPlace[] | null>(null);
-  const [nearbyMeta, setNearbyMeta] = useState<{ engineLabel: string | null; note: string; neshanConfigured: boolean; neshanSearchNote: string } | null>(null);
+  const [nearbyMeta, setNearbyMeta] = useState<{ engineLabel: string | null; note: string; neshanConfigured: boolean; neshanSearchNote: string; originArea?: string } | null>(null);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [neshanKey, setNeshanKey] = useState("");
 
@@ -244,7 +250,8 @@ export default function AccommodationDetailPage() {
           engineLabel: typeof payload.engineLabel === "string" ? payload.engineLabel : null,
           note: typeof payload.note === "string" ? payload.note : "",
           neshanConfigured: Boolean(payload.neshanConfigured),
-          neshanSearchNote: typeof payload.neshanSearchNote === "string" ? payload.neshanSearchNote : "",
+          neshanSearchNote: typeof payload.neshanNearbyNote === "string" ? payload.neshanNearbyNote : "",
+          originArea: typeof payload.originArea?.formatted === "string" ? payload.originArea.formatted : "",
         });
       })
       .catch(() => {
@@ -616,25 +623,44 @@ export default function AccommodationDetailPage() {
                   <ol className="mt-4 grid gap-2.5 sm:grid-cols-2">
                     {nearby.map((place) => (
                       <li key={place.id}>
-                        <a href={place.wikipediaUrl || place.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex h-full flex-wrap items-center justify-between gap-2 p-3 transition hover:bg-white/[0.07]">
-                          <span className="min-w-0">
-                            <b className="block truncate text-xs font-extrabold text-white">{place.name}</b>
-                            <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                              <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{place.category}</span>
-                              <span>{place.sourceLabel}</span>
-                              {place.address ? <span className="truncate text-slate-600">· {place.address}</span> : null}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2 text-[11px] font-bold">
-                            {place.distanceKm !== null ? (
-                              <>
-                                <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatKm(place.distanceKm)} کیلومتر</span>
-                                {place.durationMinutes !== null && <span className="text-slate-400">≈ {formatNumber(place.durationMinutes)} د</span>}
-                              </>
+                        <a href={place.imageCreditUrl || place.wikipediaUrl || place.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex h-full items-stretch gap-3 overflow-hidden p-2.5 transition hover:bg-white/[0.07]">
+                          <span className="relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+                            {place.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={place.imageUrl}
+                                alt={place.imageKind === "map" ? `نقشهٔ موقعیت ${place.name}` : `${place.name}`}
+                                loading="lazy"
+                                className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                              />
                             ) : (
-                              <span className="text-slate-500">فاصله نامعلوم</span>
+                              <span className="grid h-full w-full place-items-center text-slate-600"><ImageIcon className="h-5 w-5" /></span>
                             )}
-                            <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
+                            {place.imageKind === "map" && (
+                              <span className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-1 py-0.5 text-center text-[8px] font-bold text-cyan-200">نقشه</span>
+                            )}
+                          </span>
+                          <span className="flex min-w-0 flex-1 flex-col justify-between gap-1.5">
+                            <span className="min-w-0">
+                              <b className="block truncate text-xs font-extrabold text-white">{place.name}</b>
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                                <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{place.category}</span>
+                                <span>{place.sourceLabel}</span>
+                              </span>
+                              {place.imageLabel ? <span className="mt-1 block truncate text-[9px] text-slate-600">{place.imageLabel}</span> : null}
+                            </span>
+                            <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                              {place.distanceKm !== null ? (
+                                <>
+                                  <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 text-cyan-100">{formatKm(place.distanceKm)} کیلومتر</span>
+                                  {place.durationMinutes !== null && <span className="text-slate-400">≈ {formatNumber(place.durationMinutes)} د</span>}
+                                  {place.distanceEngine ? <span className="text-[9px] text-slate-600">{place.distanceEngine}</span> : null}
+                                </>
+                              ) : (
+                                <span className="text-slate-500">فاصله نامعلوم</span>
+                              )}
+                              <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
+                            </span>
                           </span>
                         </a>
                       </li>
@@ -643,7 +669,7 @@ export default function AccommodationDetailPage() {
                 ) : (
                   <p className="mt-3 text-[11px] leading-6 text-slate-500">
                     {nearbyLoading
-                      ? "در حال خواندن جاذبه‌های اطراف از منابع عمومی…"
+                      ? "در حال خواندن جاذبه‌های اطراف و آماده‌کردن عکس‌ها…"
                       : mapHasPin
                         ? "برای این نقطه جاذبهٔ عمومی ثبت‌شده‌ای پیدا نشد؛ هیچ مکانی حدس زده نمی‌شود."
                         : "این منبع مختصات معتبر منتشر نکرده است، پس فاصله‌ای هم محاسبه نشد تا عدد ساختگی نمایش داده نشود."}
@@ -653,6 +679,8 @@ export default function AccommodationDetailPage() {
                 <p className="mt-3 text-[10px] leading-6 text-slate-500">
                   {nearbyMeta?.note || "مکان‌ها از OpenStreetMap، ویکی‌داده و ویکی‌پدیای فارسی خوانده می‌شوند و فاصله از مختصات واقعی همین اقامتگاه حساب می‌شود."}
                   {nearbyMeta && !nearbyMeta.neshanConfigured ? " کلید نشان روی سرور تنظیم نشده، بنابراین مسیریابی از OpenStreetMap گرفته می‌شود." : ""}
+                  {nearbyMeta?.originArea ? ` این نقطه در «${nearbyMeta.originArea}» است.` : ""}
+                  {" عکس هر مکان از مقالهٔ ویکی‌پدیای همان مکان یا ویکی‌انبار می‌آید؛ اگر عکسی نباشد، نقشهٔ واقعی نشان برای همان نقطه نمایش داده می‌شود و با برچسب «نقشه» مشخص است."}
                   {nearbyMeta?.neshanSearchNote ? ` ${nearbyMeta.neshanSearchNote}` : ""}
                 </p>
                 {mapHasPin && (

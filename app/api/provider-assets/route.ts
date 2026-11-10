@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
     imageUrl.hostname === "cdn.otaghak.com" && imageUrl.pathname.startsWith("/otg-images-new/X500/") ||
     imageUrl.hostname === "store.snapptrip.com" && imageUrl.pathname.startsWith("/domestic-hotel/") ||
     imageUrl.hostname === "cdnsnapptrip.com" && imageUrl.pathname.startsWith("/images/market/domestic-hotel/") ||
-    imageUrl.hostname === "www.eghamat24.com" && imageUrl.pathname.startsWith("/app/public/hotel_images/original/");
+    imageUrl.hostname === "www.eghamat24.com" && imageUrl.pathname.startsWith("/app/public/hotel_images/original/") ||
+    // Real photos of places, from the Wikimedia projects.
+    (imageUrl.hostname === "upload.wikimedia.org" && imageUrl.pathname.startsWith("/wikipedia/")) ||
+    (imageUrl.hostname === "thumb.wikimedia.org" && imageUrl.pathname.startsWith("/wikipedia/"));
   if (
     source.length > 4096 || imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password || imageUrl.port ||
     !allowedHost || !/\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname)
