@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
@@ -211,6 +213,18 @@ export default function PlanPage() {
     stayLatitude !== 0 &&
     stayLongitude !== 0;
 
+  const stayCity = typeof accommodationDetails.city === "string" ? accommodationDetails.city.trim() : "";
+  const sameCity = (first: string, second: string) => {
+    const clean = (value: string) => value.replace(/\s+/g, "").replace(/\u064a/g, "\u06cc").replace(/\u0643/g, "\u06a9");
+    const a = clean(first);
+    const b = clean(second);
+    if (!a || !b) return true;
+    return a === b || a.includes(b) || b.includes(a);
+  };
+  /** A stay in another city must never be sold as "2 km from this restaurant". */
+  const stayCityMismatch = Boolean(stayCity) && Boolean(destination.trim()) && !sameCity(stayCity, destination);
+  const canMeasureFromStay = hasStayPin && !stayCityMismatch;
+
   const enrichedPois: PlanPoiWithStay[] = (poiData?.pois ?? []).map((poi) => ({
     ...poi,
     fromStayKm: poiDistances[poi.id]?.distanceKm ?? null,
@@ -309,7 +323,7 @@ export default function PlanPage() {
   // engine that answered is always shown to the traveller.
   useEffect(() => {
     const pois = poiData?.pois ?? [];
-    if (!hasStayPin || !pois.length) {
+    if (!canMeasureFromStay || !pois.length) {
       setPoiDistances({});
       setDistanceMeta(null);
       return;
@@ -347,7 +361,7 @@ export default function PlanPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [poiData, hasStayPin, stayLatitude, stayLongitude, neshanKey]);
+  }, [poiData, canMeasureFromStay, stayLatitude, stayLongitude, neshanKey]);
 
   useEffect(() => {
     if (!Object.keys(poiDistances).length) return;
@@ -541,7 +555,23 @@ export default function PlanPage() {
             </section>
           )}
 
-          {hasStayPin && (
+          {stayCityMismatch && (
+            <section className="glass print-card mt-6 border border-amber-300/25 p-5" aria-label="هشدار ناسازگاری مقصد و اقامتگاه">
+              <h2 className="flex items-center gap-2 text-sm font-black text-amber-200">
+                <MapPin className="h-4 w-4" />
+                اقامتگاه انتخابی در «{stayCity}» است، ولی مقصد این برنامه «{destination}» است
+              </h2>
+              <p className="mt-2 text-[11px] leading-6 text-slate-300">
+                برای اینکه هیچ فاصله‌ای اشتباه گفته نشود، سفرینو در این حالت فاصلهٔ اقامتگاه تا جاذبه‌ها را حساب نمی‌کند؛ چون اقامتگاه و جاذبه‌ها در دو شهر مختلف‌اند.
+                یا مقصد برنامه را به «{stayCity}» تغییر بده، یا اقامتگاه را از شهر «{destination}» انتخاب کن تا فاصله و زمان رانندگی درست نمایش داده شود.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link href="/accommodation" className="btn-ghost !py-2.5 text-xs">تغییر اقامتگاه</Link>
+              </div>
+            </section>
+          )}
+
+          {canMeasureFromStay && (
             <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="جاذبه‌های نزدیک اقامتگاه انتخابی">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="flex items-center gap-2 text-xl font-black text-white"><MapPin className="h-5 w-5 text-cyan-300" />نزدیک‌ترین جاذبه‌ها به اقامتگاه شما</h2>
