@@ -112,6 +112,33 @@ export async function wikipediaThumbnails(titles: string[], lang = "fa"): Promis
   return found;
 }
 
+type CommonsPayload = {
+  query?: { pages?: { title?: string; missing?: boolean; imageinfo?: { thumburl?: string; url?: string }[] }[] };
+};
+
+/**
+ * Turns "File:X.jpg" into the direct picture address on Wikimedia's image CDN.
+ * One request covers many files; if it fails, the plain file address is used.
+ */
+async function commonsThumbnails(files: string[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(files.map((file) => file.replace(/^File:/i, "").trim()).filter(Boolean)));
+  const resolved = new Map<string, string>();
+  for (let index = 0; index < unique.length; index += BATCH) {
+    const slice = unique.slice(index, index + BATCH);
+    const url =
+      `https://commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo` +
+      `&iiprop=url&iiurlwidth=800&titles=${encodeURIComponent(slice.map((file) => `File:${file}`).join("|"))}`;
+    const payload = await fetchJson<CommonsPayload>(url);
+    if (!payload?.query?.pages) continue;
+    payload.query.pages.forEach((page) => {
+      const source = page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || "";
+      if (!page?.title || page.missing || !isWikimedia(source)) return;
+      resolved.set(page.title.replace(/^File:/i, "").replace(/_/g, " "), source);
+    });
+  }
+  return resolved;
+}
+
 type WikidataPayload = {
   entities?: Record<string, { claims?: Record<string, { mainsnak?: { datavalue?: { value?: unknown } } }[]> }>;
 };
@@ -125,11 +152,16 @@ export async function wikidataImages(ids: string[]): Promise<Map<string, PlacePh
     const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&formatversion=2&props=claims&ids=${slice.join("|")}`;
     const payload = await fetchJson<WikidataPayload>(url);
     if (!payload?.entities) continue;
+    const files = slice
+      .map((id) => payload.entities?.[id]?.claims?.P18?.[0]?.mainsnak?.datavalue?.value)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    const thumbs = files.length ? await commonsThumbnails(files) : new Map<string, string>();
     slice.forEach((id) => {
       const file = payload.entities?.[id]?.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
       if (typeof file !== "string" || !file) return;
+      const direct = thumbs.get(file.replace(/^File:/i, "").replace(/_/g, " "));
       found.set(id, {
-        url: commonsFilePath(file),
+        url: direct || commonsFilePath(file),
         label: "عکس از ویکی‌انبار",
         source: "commons",
         creditUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file.replace(/^File:/i, ""))}`,

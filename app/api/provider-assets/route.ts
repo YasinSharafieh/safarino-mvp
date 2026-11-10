@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     imageUrl.hostname === "www.eghamat24.com" && imageUrl.pathname.startsWith("/app/public/hotel_images/original/") ||
     // Real photos of places, from the Wikimedia projects.
     (imageUrl.hostname === "upload.wikimedia.org" && imageUrl.pathname.startsWith("/wikipedia/")) ||
-    (imageUrl.hostname === "thumb.wikimedia.org" && imageUrl.pathname.startsWith("/wikipedia/"));
+    (imageUrl.hostname === "thumb.wikimedia.org" && imageUrl.pathname.startsWith("/wikipedia/")) ||
+    (imageUrl.hostname === "commons.wikimedia.org" && imageUrl.pathname.startsWith("/wiki/Special:FilePath/"));
   if (
     source.length > 4096 || imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password || imageUrl.port ||
     !allowedHost || !/\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname)
