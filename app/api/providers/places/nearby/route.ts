@@ -43,6 +43,58 @@ function nameKey(name: string): string {
   return lettersOnly.toLowerCase();
 }
 
+/** Same place, two spellings ("مسجد سید" / "مسجد سید (اصفهان)"). */
+function looseName(name: string): string {
+  return name
+    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, " ")
+    .replace(/\u064a/g, "\u06cc")
+    .replace(/\u0643/g, "\u06a9")
+    .replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, "")
+    .toLowerCase();
+}
+
+function metresBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** One entry per real place: no duplicates, whatever sources it came from. */
+function dropDuplicates(places: NearbyPlace[]): NearbyPlace[] {
+  const kept: NearbyPlace[] = [];
+  places.forEach((place) => {
+    const loose = looseName(place.name);
+    const duplicate = kept.find((other) => {
+      if (nameKey(other.name) === nameKey(place.name)) return true;
+      if (!loose || !looseName(other.name)) return false;
+      if (metresBetween(other, place) > 250) return false;
+      const a = looseName(other.name);
+      const b = loose;
+      return a === b || a.includes(b) || b.includes(a);
+    });
+    if (duplicate) {
+      // Keep the richer record: a place with an article beats one without.
+      if (!duplicate.wikipediaUrl && place.wikipediaUrl) {
+        duplicate.wikipediaUrl = place.wikipediaUrl;
+        duplicate.sourceUrl = place.sourceUrl;
+        duplicate.sourceLabel = place.sourceLabel;
+      }
+      if (duplicate.distanceKm === null && place.distanceKm !== null) {
+        duplicate.distanceKm = place.distanceKm;
+        duplicate.durationMinutes = place.durationMinutes;
+        duplicate.distanceEngine = place.distanceEngine;
+      }
+      return;
+    }
+    kept.push(place);
+  });
+  return kept;
+}
+
 function fromPoi(poi: PoiWithMeta): NearbyPlace {
   return {
     id: poi.id,
@@ -183,6 +235,10 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    const uniquePlaces = dropDuplicates(places);
+    places.length = 0;
+    places.push(...uniquePlaces);
 
     const targets: DistanceTarget[] = places.map((place) => ({ id: place.id, latitude: place.latitude, longitude: place.longitude }));
     const distance = hasOrigin ? await computePoiDistances({ latitude, longitude }, targets, { neshanKey: requestKey }) : null;
