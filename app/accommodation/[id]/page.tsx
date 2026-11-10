@@ -211,6 +211,7 @@ export default function AccommodationDetailPage() {
     saveAccommodationSelection(selection);
     setTravelData((current) => ({ ...current, accommodation: selection, days: contexts.nights }));
     setSaved(true);
+    router.push("/plan");
   }
 
   function backToResults() {
@@ -286,7 +287,9 @@ export default function AccommodationDetailPage() {
                 <section aria-label="گالری تصاویر" className="glass overflow-hidden p-3">
                   <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-night-900">
                     {photos.length ? (
-                      <AccommodationImage src={photos[photoIndex]} alt={`${offer.name} — تصویر ${formatNumber(photoIndex + 1)}`} />
+                      <button type="button" onClick={() => setLightbox(true)} aria-label="بزرگ‌کردن تصویر" className="block h-full w-full cursor-zoom-in">
+                        <AccommodationImage src={photos[photoIndex]} alt={`${offer.name} — تصویر ${formatNumber(photoIndex + 1)}`} />
+                      </button>
                     ) : (
                       <div className="flex h-full items-center justify-center text-slate-500">
                         <BedDouble className="h-10 w-10" />
