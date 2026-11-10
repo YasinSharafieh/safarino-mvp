@@ -111,13 +111,15 @@ function straightLine(origin: Coordinates, targets: DistanceTarget[]): DistanceE
   return targets.map((target) => ({ id: target.id, distanceKm: haversineKm(origin, target), durationMinutes: null }));
 }
 
-function cacheKey(origin: Coordinates, targets: DistanceTarget[]): string {
+function cacheKey(origin: Coordinates, targets: DistanceTarget[], engine: "neshan" | "keyless"): string {
   const originKey = `${origin.latitude.toFixed(4)},${origin.longitude.toFixed(4)}`;
   const targetKey = targets
     .map((target) => `${target.id}@${target.latitude.toFixed(4)},${target.longitude.toFixed(4)}`)
     .sort()
     .join("|");
-  return `safarino:poi-distance:${originKey}:${targetKey}`.slice(0, 900);
+  // The engine is part of the key: a result computed without a Neshan key must
+  // never be served as if Neshan had produced it (and the other way round).
+  return `safarino:poi-distance:v2:${engine}:${originKey}:${targetKey}`.slice(0, 900);
 }
 
 /**
@@ -155,7 +157,7 @@ export async function computePoiDistances(
   }
 
   const ttl = options.cacheSeconds ?? 3_600;
-  const key = cacheKey(origin, clean);
+  const key = cacheKey(origin, clean, configured ? "neshan" : "keyless");
   const shareable = !options.neshanKey;
   if (shareable) {
     const cached = await getProviderCache<DistanceResult>(key);

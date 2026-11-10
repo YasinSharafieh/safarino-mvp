@@ -101,6 +101,20 @@ async function main() {
   check("no entries", badOrigin.entries.length === 0);
   check("explains why", badOrigin.note.includes("مختصات اقامتگاه"), badOrigin.note);
 
+  console.log("A keyless result is never reused once a key exists");
+  process.env.NESHAN_API_KEY = "test-key-not-real";
+  let called = "";
+  stubFetch((url) => {
+    called = url.includes("api.neshan.org") ? "neshan" : "osrm";
+    if (url.includes("api.neshan.org")) {
+      return { status: 200, body: { status: "Ok", rows: [{ elements: [{ status: "Ok", distance: { value: 5000 }, duration: { value: 600 } }, { status: "Ok", distance: { value: 7000 }, duration: { value: 800 } }] }] } };
+    }
+    return { status: 200, body: { distances: [[1000, 2000]], durations: [[100, 200]] } };
+  });
+  const withKey = await computePoiDistances(origin, targets, { cacheSeconds: 3600 });
+  check("with a key the engine is neshan", withKey.engine === "neshan", withKey.engine);
+  check("the Neshan request was actually made", called === "neshan", called);
+
   console.log("Status notes");
   check("missing key is explained in Persian", neshanStatusNote("not_configured").includes("نشان"));
 
