@@ -27,14 +27,17 @@ export async function GET(request: NextRequest) {
     await probe(`nearby:${layer}`, `https://api.neshan.org/v1/nearby?location=${lat},${lng}&layer=${layer}&searchRadius=3000`);
   }
   await probe("point", "https://api.neshan.org/v1/point?hash=wXtqMQxZnBicNffFbj37mUMdyo_92YTV2jf6sB110zXQzyjSoSOcPWdzWPU4oEeL8O75AsLHWqHCd22jyD5Tlg");
-  await probe("static", `https://api.neshan.org/v5/static?center=${lat},${lng}&zoom=15&width=400&height=250`);
-  await probe("staticV4", `https://api.neshan.org/v4/static?center=${lat},${lng}&zoom=15&width=400&height=250`);
+  await probe("staticA", `https://api.neshan.org/v5/static?center=${lat},${lng}&zoom=15&width=400&height=250&type=standard-day`);
+  await probe("staticB", `https://api.neshan.org/v4/static?type=standard-day&center=${lat},${lng}&zoom=15&width=400&height=250&marker=red`);
+  await probe("staticC", `https://api.neshan.org/v5/static?center=${lat},${lng}&zoom=15&width=400&height=250&type=standard-night&marker=red`);
   await probe("reverse", `https://api.neshan.org/v5/reverse?lat=${lat}&lng=${lng}`);
   await probe("search", `https://api.neshan.org/v3/search?q=${encodeURIComponent(JSON.stringify({ term: "حرم امام رضا", center: { latitude: Number(lat), longitude: Number(lng) } }))}`);
 
   // Can our server reach the free photo sources at all?
   await probe("wikidata", "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q2241485&props=claims&format=json");
   await probe("commons", "https://commons.wikimedia.org/wiki/Special:FilePath/Imam%20Reza%20Shrine%202018.jpg?width=640");
+  await probe("p18", "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q2241485&props=claims&format=json&formatversion=2");
+  await probe("wikiThumb", `https://fa.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent("مسجد گوهرشاد")}`);
   await probe("faWiki", `https://fa.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent("حرم امام رضا")}`);
 
   return NextResponse.json({ success: true, probes: out });
