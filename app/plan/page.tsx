@@ -29,6 +29,8 @@ import ProviderBadge from "@/components/ProviderBadge";
 import type { AccommodationProvider } from "@/lib/accommodation-types";
 import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "../context/TravelContext";
+import NeshanKeyCard from "@/components/NeshanKeyCard";
+import { readNeshanKey } from "@/lib/neshan-key";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = {
@@ -62,6 +64,18 @@ type PlanPoi = {
   source: "openstreetmap" | "wikidata" | "wikipedia";
   sourceUrl: string;
   wikipediaUrl: string | null;
+};
+
+type PlanPoiWithStay = PlanPoi & { fromStayKm?: number | null; fromStayMinutes?: number | null };
+
+type PoiDistanceResponse = {
+  success: boolean;
+  engine: "neshan" | "osrm" | "straight-line";
+  engineLabel: string;
+  entries: { id: string; distanceKm: number; durationMinutes: number | null }[];
+  failedIds: string[];
+  neshanConfigured: boolean;
+  note: string;
 };
 
 type PoiResponse = {
@@ -102,8 +116,12 @@ const ACTIVITY_STYLES: Record<ActivityType, { icon: LucideIcon; tone: string; la
 const LOCAL_TIMES = ["۰۹:۰۰", "۱۱:۳۰", "۱۵:۰۰", "۱۷:۳۰"];
 
 /** Offline plan: when real POIs are available they are the only places shown. */
-function localDays(destination: string, days: number, pois: PlanPoi[]): PlanDay[] {
-  const pool = [...pois];
+function localDays(destination: string, days: number, pois: PlanPoiWithStay[]): PlanDay[] {
+  const pool = [...pois].sort((a, b) => {
+    const first = typeof a.fromStayKm === "number" ? a.fromStayKm : Number.POSITIVE_INFINITY;
+    const second = typeof b.fromStayKm === "number" ? b.fromStayKm : Number.POSITIVE_INFINITY;
+    return first - second;
+  });
   return Array.from({ length: days }, (_, index) => {
     const day = index + 1;
     const stops = pool.splice(0, 2);
@@ -112,13 +130,16 @@ function localDays(destination: string, days: number, pois: PlanPoi[]): PlanDay[
       ...stops.map((poi, stopIndex) => ({
         time: LOCAL_TIMES[stopIndex % LOCAL_TIMES.length],
         title: poi.name,
-        description: `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ حدود ${new Intl.NumberFormat("fa-IR").format(poi.distanceKm)} کیلومتر از مرکز شهر فاصله دارد.`,
+        description:
+          typeof poi.fromStayKm === "number"
+            ? `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ ${new Intl.NumberFormat("fa-IR").format(poi.fromStayKm)} کیلومتر از اقامتگاه انتخاب‌شده فاصله دارد${typeof poi.fromStayMinutes === "number" ? ` (حدود ${new Intl.NumberFormat("fa-IR").format(poi.fromStayMinutes)} دقیقه رانندگی)` : ""}.`
+            : `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ حدود ${new Intl.NumberFormat("fa-IR").format(poi.distanceKm)} کیلومتر از مرکز شهر فاصله دارد.`,
         type: "sightseeing" as ActivityType,
         poiId: poi.id,
         poiCategory: poi.category,
         poiSourceUrl: poi.wikipediaUrl || poi.sourceUrl,
         poiWikipediaUrl: poi.wikipediaUrl,
-        poiDistanceKm: poi.distanceKm,
+        poiDistanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
       })),
       { time: "۱۳:۳۰", title: "ناهار در رستوران محلی", description: "ناهار ساده و محلی نزدیک به همان محله؛ قیمت را همان‌جا کنترل کنید.", type: "food" },
       { time: "۱۹:۳۰", title: "شام و پیاده‌روی", description: "پایان روز با شام سبک و پیاده‌روی آرام.", type: "food" },
@@ -132,7 +153,7 @@ function localDays(destination: string, days: number, pois: PlanPoi[]): PlanDay[
   });
 }
 
-function createLocalPlan(destination: string, budget: number, days: number, transport = 0, accommodation = 0, pois: PlanPoi[] = []): TravelPlan {
+function createLocalPlan(destination: string, budget: number, days: number, transport = 0, accommodation = 0, pois: PlanPoiWithStay[] = []): TravelPlan {
   const free = Math.max(0, budget - transport - accommodation);
   const food = Math.round(free * 0.3);
   const activities = Math.round(free * 0.2);
@@ -173,6 +194,28 @@ export default function PlanPage() {
   const [accommodationDetails, setAccommodationDetails] = useState<Record<string, unknown>>({});
   const [poiData, setPoiData] = useState<PoiResponse | null>(null);
   const [poiLoading, setPoiLoading] = useState(false);
+  const [poiDistances, setPoiDistances] = useState<Record<string, { distanceKm: number; durationMinutes: number | null }>>({});
+  const [distanceMeta, setDistanceMeta] = useState<{ engineLabel: string; engine: string; note: string; neshanConfigured: boolean } | null>(null);
+  const [distanceLoading, setDistanceLoading] = useState(false);
+  const [neshanKey, setNeshanKey] = useState("");
+
+  useEffect(() => {
+    setNeshanKey(readNeshanKey());
+  }, []);
+
+  const stayLatitude = Number(accommodationDetails.latitude);
+  const stayLongitude = Number(accommodationDetails.longitude);
+  const hasStayPin =
+    Number.isFinite(stayLatitude) &&
+    Number.isFinite(stayLongitude) &&
+    stayLatitude !== 0 &&
+    stayLongitude !== 0;
+
+  const enrichedPois: PlanPoiWithStay[] = (poiData?.pois ?? []).map((poi) => ({
+    ...poi,
+    fromStayKm: poiDistances[poi.id]?.distanceKm ?? null,
+    fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null,
+  }));
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -222,7 +265,7 @@ export default function PlanPage() {
     } catch {
       // Shared context remains the source of truth when legacy storage is invalid.
     }
-    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, poiData?.pois ?? []));
+    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, enrichedPois));
     setActiveDay(0);
   }, [isHydrated, travelData]);
 
@@ -247,7 +290,7 @@ export default function PlanPage() {
         setPoiData(payload);
         setPlan((current) => current.poiUsage
           ? current
-          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, payload.pois ?? []));
+          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, (payload.pois ?? []).map((poi) => ({ ...poi, fromStayKm: poiDistances[poi.id]?.distanceKm ?? null, fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null }))));
       })
       .catch(() => {
         if (!cancelled) setPoiData({ success: false, city, pois: [], poisWithArticle: 0, sources: { openstreetmap: "failed", wikidata: "failed", wikipedia: "failed" }, note: "خواندن جاذبه‌های واقعی مقصد انجام نشد." });
@@ -260,6 +303,67 @@ export default function PlanPage() {
       controller.abort();
     };
   }, [destination]);
+
+  // Real distance from the chosen accommodation to every attraction.
+  // Neshan first (when its key exists), OpenStreetMap routing second; the
+  // engine that answered is always shown to the traveller.
+  useEffect(() => {
+    const pois = poiData?.pois ?? [];
+    if (!hasStayPin || !pois.length) {
+      setPoiDistances({});
+      setDistanceMeta(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setDistanceLoading(true);
+    fetch("/api/route/poi-distances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origin: { latitude: stayLatitude, longitude: stayLongitude },
+        targets: pois.map((poi) => ({ id: poi.id, latitude: poi.latitude, longitude: poi.longitude })),
+        neshanApiKey: neshanKey || undefined,
+      }),
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((payload: PoiDistanceResponse) => {
+        if (cancelled || !payload?.success || !Array.isArray(payload.entries)) return;
+        const map: Record<string, { distanceKm: number; durationMinutes: number | null }> = {};
+        payload.entries.forEach((entry) => {
+          map[entry.id] = { distanceKm: entry.distanceKm, durationMinutes: entry.durationMinutes };
+        });
+        setPoiDistances(map);
+        setDistanceMeta({ engineLabel: payload.engineLabel, engine: payload.engine, note: payload.note, neshanConfigured: payload.neshanConfigured });
+      })
+      .catch(() => {
+        if (!cancelled) setDistanceMeta({ engineLabel: "", engine: "", note: "محاسبهٔ فاصله از اقامتگاه انجام نشد؛ همان فاصلهٔ مرکز شهر نمایش داده می‌شود.", neshanConfigured: false });
+      })
+      .finally(() => {
+        if (!cancelled) setDistanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [poiData, hasStayPin, stayLatitude, stayLongitude, neshanKey]);
+
+  useEffect(() => {
+    if (!Object.keys(poiDistances).length) return;
+    setPlan((current) =>
+      current.poiUsage
+        ? current
+        : createLocalPlan(destination, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, enrichedPois),
+    );
+    // Only rebuild while the plan is still the local, real-place-only one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poiDistances]);
+
+  const nearestPois = enrichedPois
+    .filter((poi) => typeof poi.fromStayKm === "number")
+    .sort((a, b) => (a.fromStayKm as number) - (b.fromStayKm as number))
+    .slice(0, 8);
 
   const selectedDay = plan.days[Math.min(activeDay, plan.days.length - 1)] ?? plan.days[0];
   const totalSpent = useMemo(() => {
@@ -285,7 +389,7 @@ export default function PlanPage() {
           travelers: travelData.travelers,
           transport: transportDetails,
           accommodation: accommodationDetails,
-          pois: (poiData?.pois ?? []).map((poi) => ({ id: poi.id, name: poi.name, category: poi.category, latitude: poi.latitude, longitude: poi.longitude, distanceKm: poi.distanceKm, sourceUrl: poi.sourceUrl, wikipediaUrl: poi.wikipediaUrl })),
+          pois: enrichedPois.map((poi) => ({ id: poi.id, name: poi.name, category: poi.category, latitude: poi.latitude, longitude: poi.longitude, distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm, sourceUrl: poi.sourceUrl, wikipediaUrl: poi.wikipediaUrl })),
           preferences: preferences.split(/[،,]/).map((item) => item.trim()).filter(Boolean),
         }),
       });
@@ -298,7 +402,7 @@ export default function PlanPage() {
       setNoticeTone("success");
       setNotice(`برنامه تازه با ${payload.meta?.model || "هوش مصنوعی"} ساخته شد.`);
     } catch {
-      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, poiData?.pois ?? []));
+      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois));
       setActiveDay(0);
       setNoticeTone("warning");
       setNotice("اتصال زنده به AI برقرار نشد؛ نسخه آفلاین ساخته شد. روی Netlify ایستا، مسیر API باید به یک سرویس سروری خارجی متصل شود.");
@@ -437,6 +541,48 @@ export default function PlanPage() {
             </section>
           )}
 
+          {hasStayPin && (
+            <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="جاذبه‌های نزدیک اقامتگاه انتخابی">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-xl font-black text-white"><MapPin className="h-5 w-5 text-cyan-300" />نزدیک‌ترین جاذبه‌ها به اقامتگاه شما</h2>
+                <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">{distanceLoading ? "در حال محاسبهٔ فاصله…" : distanceMeta?.engineLabel ? `فاصله و زمان رانندگی: ${distanceMeta.engineLabel}` : "در انتظار محاسبهٔ فاصله"}</span>
+              </div>
+              {nearestPois.length ? (
+                <ol className="mt-4 space-y-2.5">
+                  {nearestPois.map((poi, index) => (
+                    <li key={poi.id}>
+                      <a href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex flex-wrap items-center justify-between gap-3 p-3 transition hover:bg-white/[0.07]">
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cyan-400/15 text-[11px] font-black text-cyan-200">{formatNumber(index + 1)}</span>
+                          <span className="min-w-0">
+                            <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
+                            <span className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{poi.wikipediaUrl ? "دارای مقالهٔ ویکی‌پدیا" : "از نقشهٔ عمومی"}</span>
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-3 text-[11px] font-bold text-slate-300">
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatNumber(poi.fromStayKm as number)} کیلومتر</span>
+                          {typeof poi.fromStayMinutes === "number" && <span className="text-slate-400">≈ {formatNumber(poi.fromStayMinutes)} دقیقه رانندگی</span>}
+                          <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-4 rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-3 text-[11px] leading-6 text-slate-300">
+                  {distanceLoading ? "در حال محاسبهٔ فاصله تا اقامتگاه انتخابی…" : distanceMeta?.note || "برای این اقامتگاه جاذبهٔ نزدیکی با اطلاعات کافی پیدا نشد؛ هیچ فاصله‌ای حدس زده نمی‌شود."}
+                </p>
+              )}
+              <p className="mt-3 text-[10px] leading-6 text-slate-500">
+                {distanceMeta?.note || "فاصله‌ها از مختصات واقعی اقامتگاه انتخابی و مختصات منتشرشدهٔ هر جاذبه محاسبه می‌شود."}
+                {distanceMeta && !distanceMeta.neshanConfigured ? " چون کلید نشان وصل نیست، مسیریابی از OpenStreetMap گرفته می‌شود." : ""}
+              </p>
+              <div className="mt-4">
+                <NeshanKeyCard compact onChanged={setNeshanKey} />
+              </div>
+            </section>
+          )}
+
           <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="جاذبه‌های واقعی مقصد">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-xl font-black text-white"><MapPin className="h-5 w-5 text-cyan-300" />جاذبه‌های واقعی {destination}</h2>
@@ -446,11 +592,11 @@ export default function PlanPage() {
             </div>
             {poiData?.pois.length ? (
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                {poiData.pois.map((poi) => (
+                {enrichedPois.map((poi) => (
                   <a key={poi.id} href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex items-start justify-between gap-2 p-3 transition hover:bg-white/[0.07]">
                     <span className="min-w-0">
                       <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
-                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{formatNumber(poi.distanceKm)} کیلومتر از مرکز</span>
+                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{typeof poi.fromStayKm === "number" ? `${formatNumber(poi.fromStayKm)} کیلومتر از اقامتگاه شما` : `${formatNumber(poi.distanceKm)} کیلومتر از مرکز`}</span>
                     </span>
                     <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
                   </a>
