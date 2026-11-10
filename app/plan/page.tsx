@@ -105,6 +105,9 @@ const numberFormatter = new Intl.NumberFormat("fa-IR");
 const compactFormatter = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 });
 const formatNumber = (value: number) => numberFormatter.format(Math.round(value));
 const formatToman = (value: number) => `${formatNumber(value)} تومان`;
+/** Kilometres keep one decimal below 10 so 0.5 km never reads as "1 km". */
+const formatKm = (value: number) =>
+  new Intl.NumberFormat("fa-IR", { maximumFractionDigits: value < 10 ? 1 : 0, minimumFractionDigits: 0 }).format(value);
 const formatCompact = (value: number) => `${compactFormatter.format(value / 1_000_000)} میلیون`;
 
 const ACTIVITY_STYLES: Record<ActivityType, { icon: LucideIcon; tone: string; label: string }> = {
@@ -134,8 +137,8 @@ function localDays(destination: string, days: number, pois: PlanPoiWithStay[]): 
         title: poi.name,
         description:
           typeof poi.fromStayKm === "number"
-            ? `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ ${new Intl.NumberFormat("fa-IR").format(poi.fromStayKm)} کیلومتر از اقامتگاه انتخاب‌شده فاصله دارد${typeof poi.fromStayMinutes === "number" ? ` (حدود ${new Intl.NumberFormat("fa-IR").format(poi.fromStayMinutes)} دقیقه رانندگی)` : ""}.`
-            : `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ حدود ${new Intl.NumberFormat("fa-IR").format(poi.distanceKm)} کیلومتر از مرکز شهر فاصله دارد.`,
+            ? `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ ${formatKm(poi.fromStayKm)} کیلومتر از اقامتگاه انتخاب‌شده فاصله دارد${typeof poi.fromStayMinutes === "number" ? ` (حدود ${new Intl.NumberFormat("fa-IR").format(poi.fromStayMinutes)} دقیقه رانندگی)` : ""}.`
+            : `${poi.name} از جاذبه‌های ${poi.category} در ${destination} است؛ حدود ${formatKm(poi.distanceKm)} کیلومتر از مرکز شهر فاصله دارد.`,
         type: "sightseeing" as ActivityType,
         poiId: poi.id,
         poiCategory: poi.category,
@@ -590,7 +593,7 @@ export default function PlanPage() {
                           </span>
                         </span>
                         <span className="flex items-center gap-3 text-[11px] font-bold text-slate-300">
-                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatNumber(poi.fromStayKm as number)} کیلومتر</span>
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatKm(poi.fromStayKm as number)} کیلومتر</span>
                           {typeof poi.fromStayMinutes === "number" && <span className="text-slate-400">≈ {formatNumber(poi.fromStayMinutes)} دقیقه رانندگی</span>}
                           <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
                         </span>
@@ -626,7 +629,7 @@ export default function PlanPage() {
                   <a key={poi.id} href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex items-start justify-between gap-2 p-3 transition hover:bg-white/[0.07]">
                     <span className="min-w-0">
                       <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
-                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{typeof poi.fromStayKm === "number" ? `${formatNumber(poi.fromStayKm)} کیلومتر از اقامتگاه شما` : `${formatNumber(poi.distanceKm)} کیلومتر از مرکز`}</span>
+                      <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{typeof poi.fromStayKm === "number" ? `${formatKm(poi.fromStayKm)} کیلومتر از اقامتگاه شما` : `${formatKm(poi.distanceKm)} کیلومتر از مرکز`}</span>
                     </span>
                     <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
                   </a>

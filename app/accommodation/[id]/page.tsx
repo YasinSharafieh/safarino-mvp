@@ -38,6 +38,9 @@ import {
 const numberFormatter = new Intl.NumberFormat("fa-IR");
 const decimalFormatter = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 });
 const formatNumber = (value: number) => numberFormatter.format(Math.round(value));
+/** Kilometres keep one decimal below 10 so 0.5 km never reads as "1 km". */
+const formatKm = (value: number) =>
+  new Intl.NumberFormat("fa-IR", { maximumFractionDigits: value < 10 ? 1 : 0, minimumFractionDigits: 0 }).format(value);
 const formatToman = (value: number) => `${formatNumber(value)} تومان`;
 const formatScore = (value: number | null) => (value === null ? "—" : decimalFormatter.format(value));
 
@@ -625,7 +628,7 @@ export default function AccommodationDetailPage() {
                           <span className="flex shrink-0 items-center gap-2 text-[11px] font-bold">
                             {place.distanceKm !== null ? (
                               <>
-                                <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatNumber(place.distanceKm)} کیلومتر</span>
+                                <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatKm(place.distanceKm)} کیلومتر</span>
                                 {place.durationMinutes !== null && <span className="text-slate-400">≈ {formatNumber(place.durationMinutes)} د</span>}
                               </>
                             ) : (
