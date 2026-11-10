@@ -45,6 +45,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch {
-    return NextResponse.json({ success: false, error: "تصویر نقشه دریافت نشد." }, { status: 404 });
+    // Never leave a broken picture in the page: a plain, clearly non-photo tile.
+    const placeholder = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#0b1a26"/><g fill="none" stroke="#1e4b60" stroke-width="2"><path d="M0 ${height * 0.3} H${width} M0 ${height * 0.65} H${width} M${width * 0.25} 0 V${height} M${width * 0.7} 0 V${height}"/></g><text x="50%" y="52%" text-anchor="middle" font-family="sans-serif" font-size="${Math.round(width / 22)}" fill="#7dd3fc">نقشه در دسترس نیست</text></svg>`;
+    return new NextResponse(placeholder, {
+      headers: { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" },
+    });
   }
 }
