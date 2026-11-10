@@ -49,7 +49,20 @@ export async function assertProviderRateLimit(ip: string, provider: string): Pro
     count = Number(await command(["INCR", key]));
     if (count === 1) await command(["EXPIRE", key, String(windowSeconds)]);
   } catch {
-    throw new Error("PROVIDER_RATE_LIMIT_UNAVAILABLE");
+    // Fail open: if the storage is down or its monthly quota is used up, the
+    // traveller still gets real results instead of an error page. The limiter
+    // only exists to protect the providers, so losing it briefly is safe.
+    return;
   }
   if (count > limit) throw new Error("PROVIDER_RATE_LIMIT_EXCEEDED");
+}
+
+/** True when the shared cache/rate-limit storage is reachable right now. */
+export async function providerStorageHealthy(): Promise<boolean> {
+  try {
+    await command(["PING"]);
+    return true;
+  } catch {
+    return false;
+  }
 }

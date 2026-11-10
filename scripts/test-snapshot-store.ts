@@ -96,6 +96,38 @@ async function main() {
   check("source is live", cold.source === "live", cold.source);
   check("no snapshot is returned", cold.snapshot === null);
 
+  console.log("Storage failure never breaks a search");
+  const { assertProviderRateLimit, providerStorageHealthy } = await import("../lib/provider-cache");
+  process.env.UPSTASH_REDIS_REST_URL = "https://broken.upstash.io";
+  global.fetch = (async () => { throw new Error("redis down"); }) as unknown as typeof fetch;
+  let threw = false;
+  try {
+    await assertProviderRateLimit("1.2.3.4", "multi-accommodation");
+  } catch {
+    threw = true;
+  }
+  check("rate limiter fails open when storage is down", !threw);
+  check("health probe reports the outage", (await providerStorageHealthy()) === false);
+
+  console.log("The limiter still blocks a real flood when storage works");
+  store.clear();
+  process.env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : String(input.url);
+    const result = fakeUpstash(url, String(init?.body || "[]"));
+    return new Response(JSON.stringify({ result }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  let blocked = false;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      await assertProviderRateLimit("9.9.9.9", "multi-accommodation");
+    } catch {
+      blocked = true;
+      break;
+    }
+  }
+  check("the 11th request in a minute is refused", blocked);
+
   global.fetch = realFetch;
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
