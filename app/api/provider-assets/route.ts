@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(12_000),
       next: { revalidate: 86_400 },
     });
-    if (!response.ok) throw new Error("ASSET_NOT_FOUND");
+    if (!response.ok) throw new Error(`ASSET_NOT_FOUND_${response.status}`);
     const contentType = response.headers.get("content-type") || "";
     const length = Number(response.headers.get("content-length") || 0);
     if (!contentType.startsWith("image/") || length > 3_000_000) throw new Error("INVALID_ASSET");
@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch {
-    return NextResponse.json({ success: false, error: "تصویر دریافت نشد." }, { status: 404 });
+  } catch (caught) {
+    const reason = caught instanceof Error ? caught.message.slice(0, 60) : "UNKNOWN";
+    return NextResponse.json({ success: false, error: "تصویر دریافت نشد.", reason }, { status: 404 });
   }
 }
