@@ -4,6 +4,7 @@
   "private": true,
   "description": "سفرینو — پلتفرم مدرن رزرو سفر ایرانی (Next.js 14 + Tailwind CSS)",
   "scripts": {
+    "test:place-photos": "tsx scripts/test-place-photos.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

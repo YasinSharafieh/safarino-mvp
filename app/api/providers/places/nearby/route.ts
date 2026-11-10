@@ -9,7 +9,7 @@ import {
   resolveNeshanKey,
   type NeshanPlace,
 } from "../../../../../lib/neshan";
-import { placePhoto, neshanStaticMapUrl } from "../../../../../lib/place-photos";
+import { attachPlaceImages } from "../../../../../lib/place-photos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -205,31 +205,8 @@ export async function POST(request: NextRequest) {
     withDistance.sort((a, b) => (a.distanceKm as number) - (b.distanceKm as number));
     const ordered = [...withDistance, ...withoutDistance].slice(0, limit);
 
-    // Real pictures, in parallel, from each place's own article or item.
-    await Promise.all(
-      ordered.map(async (place) => {
-        const photo = await placePhoto({
-          wikipediaUrl: place.wikipediaUrl,
-          wikidataId: place.sourceUrl.includes("wikidata.org")
-            ? (place.sourceUrl.match(/Q\d+/) || [""])[0]
-            : null,
-          name: place.name,
-        });
-        if (photo) {
-          place.imageUrl = `/api/provider-assets?src=${encodeURIComponent(photo.url)}`;
-          place.imageKind = "photo";
-          place.imageLabel = photo.label;
-          place.imageCreditUrl = photo.creditUrl;
-          return;
-        }
-        if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude)) {
-          place.imageUrl = neshanStaticMapUrl({ latitude: place.latitude, longitude: place.longitude });
-          place.imageKind = "map";
-          place.imageLabel = "نقشهٔ نشان برای همین نقطه";
-          place.imageCreditUrl = place.sourceUrl;
-        }
-      }),
-    );
+    // Real pictures: each place's own Wikipedia/Wikimedia photo, otherwise a real Neshan map image.
+    await attachPlaceImages(ordered, { maxPhotos: ordered.length });
 
     const reverse = hasOrigin ? await neshanReverse({ latitude, longitude }, { key: requestKey }) : null;
 

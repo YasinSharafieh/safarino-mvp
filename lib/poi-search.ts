@@ -263,6 +263,9 @@ function categoryFromKindLabel(label: string | undefined): string {
   return categoryLabel("attraction");
 }
 
+/** News/event articles are not places a traveller can visit. */
+const EVENT_NAME = /(حمله|انفجار|کشتار|ترور|اعتراضات|ناآرامی|جنگ |زلزله|سیل |آتش‌سوزی|آتش‌سوزي|سانحه|سقوط هواپیما|تصادف|بمباران|موشک‌باران|ترور|قتل|اعدام|همه‌گیری|کرونا)/;
+
 const NOISE_NAME = /^(مخبز|مغازه|سوپرمارکت|نانوایی|رستوران|کافه|فروشگاه|پارکینگ|سرویس بهداشتی|ایستگاه|پمپ بنزین|بانک|خیابان|بلوار|میدان)$/;
 
 const GENERIC_WORDS = /(موزه|پارک|بوستان|باغ|مسجد|آستان|حرم|مجموعه|ساختمان|بنای|اثر|خانه|مدرسه|آرامگاه|کاخ|عمارت|حمام|گرمابه|میدان|بازار|پل|برج)/g;
@@ -292,7 +295,7 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
     };
   }
 
-  const cacheKey = `safarino:pois:v3:${normalizeTerm(city).replace(/\s+/g, "-")}`;
+  const cacheKey = `safarino:pois:v4:${normalizeTerm(city).replace(/\s+/g, "-")}`;
   const cached = await getProviderCache<PoiSearchResult & { pois: PoiWithMeta[] }>(cacheKey);
   if (cached && Array.isArray(cached.pois) && cached.pois.length) {
     return { ...cached, pois: cached.pois.slice(0, limit) };
@@ -308,7 +311,7 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
 
   const add = (candidate: Omit<Candidate, "distanceKm">) => {
     const key = dedupeKey(candidate.name);
-    if (!key || candidate.name.length < 3 || NOISE_NAME.test(candidate.name)) return;
+    if (!key || candidate.name.length < 3 || NOISE_NAME.test(candidate.name) || EVENT_NAME.test(candidate.name)) return;
     const existing = merged.get(key);
     if (existing) {
       existing.notability = Math.max(existing.notability, candidate.notability);

@@ -23,6 +23,23 @@ export type PlacePhoto = {
 };
 
 const PHOTO_TTL = 7 * 86_400;
+/** Wikipedia asks not to be hammered; keep the fan-out small. */
+const PHOTO_CONCURRENCY = 4;
+
+async function inPool<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      results[index] = await work(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 function commonsFilePath(file: string, width = 640): string {
   const clean = file.replace(/^File:/i, "").trim();
@@ -56,7 +73,8 @@ export async function wikipediaPhoto(title: string, lang = "fa", timeoutMs = 8_0
       cache: "no-store",
     });
     if (!response.ok) {
-      await setProviderCache(cacheKey, "none", 3_600);
+      // 429 = too many requests; do not remember "no photo" for long.
+      await setProviderCache(cacheKey, "none", response.status === 429 ? 60 : 3_600);
       return null;
     }
     const payload = (await response.json()) as {
@@ -168,8 +186,7 @@ type PlaceWithMaybePhoto = {
  */
 export async function attachPlaceImages<T extends PlaceWithMaybePhoto>(places: T[], options: { maxPhotos?: number; mapZoom?: number } = {}): Promise<T[]> {
   const maxPhotos = options.maxPhotos ?? 16;
-  await Promise.all(
-    places.slice(0, maxPhotos).map(async (place) => {
+  await inPool(places.slice(0, maxPhotos), PHOTO_CONCURRENCY, async (place) => {
       if (place.imageUrl) return;
       const wikidataId = typeof place.sourceUrl === "string" ? (place.sourceUrl.match(/Q\d+/) || [""])[0] : "";
       const photo = await placePhoto({
@@ -192,7 +209,6 @@ export async function attachPlaceImages<T extends PlaceWithMaybePhoto>(places: T
       } else {
         place.imageKind = "none";
       }
-    }),
-  );
+  });
   return places;
 }
