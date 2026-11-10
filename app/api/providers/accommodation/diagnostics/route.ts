@@ -57,13 +57,39 @@ export async function GET(request: NextRequest) {
       output.pictures = record(item.pictures);
       output.sample = { title: item.title, properties: item.properties };
     } else if (provider === "otaghak") {
-      const locations = await publicProviderJson("https://api.otaghak.com/api/v1/Search/GetSearchResult", { query: { input: city } });
+      const locations = await publicProviderJson("https://core.otaghak.com/api/v1/Search/GetSearchResult", { query: { input: city } });
       const location = rows(locations).find((item) => text(item.typeCode) === "city");
-      const payload = record(await publicProviderJson("https://api.otaghak.com/api/v3/RoomSearch/SearchRooms", {
+      const payload = record(await publicProviderJson("https://core.otaghak.com/api/v3/RoomSearch/SearchRooms", {
         method: "POST",
         body: { cities: [text(location?.cityCode)], stateCodes: [], checkIn: "2026-11-20", checkOut: "2026-11-22", person: 2, sortingType: "MinPricePriority", aroundLocations: false, skip: 0, take: 5 },
       }));
       const item = rows(payload.rooms)[0] || {};
+      output.keys = Object.keys(item);
+      output.hits = scan(item);
+      output.sample = item;
+    } else if (provider === "snapptrip") {
+      const HEADERS = { Accept: "application/json", Origin: "https://www.snapptrip.com", Referer: "https://www.snapptrip.com/" };
+      const locations = await publicProviderJson("https://hapi.snapptrip.com/hotel/api/v2/search-text", { query: { text: city, token: "Jek", provider: "flightio" }, headers: HEADERS });
+      const list = Array.isArray(locations) ? rows(locations) : rows(record(locations).cities || record(locations).items || record(locations).locations);
+      const cityId = text(list.find((item) => item.id)?.id);
+      const payload = record(await publicProviderJson("https://hapi.snapptrip.com/hotel/api/v2/search-city", {
+        query: { city_id: cityId, date_from: "2026-11-20", date_to: "2026-11-22", page: 1, order_by: "best_selling", token: "Jek", no_rooms: 1 },
+        headers: HEADERS,
+      }));
+      const hotels = rows(payload.hotels || payload.items || payload.hotelsData);
+      const item = hotels[0] || {};
+      output.keys = Object.keys(item);
+      output.hits = scan(item);
+      output.galleries = rows(item.galleries).slice(0, 3);
+      output.amenities = item.amenities || item.facilities || null;
+    } else if (provider === "eghamat24") {
+      const locations = record(await publicProviderJson("https://www.eghamat24.com/locations", { headers: { Accept: "*/*", Referer: "https://www.eghamat24.com/" } }));
+      const wanted = rows(locations.locations).find((item) => text(item.type) === "city" && text(item.name).includes(city));
+      const result = record(await publicProviderJson("https://www.eghamat24.com/search/get-properties-v2", {
+        query: { destination_name: text(wanted?.english_name), check_in: "2026-11-20", length_of_stay: 2, group_type: "hotel" },
+        headers: { Accept: "*/*", Referer: "https://www.eghamat24.com/" },
+      }));
+      const item = rows(result.properties)[0] || {};
       output.keys = Object.keys(item);
       output.hits = scan(item);
       output.sample = item;
