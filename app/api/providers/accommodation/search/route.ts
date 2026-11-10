@@ -59,6 +59,18 @@ export async function POST(request: NextRequest) {
     await assertProviderRateLimit(ip, "multi-accommodation");
     const started = Date.now();
     const base = snapshotKey("accommodation", { ...input, kinds: input.kind });
+    // "دریافت قیمت تازه": the traveller explicitly asks for a live crawl.
+    const wantsFresh = request.nextUrl.searchParams.get("refresh") === "1";
+    if (wantsFresh) {
+      const liveNow = await searchMultiProviderAccommodation(input);
+      if (!liveNow.allProvidersFailed) {
+        await writeSnapshot(base, liveNow as unknown as Record<string, unknown>, FRESH_SECONDS, KEEP_SECONDS);
+      }
+      return NextResponse.json(
+        { success: !liveNow.allProvidersFailed, cached: false, fromStore: "refreshed-now", ...liveNow, ...(liveNow.allProvidersFailed ? { error: "هیچ‌یک از منابع اقامت پاسخ معتبر نداد؛ کمی بعد دوباره تلاش کنید." } : {}) },
+        { status: liveNow.allProvidersFailed ? 502 : 200, headers: { "Cache-Control": "no-store", "X-Safarino-Source": "forced-live", "X-Safarino-Ms": String(Date.now() - started) } },
+      );
+    }
     const { snapshot, source, refreshed } = await readWithRefresh<Record<string, unknown>>(
       base,
       async () => {
