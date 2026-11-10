@@ -1,5 +1,7 @@
 "use client";
 
+import SnapshotKeeper from "@/components/SnapshotKeeper";
+
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -144,6 +146,7 @@ export default function HomePage() {
 
   return (
     <main className="relative overflow-hidden">
+      <SnapshotKeeper />
       {/* ---------------------------------------------------- background */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_55%)]" />
