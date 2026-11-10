@@ -1,5 +1,7 @@
 "use client";
 
+import SnapshotKeeper from "@/components/SnapshotKeeper";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
