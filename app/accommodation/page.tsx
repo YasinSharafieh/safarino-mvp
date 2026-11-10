@@ -53,6 +53,9 @@ function normalizeSearchText(value: string): string {
 }
 
 type SearchResponse = {
+  cached?: boolean;
+  savedAt?: string;
+  fromStore?: string;
   success: boolean;
   error?: string;
   offers?: AccommodationOffer[];
@@ -96,6 +99,7 @@ export default function AccommodationPage() {
   const [deduplicatedCount, setDeduplicatedCount] = useState(0);
   const [resolvedCity, setResolvedCity] = useState("");
   const [fetchedAt, setFetchedAt] = useState("");
+  const [fromSavedCopy, setFromSavedCopy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [legacyTransportCost, setLegacyTransportCost] = useState(0);
@@ -289,6 +293,7 @@ export default function AccommodationPage() {
       setDeduplicatedCount(Math.max(0, Number(data.deduplicatedCount) || 0));
       setResolvedCity(data.city || city);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
+      setFromSavedCopy(Boolean(data.cached));
       setTravelData((current) => ({ ...current, days: nights }));
       try {
         window.sessionStorage.setItem(ACCOMMODATION_RESULTS_KEY, JSON.stringify({
@@ -544,7 +549,7 @@ export default function AccommodationPage() {
                         </button>
                       )}
                     </div>
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}{fromSavedCopy ? " · از نسخهٔ ذخیره‌شده" : ""}</span>}</div>
 
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">

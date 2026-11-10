@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readWithRefresh, snapshotKey, writeSnapshot } from "../../../../../lib/snapshot-store";
+
+/** Ticket lists change faster than hotels, so the saved copy lives for 20 minutes. */
+const FRESH_SECONDS = 1_200;
+const KEEP_SECONDS = 43_200;
 import { searchAlibabaFlights } from "../../../../../lib/alibaba-flights";
 import { searchAlibabaTrains, searchAlibabaBuses } from "../../../../../lib/alibaba-ground";
 import { searchSafar724Buses } from "../../../../../lib/safar724-bus";
@@ -143,6 +148,33 @@ export async function POST(request: NextRequest) {
   }
 
   const { mode, origin, destination, date, returnDate, adults, children, infants } = input;
+
+  // Saved answer first: an identical search must never crawl again.
+  const started = Date.now();
+  const base = snapshotKey("transport", { mode, origin, destination, date, returnDate: returnDate || "", adults, children, infants });
+  const saved = await readWithRefresh<Record<string, unknown>>(base, async () => crawl(input!), {
+    ttlSeconds: FRESH_SECONDS,
+    keepSeconds: KEEP_SECONDS,
+  });
+  if (saved.snapshot) {
+    if (saved.source === "stale-cache" && saved.refreshed) void saved.refreshed();
+    return NextResponse.json(
+      { ...saved.snapshot.value, cached: true, fromStore: saved.source === "stale-cache" ? "last-saved" : "just-fetched", savedAt: saved.snapshot.storedAt },
+      { headers: { "Cache-Control": "no-store", "X-Safarino-Source": saved.source, "X-Safarino-Ms": String(Date.now() - started) } },
+    );
+  }
+
+  const live = await crawl(input);
+  await writeSnapshot(base, live, FRESH_SECONDS, KEEP_SECONDS);
+  return NextResponse.json(
+    { ...live, cached: false, fromStore: "crawled-now" },
+    { headers: { "Cache-Control": "no-store", "X-Safarino-Source": "live", "X-Safarino-Ms": String(Date.now() - started) } },
+  );
+}
+
+/** The actual provider crawl; kept separate so the snapshot store can call it. */
+async function crawl(input: SearchInput): Promise<Record<string, unknown>> {
+  const { mode, origin, destination, date, returnDate, adults, children, infants } = input;
   const statuses: ProviderStatus[] = [];
   const bundles: TransportOffer[][] = [];
   const returningBundles: TransportOffer[][] = [];
@@ -207,7 +239,7 @@ export async function POST(request: NextRequest) {
   const merged = dedupeTransportOffers(bundles.flat().sort((a, b) => a.priceToman - b.priceToman));
   const mergedReturning = dedupeTransportOffers(returningBundles.flat().sort((a, b) => a.priceToman - b.priceToman));
 
-  return NextResponse.json({
+  return {
     success: true,
     mode,
     origin,
@@ -219,7 +251,7 @@ export async function POST(request: NextRequest) {
     duplicateCount: merged.removed,
     providerStatuses: statuses.sort((a, b) => a.provider.localeCompare(b.provider)),
     fetchedAt: new Date().toISOString(),
-  });
+  };
 }
 
 function infoUrl(result: Record<string, unknown>, mode: TransportMode, input: SearchInput): string {
