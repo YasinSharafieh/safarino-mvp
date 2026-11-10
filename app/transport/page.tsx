@@ -508,6 +508,7 @@ function TransportPageContent() {
   return (
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <SnapshotKeeper />
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />

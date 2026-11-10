@@ -5,6 +5,7 @@ import { searchAlibabaBuses, searchAlibabaTrains } from "../../../../lib/alibaba
 import { searchSafar724Buses } from "../../../../lib/safar724-bus";
 import { searchCityPois } from "../../../../lib/poi-search";
 import { readFreshSnapshot, snapshotKey, writeSnapshot } from "../../../../lib/snapshot-store";
+import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,6 +94,10 @@ async function warmPois(city: string): Promise<Step> {
   }
 }
 
+/** One warm-up per hour is plenty; the lock also protects the providers. */
+const LOCK_KEY = "safarino:warm-lock";
+const LOCK_SECONDS = 3_600;
+
 export async function GET(request: NextRequest) {
   return run(request, { hotels: 3, stays: 2, transports: 2, pois: 4 });
 }
@@ -107,6 +112,20 @@ export async function POST(request: NextRequest) {
  */
 async function run(request: NextRequest, budget: { hotels: number; stays: number; transports: number; pois: number }) {
   const started = Date.now();
+  const force = request.nextUrl.searchParams.get("force") === "1";
+  if (!force) {
+    const locked = await getProviderCache<string>(LOCK_KEY);
+    if (locked) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        lastRunAt: locked,
+        message: "نسخه‌های ذخیره‌شده در همین ساعت تازه شده‌اند؛ کاری لازم نبود.",
+      });
+    }
+  }
+  // Claim the hour before doing the heavy work, so two visitors cannot both crawl.
+  await setProviderCache(LOCK_KEY, new Date().toISOString(), LOCK_SECONDS);
   const checkIn = isoDate(3);
   const checkOut = isoDate(6);
   const steps: Step[] = [];
