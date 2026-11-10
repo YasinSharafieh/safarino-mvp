@@ -1,0 +1,18 @@
+# اگر خواستید خودتان این فایل را در گیت‌هاب بسازید، دقیقاً همین متن را کپی کنید.
+# مسیر فایل در مخزن باید این باشد:  .github/workflows/refresh.yml
+name: refresh-provider-snapshots
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warm the saved provider answers
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
+            -X POST https://safarino-mvp.vercel.app/api/cron/refresh \
+            | head -c 2000
