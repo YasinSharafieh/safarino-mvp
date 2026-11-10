@@ -19,6 +19,8 @@ export type AccommodationOffer = {
   typeLabel: string;
   location: string;
   imageUrl: string | null;
+  /** Every public photo the provider published for this property (first one equals imageUrl). */
+  images: string[];
   rating: number | null;
   reviewCount: number;
   stars: number | null;

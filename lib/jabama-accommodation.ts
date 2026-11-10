@@ -47,7 +47,14 @@ export function normalizeJabamaRows(value: unknown, input: AccommodationSearchIn
     const checkIn = text(price.fa_checkin) || jalaliDate(input.checkIn);
     const checkOut = text(price.fa_checkout) || jalaliDate(input.checkOut);
     const query = new URLSearchParams({ checkIn, checkOut, passengersCount: String(guests) });
-    const image = text(stay.image) || (Array.isArray(stay.images) ? text(stay.images[0]) : "");
+    const rawImages = [
+      ...(Array.isArray(stay.images) ? stay.images.map((item) => text(item)) : []),
+      text(stay.image),
+    ];
+    const images = Array.from(new Set(rawImages))
+      .map((value) => safeImageUrl(value, ["cdn.jabama.com"], "/image/"))
+      .filter((value): value is string => Boolean(value));
+    const image = images[0] || "";
     return [{
       id: `jabama-${code}`,
       providerPropertyId: code,
@@ -55,7 +62,8 @@ export function normalizeJabamaRows(value: unknown, input: AccommodationSearchIn
       name,
       typeLabel: STAY_TYPE_LABELS[type] || "اقامتگاه",
       location: [text(location.province), text(location.city)].filter(Boolean).join("، ") || input.city,
-      imageUrl: safeImageUrl(image, ["cdn.jabama.com"], "/image/"),
+      imageUrl: image || null,
+      images,
       rating: positiveNumber(rate.score),
       reviewCount: Math.max(0, Math.round(finiteNumber(rate.count) || 0)),
       stars: null,

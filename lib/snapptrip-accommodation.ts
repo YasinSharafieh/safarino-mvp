@@ -21,6 +21,17 @@ function collection(payload: unknown, keys: string[]): Record<string, unknown>[]
   return [];
 }
 
+function snapptripImages(hotel: Record<string, unknown>): string[] {
+  const list = [
+    ...rows(hotel.galleries).map((item) => text(item.media)),
+    text(record(hotel.cover_media).media),
+  ];
+  const unique = Array.from(new Set(list.map((value) => value.replace(/^\/+/, "")).filter(Boolean)));
+  return unique
+    .map((media) => safeImageUrl(`${STORE}/${media}`, ["store.snapptrip.com"], "/domestic-hotel/"))
+    .filter((value): value is string => Boolean(value));
+}
+
 function snapptripImage(hotel: Record<string, unknown>): string | null {
   const media = text(record(hotel.cover_media).media) || text(record(rows(hotel.galleries)[0]).media);
   if (!media) return null;
@@ -61,6 +72,7 @@ export function normalizeSnapptripRows(value: unknown, input: AccommodationSearc
       typeLabel: text(hotel.accommodation_type) || (stars ? `هتل ${stars} ستاره` : "هتل"),
       location: text(hotel.address) || input.city,
       imageUrl: snapptripImage(hotel),
+      images: snapptripImages(hotel),
       rating: finiteNumber(reviews.ptp_ratings) ?? finiteNumber(hotel.user_score),
       reviewCount: Math.max(0, Math.round(finiteNumber(reviews.ptp_reviews) ?? finiteNumber(hotel.review_count) ?? 0)),
       stars,

@@ -31,8 +31,9 @@ import { categorizeStay, STAY_TYPE_FILTERS } from "@/lib/accommodation-types";
 import type { AccommodationGroup, AccommodationKind, AccommodationOffer, ProviderSearchStatus } from "@/lib/accommodation-types";
 import { IRANIAN_CITIES } from "@/lib/iran-cities";
 import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
+import { ACCOMMODATION_RESULTS_KEY, ACCOMMODATION_SELECTION_KEY, buildAccommodationSelection } from "@/lib/accommodation-selection";
 
-const STORAGE_KEY = "safarino-accommodation-selection-v1";
+const STORAGE_KEY = ACCOMMODATION_SELECTION_KEY;
 const numberFormatter = new Intl.NumberFormat("fa-IR");
 const compactFormatter = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 });
 const formatNumber = (value: number) => numberFormatter.format(Math.round(value));
@@ -242,32 +243,15 @@ export default function AccommodationPage() {
   }
 
   function selectOffer(offer: AccommodationOffer, selectionFetchedAt = fetchedAt) {
-    const selection = {
-      status: "selected",
-      id: offer.id,
-      kind,
-      name: offer.name,
-      typeLabel: offer.typeLabel,
-      cost: offer.priceTotalToman,
-      pricePerNightToman: offer.pricePerNightToman,
-      city,
-      checkIn,
-      checkOut,
-      nights,
+    const selection = buildAccommodationSelection(offer, {
+      city, checkIn, checkOut, nights,
       adults: travelData.travelers,
       children: travelData.children,
       infants: travelData.infants,
       childAges,
       infantAges,
-      bookingUrl: offer.bookingUrl,
-      imageUrl: offer.imageUrl,
-      provider: offer.provider,
-      providerPropertyId: offer.providerPropertyId,
-      priceIncludesVat: offer.priceIncludesVat,
-      priceNote: offer.priceNote,
-      bookingNote: offer.bookingNote,
       fetchedAt: selectionFetchedAt,
-    };
+    });
     setTravelData((current) => ({ ...current, accommodation: selection, days: nights }));
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(selection)); } catch { /* Context still preserves it. */ }
   }
@@ -306,6 +290,23 @@ export default function AccommodationPage() {
       setResolvedCity(data.city || city);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
       setTravelData((current) => ({ ...current, days: nights }));
+      try {
+        window.sessionStorage.setItem(ACCOMMODATION_RESULTS_KEY, JSON.stringify({
+          kind,
+          city: data.city || city,
+          checkIn,
+          checkOut,
+          adults: travelData.travelers,
+          children: travelData.children,
+          infants: travelData.infants,
+          childAges,
+          infantAges,
+          nights,
+          fetchedAt: data.fetchedAt || new Date().toISOString(),
+          providerStatuses: data.providerStatuses || [],
+          groups: nextGroups,
+        }));
+      } catch { /* The page still works without the snapshot. */ }
       if (selectedId) {
         const refreshed = nextGroups.flatMap((group) => group.offers).find((offer) => offer.id === selectedId);
         if (refreshed) selectOffer(refreshed, data.fetchedAt || new Date().toISOString());
@@ -548,7 +549,7 @@ export default function AccommodationPage() {
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <AnimatePresence mode="popLayout">{filteredGroups.map((group, index) => (
-                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} onSelect={selectOffer} onClear={clearSelection} />
+                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
                         ))}</AnimatePresence>
                       </motion.div>
                     ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}

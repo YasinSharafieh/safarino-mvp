@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, ExternalLink, MapPin, Star } from "lucide-react";
+import Link from "next/link";
+import { Check, ExternalLink, Images, MapPin, Star } from "lucide-react";
 import type { AccommodationGroup, AccommodationOffer } from "@/lib/accommodation-types";
 import { categorizeStay, PROVIDER_LABELS } from "@/lib/accommodation-types";
 import AccommodationImage from "./AccommodationImage";
@@ -20,6 +21,7 @@ export default function AccommodationCard({
   selectedId,
   onSelect,
   onClear,
+  detailQuery = "",
 }: {
   group: AccommodationGroup;
   index: number;
@@ -27,6 +29,7 @@ export default function AccommodationCard({
   selectedId: string;
   onSelect: (offer: AccommodationOffer) => void;
   onClear: () => void;
+  detailQuery?: string;
 }) {
   const [activeId, setActiveId] = useState(group.offers[0].id);
   useEffect(() => {
@@ -78,6 +81,10 @@ export default function AccommodationCard({
           <button type="button" onClick={() => isSelected ? onClear() : onSelect(offer)} aria-pressed={isSelected} className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${isSelected ? "bg-emerald-400 text-slate-950" : "btn-primary w-full !py-2.5"}`}>
             {isSelected && <Check className="h-4 w-4" />}{isSelected ? "انتخاب شد؛ برای لغو کلیک کنید" : "انتخاب برای سفرینو"}
           </button>
+          <Link href={`/accommodation/${encodeURIComponent(offer.id)}${detailQuery}`} className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-cyan-400/15 px-3 py-2.5 text-[10px] font-extrabold text-cyan-100 transition hover:bg-cyan-400/25">
+            <Images className="h-3.5 w-3.5" />
+            جزئیات، گالری و نقشه
+          </Link>
           <a href={offer.bookingUrl} target="_blank" rel="noreferrer noopener" className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-[10px] font-bold text-slate-300 transition hover:bg-white/5 hover:text-white">مشاهده و رزرو در {PROVIDER_LABELS[offer.provider]}<ExternalLink className="h-3 w-3" /></a>
           <p className="text-center text-[9px] leading-5 text-slate-500">{offer.bookingNote}</p>
         </div>

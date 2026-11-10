@@ -34,6 +34,9 @@ export function normalizeEghamat24Rows(value: unknown, input: AccommodationSearc
       typeLabel,
       location: text(property.address) || input.city,
       imageUrl: imageName ? safeImageUrl(IMAGE_ROOT + encodeURIComponent(imageName), ["www.eghamat24.com"], "/app/public/hotel_images/original/") : null,
+      images: imageName
+        ? [safeImageUrl(IMAGE_ROOT + encodeURIComponent(imageName), ["www.eghamat24.com"], "/app/public/hotel_images/original/")].filter((value): value is string => Boolean(value))
+        : [],
       rating: positiveNumber(property.rating),
       reviewCount: Math.max(0, Math.round(finiteNumber(property.comment_count) || 0)),
       stars,

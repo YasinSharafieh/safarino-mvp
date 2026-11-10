@@ -17,7 +17,15 @@ export function normalizeOtaghakRows(value: unknown, input: AccommodationSearchI
     const name = text(room.roomName);
     const total = positiveNumber(room.totalPriceWithExtraPerson) ?? positiveNumber(room.totalPrice);
     if (!/^\d+$/.test(id) || !name || !total) return [];
-    const imageName = text(record(room.roomMediaTitles).mainImageTitle).replace(/^\/+/, "");
+    const mediaTitles = record(room.roomMediaTitles);
+    const imageNames = [
+      text(mediaTitles.mainImageTitle),
+      ...rows(mediaTitles.galleryImages).map((item) => text(item.galleryImagesTitle)),
+    ].map((value) => value.replace(/^\/+/, "")).filter(Boolean);
+    const images = Array.from(new Set(imageNames))
+      .map((name) => safeImageUrl(IMAGES + name, ["cdn.otaghak.com"], "/otg-images-new/X500/"))
+      .filter((value): value is string => Boolean(value));
+    const imageName = imageNames[0] || "";
     const base = finiteNumber(room.basePersonCount) ?? finiteNumber(room.personCapacity);
     const maximum = finiteNumber(room.personCapacity);
     const bedrooms = finiteNumber(room.bedRoom);
@@ -30,6 +38,7 @@ export function normalizeOtaghakRows(value: unknown, input: AccommodationSearchI
       typeLabel: text(room.roomTypeName) || "اقامتگاه",
       location: [text(room.stateFaName), text(room.cityFaName)].filter(Boolean).join("، ") || input.city,
       imageUrl: imageName ? safeImageUrl(IMAGES + imageName, ["cdn.otaghak.com"], "/otg-images-new/X500/") : null,
+      images,
       rating: positiveNumber(room.rate),
       reviewCount: Math.max(0, Math.round(finiteNumber(room.commentsCount) || 0)),
       stars: null,

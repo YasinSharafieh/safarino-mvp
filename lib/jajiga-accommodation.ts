@@ -22,9 +22,11 @@ export function normalizeJajigaRows(value: unknown, input: AccommodationSearchIn
     const path = suppliedPath.startsWith("/room/")
       ? suppliedPath
       : `/room/${id}?${new URLSearchParams({ gstnum: String(guests), chin: input.checkIn, chout: input.checkOut }).toString()}`;
-    const picture = rows(record(room.pictures).items)[0];
-    const relativeImage = text(picture?.url).replace(/^\/+/, "");
-    const imageUrl = relativeImage ? safeImageUrl(PICTURES + relativeImage, ["storage.jajiga.com"], "/public/pictures/medium/") : null;
+    const pictures = rows(record(room.pictures).items);
+    const images = pictures
+      .map((picture) => safeImageUrl(PICTURES + text(picture.url).replace(/^\/+/, ""), ["storage.jajiga.com"], "/public/pictures/medium/"))
+      .filter((value): value is string => Boolean(value));
+    const imageUrl = images[0] || null;
     const rating = record(room.rating);
     const geo = record(room.geo);
     const base = finiteNumber(room.guest_number);
@@ -39,6 +41,7 @@ export function normalizeJajigaRows(value: unknown, input: AccommodationSearchIn
       typeLabel: "ویلا و اقامتگاه",
       location: [text(room.province_name), text(room.city_name)].filter(Boolean).join("، ") || input.city,
       imageUrl,
+      images,
       rating: positiveNumber(rating.total),
       reviewCount: Math.max(0, Math.round(finiteNumber(rating.count) || 0)),
       stars: null,
