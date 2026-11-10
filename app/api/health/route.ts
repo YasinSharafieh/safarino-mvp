@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { providerStorageHealthy } from "../../../lib/provider-cache";
+import { neshanConfigured } from "../../../lib/neshan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export async function GET() {
     openRouterConfigured,
     budgetStorageConfigured,
     providerStorageReachable: providerStorage,
+    neshanConfigured: neshanConfigured(),
     aiReady: openRouterConfigured && budgetStorageConfigured,
     model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite",
     dailyBudgetUsd: Number(process.env.AI_DAILY_BUDGET_USD || 0.32),
