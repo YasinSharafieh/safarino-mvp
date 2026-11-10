@@ -569,7 +569,7 @@ export default function AccommodationDetailPage() {
               <button type="button" onClick={() => setLightbox(false)} aria-label="بستن گالری" className="absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white">
                 <X className="h-5 w-5" />
               </button>
-              <div className="relative max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="relative aspect-[16/10] max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-night-900" onClick={(event) => event.stopPropagation()}>
                 <AccommodationImage src={photos[photoIndex]} alt={`${offer?.name || ""} بزرگ`} />
                 {photos.length > 1 && (
                   <>
