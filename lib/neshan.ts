@@ -16,6 +16,9 @@ export type NeshanStatus =
   | "ok"
   | "not_configured"
   | "unauthorized"
+  | "key_type"
+  | "service_disabled"
+  | "whitelist"
   | "quota"
   | "rate_limited"
   | "invalid"
@@ -65,7 +68,10 @@ export function neshanAvailable(key?: string): boolean {
 
 export function neshanStatusFromHttp(status: number): Exclude<NeshanStatus, "ok"> {
   if (status === 400 || status === 470) return "invalid";
-  if (status === 480 || status === 483 || status === 484 || status === 485) return "unauthorized";
+  if (status === 483) return "key_type";
+  if (status === 484) return "whitelist";
+  if (status === 485) return "service_disabled";
+  if (status === 480) return "unauthorized";
   if (status === 481) return "quota";
   if (status === 482) return "rate_limited";
   return "failed";
@@ -83,6 +89,12 @@ export function neshanStatusNote(status: NeshanStatus): string {
       return "تعداد درخواست‌های نشان در این دقیقه زیاد شد؛ فاصله‌ها با OpenStreetMap محاسبه می‌شوند.";
     case "invalid":
       return "مختصات برای نشان معتبر نبود؛ فاصله‌ها با OpenStreetMap محاسبه می‌شوند.";
+    case "key_type":
+      return "این کلید از نوع «سرویس» نیست؛ در پنل نشان کلید را از تب «سرویس‌ها» بسازید.";
+    case "service_disabled":
+      return "این کلید ساخته شده، ولی سرویس «مسیریابی/ماتریس فاصله» برایش تیک نخورده است؛ در پنل نشان همان سرویس را فعال کنید.";
+    case "whitelist":
+      return "کلید نشان به دامنه/آی‌پی محدود شده و از سرور سایت پذیرفته نشد؛ فهرست دامنه‌ها را خالی بگذارید یا دامنهٔ سایت را اضافه کنید.";
     case "failed":
       return "نشان پاسخ نداد؛ فاصله‌ها با OpenStreetMap محاسبه می‌شوند.";
     default:
