@@ -21,6 +21,7 @@ import {
   MapPin,
   Navigation,
   RefreshCw,
+  Route,
   Share2,
   Shirt,
   Sparkles,
@@ -681,6 +682,10 @@ export default function PlanPage() {
           </section>
 
           <div className="mt-6 flex flex-col items-center gap-3 print:hidden">
+            <Link href="/itinerary" className="btn-ghost w-full max-w-xl !py-3.5 text-sm">
+              <Route className="h-4 w-4" />
+              ساخت برنامهٔ روزبه‌روز و نسخهٔ PDF
+            </Link>
             <button type="button" onClick={regenerate} disabled={loading || !origin.trim() || !destination.trim()} className="btn-primary w-full max-w-xl !py-4 text-sm disabled:cursor-wait disabled:opacity-60">
               {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
               {loading ? "در حال ساخت برنامه…" : "بازسازی هوشمند برنامه"}

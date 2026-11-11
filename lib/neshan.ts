@@ -431,3 +431,61 @@ export async function neshanDirection(
     return { status: "failed" };
   }
 }
+
+export type NeshanPair = { from: NeshanCoords; to: NeshanCoords };
+
+export type NeshanPairsResult = { status: "ok"; items: (NeshanDistance | null)[] } | { status: Exclude<NeshanStatus, "ok"> };
+
+/**
+ * Driving distance + time for many point-to-point legs in as few requests as
+ * possible: Neshan's matrix is asked with all the starts and all the ends at
+ * once, and only the matching pairs are read back.
+ */
+export async function neshanPairDistances(
+  pairs: NeshanPair[],
+  options: { key?: string; timeoutMs?: number } = {},
+): Promise<NeshanPairsResult> {
+  const key = resolveNeshanKey(options.key);
+  const timeoutMs = options.timeoutMs ?? 12_000;
+  if (!key) return { status: "not_configured" };
+  const clean = pairs.filter((pairItem) => validCoords(pairItem?.from) && validCoords(pairItem?.to));
+  if (!clean.length) return { status: "ok", items: [] };
+
+  const items: (NeshanDistance | null)[] = [];
+  for (let index = 0; index < clean.length; index += NESHAN_MATRIX_CHUNK) {
+    const chunk = clean.slice(index, index + NESHAN_MATRIX_CHUNK);
+    const url =
+      `${API_BASE}/v1/distance-matrix?type=car` +
+      `&origins=${encodeURIComponent(chunk.map((item) => pair(item.from)).join("|"))}` +
+      `&destinations=${encodeURIComponent(chunk.map((item) => pair(item.to)).join("|"))}`;
+    try {
+      const response = await fetch(url, {
+        headers: { "Api-Key": key, Accept: "application/json" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) return { status: neshanStatusFromHttp(response.status) };
+      const payload = (await response.json()) as {
+        rows?: { elements?: { status?: string; distance?: { value?: number }; duration?: { value?: number } }[] }[];
+      };
+      const rows = payload?.rows;
+      if (!Array.isArray(rows) || rows.length < chunk.length) return { status: "failed" };
+      for (let position = 0; position < chunk.length; position += 1) {
+        const element = rows[position]?.elements?.[position];
+        const meters = Number(element?.distance?.value);
+        const seconds = Number(element?.duration?.value);
+        if (element?.status === "Ok" && Number.isFinite(meters) && meters > 0) {
+          items.push({
+            distanceKm: Math.round(meters / 100) / 10,
+            durationMinutes: Number.isFinite(seconds) ? Math.max(1, Math.round(seconds / 60)) : 0,
+          });
+        } else {
+          items.push(null);
+        }
+      }
+    } catch {
+      return { status: "failed" };
+    }
+  }
+  return { status: "ok", items };
+}
