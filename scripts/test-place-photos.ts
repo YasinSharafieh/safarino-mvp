@@ -38,13 +38,18 @@ function check(label: string, ok: boolean, extra = "") {
     "نطنز ≠ مشهد",
   );
   check(
-    "an article without coordinates cannot be proven, so it is refused",
+    "an article without coordinates and no link is refused",
     articleIsAboutPlace(mashhad, { latitude: null, longitude: null }) === false,
   );
   check("a missing article is refused", articleIsAboutPlace(mashhad, null) === false);
   check(
-    "an article the place itself linked to is trusted",
-    articleIsAboutPlace(mashhad, { latitude: 33.5, longitude: 51.9 }, { linkedDirectly: true }) === true,
+    "even a linked article is refused when it sits in another city",
+    articleIsAboutPlace(mashhad, { latitude: 33.5, longitude: 51.9 }, { linkedDirectly: true }) === false,
+    "مسجد امام حسن مشهد ≠ نطنز",
+  );
+  check(
+    "a linked article with no coordinates is still used",
+    articleIsAboutPlace(mashhad, { latitude: null, longitude: null }, { linkedDirectly: true }) === true,
   );
   check(
     "a place without coordinates gets no borrowed words",

@@ -143,7 +143,6 @@ export function articleIsAboutPlace(
   options: { linkedDirectly?: boolean; maxKm?: number } = {},
 ): boolean {
   if (!article) return false;
-  if (options.linkedDirectly) return true;
   const placeLat = Number(place.latitude);
   const placeLon = Number(place.longitude);
   const articleLat = Number(article.latitude);
@@ -151,8 +150,9 @@ export function articleIsAboutPlace(
   const valid = (latitude: number, longitude: number) =>
     Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0 && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
   if (!valid(placeLat, placeLon)) return false;
-  // No coordinate in the article: we cannot prove it is the same place.
-  if (!valid(articleLat, articleLon)) return false;
+  // No coordinate in the article: it can only be used when the place itself
+  // pointed at that article; a name match alone proves nothing.
+  if (!valid(articleLat, articleLon)) return Boolean(options.linkedDirectly);
   return haversineKm(placeLat, placeLon, articleLat, articleLon) <= (options.maxKm ?? SAME_PLACE_MAX_KM);
 }
 
