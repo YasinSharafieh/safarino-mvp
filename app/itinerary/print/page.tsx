@@ -111,8 +111,8 @@ export default function ItineraryPrintPage() {
           .sheet { box-shadow: none !important; margin: 0 !important; border: 0 !important; }
           .day-block { break-before: page; }
           .stop-row { break-inside: avoid; page-break-inside: avoid; }
-          .day-map { max-height: 56mm; overflow: hidden; }
-          .day-map svg { max-height: 56mm; }
+          .day-map { max-height: 82mm; overflow: hidden; }
+          .day-map svg { max-height: 82mm; }
           .stop-text { font-size: 9.5pt; line-height: 1.55; }
           body { background: #fff !important; }
         }
