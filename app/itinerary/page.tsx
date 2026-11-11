@@ -34,6 +34,13 @@ import type { WeatherDay } from "@/lib/weather";
 import WeatherGlyph from "@/components/WeatherGlyph";
 import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
+import BudgetBreakdown from "@/components/BudgetBreakdown";
+import {
+  buildBudgetPlan,
+  readBudgetAssumptions,
+  saveBudgetAssumptions,
+  type BudgetAssumptions,
+} from "@/lib/budget";
 
 type ItineraryResponse = {
   success: boolean;
@@ -86,6 +93,7 @@ function ItineraryContent() {
   const [favoriteFilters, setFavoriteFilters] = useState<FilterOptions>({ query: "", categories: [], sort: "distance" });
   const [editNote, setEditNote] = useState("");
   const [remeasuring, setRemeasuring] = useState(false);
+  const [assumptions, setAssumptions] = useState<BudgetAssumptions>(() => readBudgetAssumptions());
 
   useEffect(() => {
     const sync = () => setFavorites(readFavorites());
@@ -234,11 +242,6 @@ function ItineraryContent() {
       }
       setData(payload);
       setActiveDay(0);
-      try {
-        window.sessionStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(payload));
-      } catch {
-        /* the printable page will rebuild if storage is blocked */
-      }
     } catch {
       setError("ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.");
     } finally {
@@ -274,16 +277,6 @@ function ItineraryContent() {
       .then((payload) => {
         if (cancelled || !payload?.success || !Array.isArray(payload.days)) return;
         setWeather({ mode: payload.mode, days: payload.days, note: payload.note, suggestion: payload.suggestion || null });
-        try {
-          const stored = window.sessionStorage.getItem(ITINERARY_STORAGE_KEY);
-          if (stored) {
-            const parsed = JSON.parse(stored) as Record<string, unknown>;
-            parsed.weather = { mode: payload.mode, days: payload.days, note: payload.note };
-            window.sessionStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(parsed));
-          }
-        } catch {
-          /* the printable page will simply omit the weather line */
-        }
       })
       .catch(() => {
         /* weather is a bonus; the plan stays usable without it */
@@ -293,6 +286,50 @@ function ItineraryContent() {
       controller.abort();
     };
   }, [data, hasStayPin, stayLatitude, stayLongitude, travelData.departureDate]);
+
+  /** The printable book always shows exactly what is on screen, edits included. */
+  useEffect(() => {
+    if (!data) return;
+    try {
+      const payload = weather
+        ? { ...data, weather: { mode: weather.mode, days: weather.days, note: weather.note } }
+        : data;
+      window.sessionStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      /* the printable page will rebuild if storage is blocked */
+    }
+  }, [data, weather]);
+
+  const applyAssumptions = (next: BudgetAssumptions) => {
+    setAssumptions(next);
+    saveBudgetAssumptions(next);
+  };
+
+  /** Money: real picks plus clearly labelled assumptions, all editable. */
+  const budgetPlan = useMemo(() => {
+    const daysOnScreen = data?.days.length || 0;
+    const stopsOnScreen = data?.days.reduce((sum, day) => sum + day.stops.length, 0) || 0;
+    const measuredKm = data
+      ? Math.round(data.days.reduce((sum, day) => sum + day.stops.reduce((inner, stop) => inner + (stop.legKm || 0), 0), 0) * 10) / 10
+      : null;
+    const stayName = typeof stay?.name === "string" ? stay.name : "";
+    const stayNights = Number(stay?.nights);
+    const transport = travelData.transport;
+    const transportLabel = transport
+      ? String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.title as string) || (transport.kind as string) || "وسیلهٔ انتخاب‌شده")
+      : "";
+    return buildBudgetPlan({
+      days: daysOnScreen,
+      stops: stopsOnScreen,
+      cityKm: measuredKm,
+      people: Math.max(1, Number(travelData.travelers) || 1) + Math.max(0, Number(travelData.children) || 0),
+      children: Number(travelData.children) || 0,
+      budgetToman: travelData.budget ? Number(travelData.budget) * 1_000_000 : null,
+      accommodation: stay ? { name: stayName, nights: Number.isFinite(stayNights) ? stayNights : undefined, totalToman: Number(stay?.cost) || null } : null,
+      transport: transport ? { label: transportLabel, totalToman: Number(transport.cost) || null } : null,
+      assumptions,
+    });
+  }, [assumptions, data, stay, travelData.budget, travelData.children, travelData.transport, travelData.travelers]);
 
   const weatherForDay = (index: number): WeatherDay | null => weather?.days[index] || null;
 
@@ -756,6 +793,8 @@ function ItineraryContent() {
                     </div>
                   </motion.div>
                 )}
+
+                <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
 
                 {data.unused.length ? (
                   <p className="mt-4 text-[10px] leading-6 text-slate-500">

@@ -12,7 +12,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:budget": "tsx scripts/test-budget.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

@@ -8,6 +8,7 @@ import { drawDayMap } from "@/lib/day-map";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
+import { buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
 
 type SavedItinerary = {
   success: boolean;
@@ -37,6 +38,7 @@ export default function ItineraryPrintPage() {
   const { travelData, isHydrated } = useTravel();
   const [saved, setSaved] = useState<SavedItinerary | null>(null);
   const [missing, setMissing] = useState(false);
+  const [assumptions, setAssumptions] = useState<BudgetAssumptions | null>(null);
 
   useEffect(() => {
     try {
@@ -52,6 +54,7 @@ export default function ItineraryPrintPage() {
     } catch {
       setMissing(true);
     }
+    setAssumptions(readBudgetAssumptions());
   }, []);
 
   const stay = travelData.accommodation && travelData.accommodation.status === "selected" ? travelData.accommodation : null;
@@ -59,8 +62,20 @@ export default function ItineraryPrintPage() {
   const accommodationCost = Number(stay?.cost) || 0;
   const transportCost = Number(transport?.cost) || 0;
   const budgetToman = (Number(travelData.budget) || 0) * 1_000_000;
-  const rest = Math.max(0, budgetToman - accommodationCost - transportCost);
   const tripDays = saved?.totals.days || Number(travelData.days) || 1;
+
+  const budgetPlanAssumptions = assumptions || readBudgetAssumptions(null);
+  const budgetPlan = buildBudgetPlan({
+    days: saved?.totals.days || tripDays,
+    stops: saved?.totals.stops || 0,
+    cityKm: saved ? saved.totals.km : null,
+    people: Math.max(1, Number(travelData.travelers) || 1) + Math.max(0, Number(travelData.children) || 0),
+    children: Number(travelData.children) || 0,
+    budgetToman: budgetToman || null,
+    accommodation: stay ? { name: String(stay.name || ""), nights: Number(stay.nights) || 0, totalToman: accommodationCost || null } : null,
+    transport: transport ? { label: String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.kind as string) || ""), totalToman: transportCost || null } : null,
+    assumptions: budgetPlanAssumptions,
+  });
 
   const maps = useMemo(() => {
     if (!saved) return {};
@@ -250,32 +265,54 @@ export default function ItineraryPrintPage() {
               <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                 <th className="py-2 font-bold">قلم</th>
                 <th className="py-2 font-bold">مبلغ</th>
+                <th className="py-2 font-bold">نوع</th>
                 <th className="py-2 font-bold">توضیح</th>
               </tr>
             </thead>
             <tbody className="text-slate-800">
-              <tr className="border-b border-slate-100">
-                <td className="py-2 font-bold">اقامتگاه</td>
-                <td className="py-2">{accommodationCost ? toman(accommodationCost) : "—"}</td>
-                <td className="py-2 text-[11px] text-slate-500">{stay ? `${String(stay.name || "")} · ${fa(Number(stay.nights) || 0)} شب` : "انتخاب نشده"}</td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="py-2 font-bold">حمل‌ونقل</td>
-                <td className="py-2">{transportCost ? toman(transportCost) : "—"}</td>
-                <td className="py-2 text-[11px] text-slate-500">{transport ? String((transport.providerLabel as string) || (transport.kind as string) || "") : "انتخاب نشده"}</td>
+              {budgetPlan.lines.map((line) => (
+                <tr key={line.id} className="border-b border-slate-100">
+                  <td className="py-2 font-bold">{line.label}</td>
+                  <td className="py-2">{line.amount === null ? "—" : toman(line.amount)}</td>
+                  <td className="py-2 text-[11px]">
+                    {line.kind === "real" ? (
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-800">قیمت واقعی</span>
+                    ) : line.kind === "estimate" ? (
+                      <span className="rounded bg-cyan-50 px-1.5 py-0.5 font-bold text-cyan-800">تخمین</span>
+                    ) : (
+                      <span className="rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-800">انتخاب نشده</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-[11px] leading-6 text-slate-500">{line.detail}</td>
+                </tr>
+              ))}
+              <tr className="border-b border-slate-100 bg-slate-50">
+                <td className="py-2 font-black">جمع سفر</td>
+                <td className="py-2 font-black">{toman(budgetPlan.total)}</td>
+                <td className="py-2 text-[11px] text-slate-500" colSpan={2}>
+                  {toman(budgetPlan.perDay)} در روز · {toman(budgetPlan.perTraveler)} برای هر نفر
+                </td>
               </tr>
               <tr className="border-b border-slate-100">
                 <td className="py-2 font-bold">بودجهٔ کل سفر</td>
-                <td className="py-2">{budgetToman ? toman(budgetToman) : "—"}</td>
-                <td className="py-2 text-[11px] text-slate-500">عددی که خودتان وارد کرده‌اید</td>
+                <td className="py-2">{budgetPlan.budget === null ? "—" : toman(budgetPlan.budget)}</td>
+                <td className="py-2 text-[11px] text-slate-500" colSpan={2}>عددی که خودتان در مرحلهٔ اقامتگاه وارد کرده‌اید</td>
               </tr>
               <tr>
-                <td className="py-2 font-bold">باقی‌مانده برای خوراک و بازدید</td>
-                <td className="py-2 font-black text-cyan-800">{budgetToman ? toman(rest) : "—"}</td>
-                <td className="py-2 text-[11px] text-slate-500">بودجه منهای اقامتگاه و حمل‌ونقل</td>
+                <td className="py-2 font-bold">{budgetPlan.over ? "بیشتر از بودجه" : "باقی‌ماندهٔ بودجه"}</td>
+                <td className={`py-2 font-black ${budgetPlan.over ? "text-rose-700" : "text-cyan-800"}`}>
+                  {budgetPlan.remaining === null ? "—" : toman(Math.abs(budgetPlan.remaining))}
+                </td>
+                <td className="py-2 text-[11px] text-slate-500" colSpan={2}>بودجه منهای جمع سفر</td>
               </tr>
             </tbody>
           </table>
+          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-6 text-slate-600">
+            <p className="font-bold text-slate-700">فرض‌های حساب‌شده (قابل تغییر در نسخهٔ آنلاین)</p>
+            <p>
+              هر کیلومتر رانندگی در شهر {toman(budgetPlanAssumptions.cityCostPerKm)} · خوراک هر نفر در روز {toman(budgetPlanAssumptions.foodPerPersonPerDay)} · بلیت هر جاذبه برای هر نفر {toman(budgetPlanAssumptions.ticketPerStop)} · سوغات و متفرقه هر نفر در روز {toman(budgetPlanAssumptions.extrasPerPersonPerDay)}
+            </p>
+          </div>
           <p className="mt-4 text-[10px] leading-6 text-slate-500">
             قیمت‌های اقامتگاه و حمل‌ونقل همان چیزی است که در لحظهٔ انتخاب از منبع اصلی خوانده شد؛ ممکن است تغییر کند. هیچ هزینه‌ای تخمینی به‌عنوان واقعیت نوشته نشده است.
           </p>
