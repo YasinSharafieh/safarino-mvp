@@ -628,7 +628,7 @@ export default function PlanPage() {
               )}
               <p className="mt-3 text-[10px] leading-6 text-slate-500">
                 {distanceMeta?.note || "فاصله‌ها از مختصات واقعی اقامتگاه انتخابی و مختصات منتشرشدهٔ هر جاذبه محاسبه می‌شود."}
-                {distanceMeta && !distanceMeta.neshanConfigured ? " چون کلید نشان وصل نیست، مسیریابی از OpenStreetMap گرفته می‌شود." : ""}
+                {distanceMeta && !distanceMeta.neshanConfigured ? " فاصله‌های این بخش با OpenStreetMap گرفته شده است." : ""}
               </p>
               <div className="mt-4">
   
