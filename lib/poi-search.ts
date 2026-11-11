@@ -295,7 +295,7 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
     };
   }
 
-  const cacheKey = `safarino:pois:v4:${normalizeTerm(city).replace(/\s+/g, "-")}`;
+  const cacheKey = `safarino:pois:v5:${normalizeTerm(city).replace(/\s+/g, "-")}`;
   const cached = await getProviderCache<PoiSearchResult & { pois: PoiWithMeta[] }>(cacheKey);
   if (cached && Array.isArray(cached.pois) && cached.pois.length) {
     return { ...cached, pois: cached.pois.slice(0, limit) };

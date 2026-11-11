@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     : null;
 
   const neshanReadyForCache = neshanAvailable();
-  const cacheKey = `safarino:itinerary:v5:${neshanReadyForCache ? "neshan" : "keyless"}:${city}:${days}:${stopsPerDay}:${
+  const cacheKey = `safarino:itinerary:v6:${neshanReadyForCache ? "neshan" : "keyless"}:${city}:${days}:${stopsPerDay}:${
     origin ? `${origin.latitude.toFixed(3)},${origin.longitude.toFixed(3)}` : "no-origin"
   }`;
   if (!Array.isArray(body.places)) {
