@@ -215,6 +215,10 @@ export function buildItinerary(
   const dayCount = Math.max(1, Math.min(days, Math.ceil(ranked.length / 2)));
   const seeds = pickSeeds(ranked, dayCount);
   const capacity = balancedCapacity(ranked.length, dayCount, stopsPerDay);
+  // The best-known places always make the plan; only the rest can fall outside.
+  const totalCapacity = capacity.reduce((sum, value) => sum + value, 0);
+  const selected = ranked.slice(0, totalCapacity);
+  const leftOut = ranked.slice(totalCapacity);
 
   // Assign places farthest-from-any-start-point first: the awkward ones choose
   // while there is still room, and the easy ones fill the gaps. Each day's
@@ -223,10 +227,10 @@ export function buildItinerary(
   const buckets: ItineraryPlace[][] = seeds.map(() => []);
   const overflow: ItineraryPlace[] = [];
   const difficulty = new Map<string, number>();
-  ranked.forEach((place) => {
+  selected.forEach((place) => {
     difficulty.set(place.id, Math.min(...seeds.map((seed) => distanceKm(seed, place))));
   });
-  [...ranked]
+  [...selected]
     .sort((a, b) => (difficulty.get(b.id) || 0) - (difficulty.get(a.id) || 0))
     .forEach((place) => {
       let target = -1;
@@ -289,7 +293,7 @@ export function buildItinerary(
 
   return {
     days: itineraryDays,
-    unused: [...clean.filter((place) => !usedIds.has(place.id)), ...overflow].filter(
+    unused: [...leftOut, ...clean.filter((place) => !usedIds.has(place.id)), ...overflow].filter(
       (place, index, list) => list.findIndex((candidate) => candidate.id === place.id) === index,
     ),
     stopsPerDay,

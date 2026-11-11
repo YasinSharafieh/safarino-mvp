@@ -30,6 +30,7 @@ check("no day is overloaded", plan.days.every((day) => day.stops.length <= 4));
 const counts = plan.days.map((day) => day.stops.length);
 check("days are balanced, not one heavy and one empty", Math.max(...counts) - Math.min(...counts) <= 1, counts.join(" / "));
 check("every stop keeps its real coordinates", plan.days.flatMap((day) => day.stops).every((stop) => stop.place.latitude !== 0));
+check("the best-known places are always included", plan.days.flatMap((day) => day.stops.map((stop) => stop.place.id)).includes("haram"));
 check("nothing was invented", plan.days.flatMap((day) => day.stops).every((stop) => places.some((place) => place.id === stop.place.id)));
 
 console.log("Geography: a day should stay in one part of town");
