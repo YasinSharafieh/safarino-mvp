@@ -13,7 +13,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:budget": "tsx scripts/test-budget.ts"
+    "test:budget": "tsx scripts/test-budget.ts",
+    "test:share": "tsx scripts/test-share.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

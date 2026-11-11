@@ -35,6 +35,7 @@ import WeatherGlyph from "@/components/WeatherGlyph";
 import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import BudgetBreakdown from "@/components/BudgetBreakdown";
+import ShareTrip from "@/components/ShareTrip";
 import {
   buildBudgetPlan,
   readBudgetAssumptions,
@@ -330,6 +331,34 @@ function ItineraryContent() {
       assumptions,
     });
   }, [assumptions, data, stay, travelData.budget, travelData.children, travelData.transport, travelData.travelers]);
+
+  /** Exactly what is on the screen, in the shape the link keeps. */
+  const sharePayload = useMemo(() => {
+    if (!data) return null;
+    return {
+      v: 1 as const,
+      city: data.city,
+      createdAt: new Date().toISOString(),
+      days: data.days,
+      totals: {
+        km: Math.round(data.days.reduce((sum, day) => sum + day.totalKm, 0) * 10) / 10,
+        driveMinutes: data.days.reduce((sum, day) => sum + day.totalDriveMinutes, 0),
+        stops: data.days.reduce((sum, day) => sum + day.stops.length, 0),
+        days: data.days.length,
+      },
+      engine: data.engine,
+      note: data.note,
+      weather: weather ? { mode: weather.mode, note: weather.note, days: weather.days } : null,
+      money: {
+        total: budgetPlan.total,
+        real: budgetPlan.realTotal,
+        estimate: budgetPlan.estimateTotal,
+        budget: budgetPlan.budget,
+        remaining: budgetPlan.remaining,
+        lines: budgetPlan.lines.map((line) => ({ label: line.label, amount: line.amount, kind: line.kind })),
+      },
+    };
+  }, [budgetPlan, data, weather]);
 
   const weatherForDay = (index: number): WeatherDay | null => weather?.days[index] || null;
 
@@ -795,6 +824,7 @@ function ItineraryContent() {
                 )}
 
                 <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
+                {sharePayload ? <ShareTrip trip={sharePayload} /> : null}
 
                 {data.unused.length ? (
                   <p className="mt-4 text-[10px] leading-6 text-slate-500">
