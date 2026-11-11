@@ -27,6 +27,8 @@ const plan = buildItinerary(places, { days: 2, stopsPerDay: 4, origin: stay });
 check("two days were built", plan.days.length === 2, `${plan.days.length}`);
 check("no place is used twice", new Set(plan.days.flatMap((day) => day.stops.map((stop) => stop.place.id))).size === plan.days.flatMap((day) => day.stops.length > 0 ? day.stops.map((stop) => stop.place.id) : []).length);
 check("no day is overloaded", plan.days.every((day) => day.stops.length <= 4));
+const counts = plan.days.map((day) => day.stops.length);
+check("days are balanced, not one heavy and one empty", Math.max(...counts) - Math.min(...counts) <= 1, counts.join(" / "));
 check("every stop keeps its real coordinates", plan.days.flatMap((day) => day.stops).every((stop) => stop.place.latitude !== 0));
 check("nothing was invented", plan.days.flatMap((day) => day.stops).every((stop) => places.some((place) => place.id === stop.place.id)));
 

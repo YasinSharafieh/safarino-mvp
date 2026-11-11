@@ -143,6 +143,14 @@ function pickSeeds(places: ItineraryPlace[], count: number): ItineraryPlace[] {
   return seeds;
 }
 
+/** Splits the available places evenly, and never above the daily limit. */
+function balancedCapacity(total: number, days: number, stopsPerDay: number): number[] {
+  const usable = Math.min(total, days * stopsPerDay);
+  const base = Math.floor(usable / days);
+  const remainder = usable % days;
+  return Array.from({ length: days }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
 /** Nearest-neighbour order from the accommodation, so the day never zig-zags. */
 function orderStops(places: ItineraryPlace[], origin: Coordinates | null): ItineraryPlace[] {
   const remaining = [...places];
@@ -206,39 +214,28 @@ export function buildItinerary(
   const ranked = [...clean].sort((a, b) => popularity(b) - popularity(a));
   const dayCount = Math.max(1, Math.min(days, Math.ceil(ranked.length / 2)));
   const seeds = pickSeeds(ranked, dayCount);
+  const capacity = balancedCapacity(ranked.length, dayCount, stopsPerDay);
 
-  // Every place goes to the nearest starting point.
+  // Assign every place to the nearest day that still has room. Balanced on
+  // purpose: no day ends up with one stop while another carries eight.
   const buckets: ItineraryPlace[][] = seeds.map(() => []);
+  const overflow: ItineraryPlace[] = [];
   ranked.forEach((place) => {
-    let target = 0;
+    let target = -1;
     let best = Infinity;
     seeds.forEach((seed, index) => {
+      if (buckets[index].length >= capacity[index]) return;
       const cost = distanceKm(seed, place);
       if (cost < best) {
         best = cost;
         target = index;
       }
     });
-    buckets[target].push(place);
+    if (target >= 0) buckets[target].push(place);
+    else overflow.push(place);
   });
 
-  // Balance: no day may hold more than `stopsPerDay`. Everything that does not
-  // fit is reported as "not in this plan" instead of stretching a day to 14
-  // stops — an overloaded day is a worse trip, not a fuller one.
-  const overflow: ItineraryPlace[] = [];
-  buckets.forEach((bucket) => {
-    // Keep the most notable places when a cluster is too big.
-    bucket.sort((a, b) => popularity(b) - popularity(a));
-    if (bucket.length > stopsPerDay) overflow.push(...bucket.splice(stopsPerDay));
-  });
-  // A day that ended up empty can still take a place from the overflow.
-  overflow.slice().forEach((place) => {
-    const emptyIndex = buckets.findIndex((bucket, index) => bucket.length === 0 && index < dayCount);
-    if (emptyIndex < 0) return;
-    buckets[emptyIndex].push(place);
-    overflow.splice(overflow.indexOf(place), 1);
-  });
-
+  // Days that stay empty (a tiny city, for example) are simply dropped.
   const usedIds = new Set<string>();
   const itineraryDays: ItineraryDay[] = buckets
     .filter((bucket) => bucket.length)
