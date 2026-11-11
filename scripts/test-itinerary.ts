@@ -4,6 +4,8 @@
  */
 import { buildItinerary, distanceKm, rescheduleDay, visitMinutes } from "../lib/itinerary";
 import { drawDayMap } from "../lib/day-map";
+import fs from "node:fs";
+import path from "node:path";
 
 let failures = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -81,6 +83,18 @@ check("map is drawn", Boolean(map && map.svg.startsWith("<svg")));
 check("map shows every stop", Boolean(map && (map.svg.match(/<circle/g) || []).length === plan.days[0].stops.length));
 check("map contains a scale bar and north arrow", Boolean(map && map.svg.includes("کیلومتر") && map.svg.includes("شمال")));
 check("no map without coordinates", drawDayMap([]) === null);
+
+console.log("Project layout guards");
+const FORBIDDEN = new Set(["build", "out", "dist", "target", "coverage"]);
+function walk(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? walk(full) : [full];
+  });
+}
+const offenders = ["app", "components", "lib"].flatMap((dir) => walk(dir)).filter((file) => file.split("/").some((part) => FORBIDDEN.has(part)));
+check("no source file sits in a folder named build/out/dist/target", offenders.length === 0, offenders.slice(0, 3).join(", "));
 
 if (failures) {
   console.error(`\n${failures} check(s) failed.`);

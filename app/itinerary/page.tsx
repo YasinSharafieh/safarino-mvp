@@ -84,7 +84,7 @@ function ItineraryContent() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/itinerary/build", {
+      const response = await fetch("/api/itinerary/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
