@@ -8,7 +8,7 @@ import { drawDayMap } from "@/lib/day-map";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
-import { buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
+import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
 
 type SavedItinerary = {
   success: boolean;
@@ -41,6 +41,7 @@ export default function ItineraryPrintPage() {
   const [assumptions, setAssumptions] = useState<BudgetAssumptions | null>(null);
 
   useEffect(() => {
+    setAssumptions(readBudgetAssumptions());
     try {
       const raw = window.sessionStorage.getItem(ITINERARY_STORAGE_KEY);
       if (raw) {
@@ -54,7 +55,6 @@ export default function ItineraryPrintPage() {
     } catch {
       setMissing(true);
     }
-    setAssumptions(readBudgetAssumptions());
   }, []);
 
   const stay = travelData.accommodation && travelData.accommodation.status === "selected" ? travelData.accommodation : null;
@@ -64,7 +64,7 @@ export default function ItineraryPrintPage() {
   const budgetToman = (Number(travelData.budget) || 0) * 1_000_000;
   const tripDays = saved?.totals.days || Number(travelData.days) || 1;
 
-  const budgetPlanAssumptions = assumptions || readBudgetAssumptions(null);
+  const budgetPlanAssumptions = assumptions || DEFAULT_BUDGET_ASSUMPTIONS;
   const budgetPlan = buildBudgetPlan({
     days: saved?.totals.days || tripDays,
     stops: saved?.totals.stops || 0,

@@ -133,6 +133,11 @@ check("the printed book builds the same budget", print.includes("buildBudgetPlan
 check("the printed book reads the traveller's own assumptions", print.includes("readBudgetAssumptions("));
 check("the online card is editable", component.includes("onAssumptionsChange("));
 check("the card labels estimates as estimates", component.includes("تخمین با فرض شما"));
+check(
+  "the printed book reads assumptions before it can stop early",
+  print.indexOf("setAssumptions(readBudgetAssumptions())") < print.indexOf("setSaved(parsed)"),
+);
+check("the printed book never falls back to a null storage", !print.includes("readBudgetAssumptions(null)"));
 check("the printable payload follows the edits", itinerary.includes("JSON.stringify(payload)") && itinerary.includes("[data, weather]"));
 
 if (failures) {
