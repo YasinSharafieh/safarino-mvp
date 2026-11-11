@@ -17,7 +17,8 @@
     "test:share": "tsx scripts/test-share.ts",
     "test:font": "tsx scripts/test-font.ts",
     "test:checklist": "tsx scripts/test-checklist.ts",
-    "test:site": "tsx scripts/test-site.ts"
+    "test:site": "tsx scripts/test-site.ts",
+    "test:offline": "tsx scripts/test-offline.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

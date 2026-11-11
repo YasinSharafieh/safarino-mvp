@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { siteUrl } from "@/lib/site";
 import type { ReactNode } from "react";
 import { TravelProvider } from "./context/TravelContext";
+import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">
+        <ServiceWorkerRegistrar />
         <TravelProvider>{children}</TravelProvider>
       </body>
     </html>

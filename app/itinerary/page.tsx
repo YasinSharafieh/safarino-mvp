@@ -37,6 +37,7 @@ import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
+import OfflineKeeper from "@/components/OfflineKeeper";
 import {
   buildBudgetPlan,
   readBudgetAssumptions,
@@ -334,6 +335,18 @@ function ItineraryContent() {
   }, [assumptions, data, stay, travelData.budget, travelData.children, travelData.transport, travelData.travelers]);
 
   /** Exactly what is on the screen, in the shape the link keeps. */
+  /** Pictures of the planned places, so the plan looks right without network. */
+  const offlineImages = useMemo(() => {
+    if (!data) return [];
+    return Array.from(
+      new Set(
+        data.days
+          .flatMap((day) => day.stops.map((stop) => stop.place.imageUrl))
+          .filter((url): url is string => typeof url === "string" && url.length > 0 && url.length < 500),
+      ),
+    ).slice(0, 40);
+  }, [data]);
+
   const sharePayload = useMemo(() => {
     if (!data) return null;
     return {
@@ -827,6 +840,7 @@ function ItineraryContent() {
                 <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
                 {sharePayload ? <ShareTrip trip={sharePayload} /> : null}
                 <TripChecklist departureDate={travelData.departureDate} />
+                <OfflineKeeper warmUrls={offlineImages} />
 
                 {data.unused.length ? (
                   <p className="mt-4 text-[10px] leading-6 text-slate-500">
