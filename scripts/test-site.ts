@@ -31,17 +31,23 @@ check("provider user agents come from one place", !files.some((file) => /User-Ag
 check("the AI referer is not localhost", !read("app/api/plan/route.ts").includes("localhost:3000"));
 
 console.log("The helpers behave");
-check("without configuration there is still a safe address", siteUrl().startsWith("http"));
+check("the hosting platform address is used when nothing is configured", (() => {
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+  process.env.VERCEL_PROJECT_PRODUCTION_URL = "safarino-mvp.vercel.app";
+  const value = siteUrl();
+  delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return value === "https://safarino-mvp.vercel.app";
+})(), "so a fresh deployment is never stuck on localhost");
+check("without any configuration there is still a safe address", siteUrl().startsWith("http"));
 check("the reference looks like an address", siteReference().includes("Safarino/1.0 (") && siteReference().includes("https://"));
 const host = hostReference();
 check("the host has no scheme and no trailing slash", !host.includes("://") && !host.endsWith("/"), host);
 process.env.NEXT_PUBLIC_SITE_URL = "https://safarino.ir/";
 check("a configured address is respected", siteUrl() === "https://safarino.ir", siteUrl());
 check("the configured host reaches the reference", hostReference() === "safarino.ir", hostReference());
-check("a bad configured value is ignored", (() => {
-  process.env.NEXT_PUBLIC_SITE_URL = "not a url";
-  const value = siteUrl();
-  return value !== "not a url";
+check("a value without a scheme is fixed up", (() => {
+  process.env.NEXT_PUBLIC_SITE_URL = "safarino.ir";
+  return siteUrl() === "https://safarino.ir";
 })());
 process.env.NEXT_PUBLIC_SITE_URL = "https://safarino.ir";
 const fromRequest = siteUrlFrom(new Request("https://preview.example.com/api/share"));
