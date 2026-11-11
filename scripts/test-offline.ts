@@ -27,7 +27,12 @@ check("images are kept on purpose", sw.includes('"/api/neshan/static"') && sw.in
 check("it caps what it keeps", sw.includes("IMAGE_LIMIT") && sw.includes("PAGES_LIMIT"));
 check("it clears old versions on activate", sw.includes("caches.keys()") && sw.includes("caches.delete"));
 check("it gives up on a slow network instead of hanging", sw.includes("NAVIGATION_TIMEOUT_MS") && sw.includes("Promise.race"));
-check("a missing page falls back to the offline page", sw.includes("OFFLINE_URL") && sw.includes("/offline"));
+check("a missing page falls back to the offline page", sw.includes("OFFLINE_URL") && sw.includes('OFFLINE_URL = "/offline.html"'));
+const fallback = fs.readFileSync("public/offline.html", "utf8");
+check("the fallback page needs no JavaScript", !/<script[^>]*src=/.test(fallback) && fallback.includes("<style>"));
+check("the fallback page is Persian and right-to-left", fallback.includes('lang="fa"') && fallback.includes('dir="rtl"'));
+check("the fallback page explains itself", fallback.includes("اینترنتی نیست"));
+check("the fallback page offers the saved plan", fallback.includes('href="/itinerary"'));
 check("only same-origin requests are handled", sw.includes("url.origin !== self.location.origin"));
 check("it can warm the pictures before a trip", sw.includes('data.type === "warm"') && sw.includes("warmUrls"));
 

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#071521" />
+<title>بدون اینترنت · سفرینو</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; padding: 24px 16px;
+    font-family: Vazirmatn, ui-sans-serif, system-ui, "Segoe UI", Tahoma, sans-serif;
+    background: radial-gradient(ellipse at top, #12364a 0%, #071521 60%);
+    color: #e7ecff; display: grid; place-items: center;
+  }
+  .card {
+    width: 100%; max-width: 520px; border-radius: 26px; padding: 22px;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35); backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .mark {
+    width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center;
+    background: linear-gradient(140deg, #22d3ee, #0d9488); color: #05202c; font-weight: 900; font-size: 18px;
+  }
+  .brand b { display: block; font-size: 14px; }
+  .brand span { display: block; font-size: 9px; letter-spacing: 0.3em; color: rgba(165, 243, 252, 0.7); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px;
+    font-size: 10px; font-weight: 700; color: #fde68a;
+    border: 1px solid rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.12);
+  }
+  h1 { font-size: 21px; margin: 14px 0 8px; }
+  p { font-size: 12px; line-height: 1.9; color: #a7b6c8; margin: 0 0 10px; }
+  ul { margin: 0 0 14px; padding: 0; list-style: none; }
+  li { font-size: 11.5px; line-height: 1.9; color: #cbd5e1; }
+  li::before { content: "•"; color: #5eead4; margin-inline-end: 6px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  a, button {
+    font: inherit; cursor: pointer; border-radius: 12px; padding: 10px 14px; font-size: 11.5px;
+    font-weight: 800; text-decoration: none; border: 1px solid transparent;
+  }
+  .primary { background: #22d3ee; color: #05202c; border-color: #22d3ee; }
+  .ghost { background: rgba(255, 255, 255, 0.06); color: #e2e8f0; border-color: rgba(255, 255, 255, 0.14); }
+  .foot { margin-top: 14px; font-size: 10px; line-height: 1.8; color: #64748b; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="mark">س</div>
+      <div>
+        <b>سفرینو</b>
+        <span>SAFARINO</span>
+      </div>
+    </div>
+
+    <span class="chip">بدون اینترنت</span>
+    <h1>فعلاً اینترنتی نیست</h1>
+    <p>
+      این صفحه قبلاً روی این دستگاه باز نشده، پس نسخهٔ آفلاین ندارد. صفحه‌هایی که باز کرده‌اید
+      (مثل برنامهٔ روزبه‌روز) از روی همین دستگاه باز می‌شوند.
+    </p>
+    <ul>
+      <li>برنامهٔ سفر ذخیره‌شده را می‌توانید از صفحهٔ برنامهٔ سفر ببینید.</li>
+      <li>جست‌وجوی زنده، قیمت‌ها و هوای روزهای سفر آفلاین به‌روز نمی‌شوند و چیزی از خودمان نمی‌سازیم.</li>
+      <li>فاصله و زمان رانندگی همان چیزی است که آخرین بار اندازه‌گیری شد.</li>
+    </ul>
+    <div class="actions">
+      <button class="primary" type="button" onclick="location.reload()">تلاش دوباره</button>
+      <a class="ghost" href="/itinerary">برنامهٔ سفر</a>
+      <a class="ghost" href="/">صفحهٔ اصلی</a>
+    </div>
+    <p class="foot">
+      وقتی اینترنت داشتید، در صفحهٔ برنامهٔ سفر دکمهٔ «ذخیره برای آفلاین» را بزنید تا همین برنامه با
+      عکس‌هایش روی دستگاه بماند.
+    </p>
+  </main>
+</body>
+</html>

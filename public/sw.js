@@ -20,7 +20,8 @@ const VERSION = "safarino-v1";
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const IMAGE_CACHE = `${VERSION}-images`;
-const OFFLINE_URL = "/offline";
+/** A standalone page with no JavaScript, so it always renders offline. */
+const OFFLINE_URL = "/offline.html";
 const IMAGE_LIMIT = 160;
 const PAGES_LIMIT = 40;
 const NAVIGATION_TIMEOUT_MS = 6000;
@@ -35,7 +36,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(ASSET_CACHE);
       await Promise.all(
-        ["/offline", "/fonts/Vazirmatn-Variable.woff2", "/manifest.webmanifest"].map(async (url) => {
+        [OFFLINE_URL, "/fonts/Vazirmatn-Variable.woff2", "/manifest.webmanifest"].map(async (url) => {
           try {
             await cache.add(new Request(url, { cache: "reload" }));
           } catch {
