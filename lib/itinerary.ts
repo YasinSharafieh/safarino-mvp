@@ -216,24 +216,40 @@ export function buildItinerary(
   const seeds = pickSeeds(ranked, dayCount);
   const capacity = balancedCapacity(ranked.length, dayCount, stopsPerDay);
 
-  // Assign every place to the nearest day that still has room. Balanced on
-  // purpose: no day ends up with one stop while another carries eight.
+  // Assign places farthest-from-any-start-point first: the awkward ones choose
+  // while there is still room, and the easy ones fill the gaps. Each day's
+  // centre is updated as it grows, so a day gravitates to one part of town.
+  const centres = seeds.map((seed) => ({ latitude: seed.latitude, longitude: seed.longitude }));
   const buckets: ItineraryPlace[][] = seeds.map(() => []);
   const overflow: ItineraryPlace[] = [];
+  const difficulty = new Map<string, number>();
   ranked.forEach((place) => {
-    let target = -1;
-    let best = Infinity;
-    seeds.forEach((seed, index) => {
-      if (buckets[index].length >= capacity[index]) return;
-      const cost = distanceKm(seed, place);
-      if (cost < best) {
-        best = cost;
-        target = index;
-      }
-    });
-    if (target >= 0) buckets[target].push(place);
-    else overflow.push(place);
+    difficulty.set(place.id, Math.min(...seeds.map((seed) => distanceKm(seed, place))));
   });
+  [...ranked]
+    .sort((a, b) => (difficulty.get(b.id) || 0) - (difficulty.get(a.id) || 0))
+    .forEach((place) => {
+      let target = -1;
+      let best = Infinity;
+      centres.forEach((centre, index) => {
+        if (buckets[index].length >= capacity[index]) return;
+        const cost = distanceKm(centre, place);
+        if (cost < best) {
+          best = cost;
+          target = index;
+        }
+      });
+      if (target < 0) {
+        overflow.push(place);
+        return;
+      }
+      buckets[target].push(place);
+      const count = buckets[target].length;
+      centres[target] = {
+        latitude: (centres[target].latitude * (count - 1) + place.latitude) / count,
+        longitude: (centres[target].longitude * (count - 1) + place.longitude) / count,
+      };
+    });
 
   // Days that stay empty (a tiny city, for example) are simply dropped.
   const usedIds = new Set<string>();
