@@ -127,8 +127,8 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   const cardWidth = columns.length ? (WIDTH - 128 - gap * (columns.length - 1)) / columns.length : 0;
   columns.forEach((day, index) => {
     const x = right - cardWidth - index * (cardWidth + gap);
-    const y = 230;
-    const height = 232;
+    const y = 216;
+    const height = 228;
     ctx.fillStyle = "rgba(255,255,255,0.055)";
     rounded(ctx, x, y, cardWidth, height, 22);
     ctx.fill();
@@ -165,7 +165,7 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   });
 
   // Money line, with its honesty label.
-  const moneyY = 468;
+  const moneyY = 492;
   if (trip.money) {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(203,229,240,0.66)";
