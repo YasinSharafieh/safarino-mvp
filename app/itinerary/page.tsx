@@ -33,7 +33,7 @@ import { FAVORITES_EVENT, readFavorites, toggleFavorite, type FavoritePlace } fr
 import type { WeatherDay } from "@/lib/weather";
 import WeatherGlyph from "@/components/WeatherGlyph";
 import { formatJalaliDate } from "@/lib/jalali";
-import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
+import { ITINERARY_OFFLINE_KEY, ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
@@ -97,6 +97,8 @@ function ItineraryContent() {
   const [editNote, setEditNote] = useState("");
   const [remeasuring, setRemeasuring] = useState(false);
   const [assumptions, setAssumptions] = useState<BudgetAssumptions>(() => readBudgetAssumptions());
+  /** The plan kept on this device, shown with its date when there is no network. */
+  const [offlineCopy, setOfflineCopy] = useState<{ savedAt: string } | null>(null);
 
   useEffect(() => {
     const sync = () => setFavorites(readFavorites());
@@ -222,6 +224,22 @@ function ItineraryContent() {
   );
   const [activeDay, setActiveDay] = useState(0);
 
+  /** Reads the plan this device kept, so a traveller with no network sees it. */
+  const restoreOfflineCopy = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem(ITINERARY_OFFLINE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { savedAt?: string; plan?: ItineraryResponse };
+      if (!parsed?.plan?.success || !Array.isArray(parsed.plan.days) || !parsed.plan.days.length) return null;
+      setData(parsed.plan);
+      setActiveDay(0);
+      setOfflineCopy({ savedAt: parsed.savedAt || "" });
+      return parsed.plan;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const build = useCallback(async () => {
     if (!city) return;
     setLoading(true);
@@ -240,17 +258,25 @@ function ItineraryContent() {
       const payload = (await response.json()) as ItineraryResponse;
       if (!payload.success) {
         setError(payload.error || "ساختن برنامهٔ روزبه‌روز انجام نشد.");
-        setData(null);
+        restoreOfflineCopy();
         return;
       }
       setData(payload);
       setActiveDay(0);
+      setOfflineCopy(null);
     } catch {
-      setError("ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.");
+      // No network: the plan this device kept is better than an empty page,
+      // and it is clearly labelled as a saved copy.
+      const restored = restoreOfflineCopy();
+      setError(
+        restored
+          ? "اینترنت در دسترس نیست؛ نسخهٔ ذخیره‌شده روی همین دستگاه نشان داده می‌شود."
+          : "ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.",
+      );
     } finally {
       setLoading(false);
     }
-  }, [city, days, hasStayPin, stayLatitude, stayLongitude, stopsPerDay]);
+  }, [city, days, hasStayPin, restoreOfflineCopy, stayLatitude, stayLongitude, stopsPerDay]);
 
   useEffect(() => {
     if (!isHydrated || !city) return;
@@ -298,6 +324,8 @@ function ItineraryContent() {
         ? { ...data, weather: { mode: weather.mode, days: weather.days, note: weather.note } }
         : data;
       window.sessionStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(payload));
+      // The same plan is kept for the next visit without a network.
+      window.localStorage.setItem(ITINERARY_OFFLINE_KEY, JSON.stringify({ savedAt: new Date().toISOString(), plan: payload }));
     } catch {
       /* the printable page will rebuild if storage is blocked */
     }
@@ -493,6 +521,14 @@ function ItineraryContent() {
               </p>
             )}
             {error && <p className="mt-5 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4 text-[11px] leading-6 text-rose-100">{error}</p>}
+            {offlineCopy ? (
+              <p className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[10px] leading-6 text-amber-100">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                نسخهٔ ذخیره‌شده روی این دستگاه
+                {offlineCopy.savedAt ? ` (${formatJalaliDate(offlineCopy.savedAt.slice(0, 10))})` : ""}
+                — کیلومترها و قیمت‌ها همان لحظه‌ای است که این برنامه ساخته شد، نه امروز.
+              </p>
+            ) : null}
             {loading && !data && (
               <div className="mt-6 flex items-center gap-2 text-[11px] text-cyan-100">
                 <LoaderCircle className="h-4 w-4 animate-spin" />

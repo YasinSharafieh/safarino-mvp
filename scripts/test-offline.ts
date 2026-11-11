@@ -57,6 +57,14 @@ check("the button says what it does", keeper.includes("ذخیره برای آف�
 check("the offer explains what is not available offline", keeper.includes("آفلاین کار نمی‌کنند"));
 check("keeping it uses the traveller's own pictures", keeper.includes("warmUrls") && keeper.includes("mode: \"no-cors\""));
 
+console.log("The plan itself survives without a network");
+check("the page keeps a copy on the device", itinerary.includes("ITINERARY_OFFLINE_KEY"));
+check("it reads that copy when the network fails", itinerary.includes("restoreOfflineCopy"));
+check("a saved copy is shown with its date", itinerary.includes("نسخهٔ ذخیره‌شده روی این دستگاه"));
+check("it says the numbers are from that moment", itinerary.includes("نه امروز"));
+const storage = fs.readFileSync("lib/itinerary-storage.ts", "utf8");
+check("the key is defined once", storage.includes("ITINERARY_OFFLINE_KEY"));
+
 console.log("The font ships with the site, so offline text still looks right");
 check("the font file is local", fs.existsSync("public/fonts/Vazirmatn-Variable.woff2"));
 check("the worker keeps the font", sw.includes("/fonts/Vazirmatn-Variable.woff2"));
