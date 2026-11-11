@@ -83,20 +83,25 @@ export function drawDayMap(points: MapPoint[], options: { title?: string } = {})
     .map((point, index) => {
       const cx = x(point.longitude);
       const cy = y(point.latitude);
-      const label = point.label.length > 26 ? `${point.label.slice(0, 25)}…` : point.label;
-      const anchor = index === 0 ? "start" : "start";
+      const label = point.label.length > 24 ? `${point.label.slice(0, 23)}…` : point.label;
+      // Keep the label inside the drawing: flip it to the other side near the
+      // right edge, and lift it above the pin when two stops sit on top of each other.
+      const toTheLeft = cx > WIDTH - 170;
+      const labelX = toTheLeft ? cx - 18 : cx + 18;
+      const labelY = cy + (index % 2 === 0 ? 4 : -9);
+      const anchor = toTheLeft ? "end" : "start";
       return `
     <g>
       <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="13" fill="#0e7490" stroke="#67e8f9" stroke-width="2" />
       <text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="#ecfeff">${toPersian(String(index + 1))}</text>
-      <text x="${(cx + 18).toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="${anchor}" font-size="11" fill="#e2e8f0">${escapeXml(label)}</text>
+      <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}" font-size="10.5" fill="#e2e8f0">${escapeXml(label)}</text>
     </g>`;
     })
     .join("");
 
-  const title = options.title ? `<text x="${WIDTH - 16}" y="26" text-anchor="end" font-size="13" font-weight="700" fill="#a5f3fc">${escapeXml(options.title)}</text>` : "";
+  const title = options.title ? `<text x="${WIDTH - 16}" y="24" text-anchor="end" font-size="13" font-weight="700" fill="#a5f3fc">${escapeXml(options.title)}</text>` : "";
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${escapeXml(options.title || "نقشهٔ روز")}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" role="img" aria-label="${escapeXml(options.title || "نقشهٔ روز")}">
   <defs>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e3a4c" stroke-width="1" />
