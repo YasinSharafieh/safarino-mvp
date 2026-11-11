@@ -3,6 +3,8 @@ import { searchCityPois } from "../../../../lib/poi-search";
 import { attachPlaceDetails } from "../../../../lib/place-photos";
 import { buildItinerary, rescheduleDay, type ItineraryDay, type ItineraryPlace } from "../../../../lib/itinerary";
 import { neshanAvailable, neshanPairDistances, type NeshanPair } from "../../../../lib/neshan";
+import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
+import { osrmPairDistances } from "../../../../lib/poi-distance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +67,17 @@ export async function POST(request: NextRequest) {
     ? { latitude: originLat, longitude: originLng }
     : null;
 
+  const neshanReadyForCache = neshanAvailable();
+  const cacheKey = `safarino:itinerary:v2:${neshanReadyForCache ? "neshan" : "keyless"}:${city}:${days}:${stopsPerDay}:${
+    origin ? `${origin.latitude.toFixed(3)},${origin.longitude.toFixed(3)}` : "no-origin"
+  }`;
+  if (!Array.isArray(body.places)) {
+    const cached = await getProviderCache<Record<string, unknown>>(cacheKey);
+    if (cached && Array.isArray((cached as { days?: unknown[] }).days)) {
+      return NextResponse.json({ ...cached, cached: true });
+    }
+  }
+
   let places: ItineraryPlace[] = Array.isArray(body.places)
     ? (body.places.map(asPlace).filter(Boolean) as ItineraryPlace[])
     : [];
@@ -101,51 +114,89 @@ export async function POST(request: NextRequest) {
 
   const itinerary = buildItinerary(places, { days, stopsPerDay, origin });
 
-  // Measure each leg with Neshan: stay → stop 1 → stop 2 → …
+  // Measure every leg of every day, once: Neshan first (traffic-aware), then
+  // OpenStreetMap for anything Neshan could not answer. A leg that neither
+  // engine measured stays empty rather than guessed.
   const neshanReady = neshanAvailable();
-  let engine = neshanReady ? "نشان" : "OpenStreetMap";
-  const measuredDays: ItineraryDay[] = [];
-  for (const day of itinerary.days) {
-    const legs: NeshanPair[] = [];
+  const flatLegs: NeshanPair[] = [];
+  const legIndex: { day: number; stop: number }[] = [];
+  itinerary.days.forEach((day, dayIndex) => {
     let previous: { latitude: number; longitude: number } | null = origin;
-    day.stops.forEach((stop) => {
-      if (previous) legs.push({ from: previous, to: { latitude: stop.place.latitude, longitude: stop.place.longitude } });
+    day.stops.forEach((stop, stopIndex) => {
+      if (previous) {
+        flatLegs.push({ from: previous, to: { latitude: stop.place.latitude, longitude: stop.place.longitude } });
+        legIndex.push({ day: dayIndex, stop: stopIndex });
+      }
       previous = { latitude: stop.place.latitude, longitude: stop.place.longitude };
     });
-    let legItems: ({ distanceKm: number; durationMinutes: number } | null)[] = [];
-    if (neshanReady && legs.length) {
-      const result = await neshanPairDistances(legs);
-      if (result.status === "ok") legItems = result.items;
-      else if (result.status === "failed") engine = "نشان (بخشی ناموفق)";
+  });
+
+  const measured: ({ distanceKm: number; durationMinutes: number } | null)[] = flatLegs.map(() => null);
+  const legEngine: string[] = flatLegs.map(() => "");
+
+  if (neshanReady && flatLegs.length) {
+    const result = await neshanPairDistances(flatLegs);
+    if (result.status === "ok") {
+      result.items.forEach((item, index) => {
+        if (!item) return;
+        measured[index] = item;
+        legEngine[index] = "نشان";
+      });
     }
-    const stops = day.stops.map((stop, index) => {
-      const measured = legItems[index] || null;
+  }
+
+  const missingIndexes = measured.map((item, index) => (item ? -1 : index)).filter((index) => index >= 0);
+  if (missingIndexes.length) {
+    const fallback = await osrmPairDistances(missingIndexes.map((index) => flatLegs[index]));
+    fallback.forEach((item, position) => {
+      const target = missingIndexes[position];
+      if (!item || target === undefined) return;
+      measured[target] = { distanceKm: item.distanceKm, durationMinutes: item.durationMinutes ?? 0 };
+      legEngine[target] = "OpenStreetMap";
+    });
+  }
+
+  const measuredDays: ItineraryDay[] = itinerary.days.map((day, dayIndex) => {
+    const stops = day.stops.map((stop, stopIndex) => {
+      const position = legIndex.findIndex((entry) => entry.day === dayIndex && entry.stop === stopIndex);
+      const item = position >= 0 ? measured[position] : null;
       return {
         ...stop,
-        legKm: measured ? measured.distanceKm : null,
-        legMinutes: measured ? measured.durationMinutes : null,
-        legEngine: measured ? "نشان" : "بدون اندازه‌گیری",
+        legKm: item ? item.distanceKm : null,
+        legMinutes: item ? item.durationMinutes : null,
+        legEngine: item ? legEngine[position] || "اندازه‌گیری‌شده" : "اندازه‌گیری نشد",
       };
     });
-    measuredDays.push(rescheduleDay({ ...day, stops }));
-  }
+    return rescheduleDay({ ...day, stops });
+  });
+
+  const enginesUsed = Array.from(new Set(legEngine.filter(Boolean)));
+  const engine = enginesUsed.length === 1 ? enginesUsed[0] : enginesUsed.length ? enginesUsed.join(" + ") : "اندازه‌گیری نشد";
 
   const totalKm = Math.round(measuredDays.reduce((sum, day) => sum + day.totalKm, 0) * 10) / 10;
   const totalDriveMinutes = measuredDays.reduce((sum, day) => sum + day.totalDriveMinutes, 0);
   const allMeasured = measuredDays.every((day) => day.stops.every((stop) => stop.legKm !== null));
+  const unmeasured = measuredDays.reduce((sum, day) => sum + day.stops.filter((stop) => stop.legKm === null).length, 0);
 
-  return NextResponse.json({
+  const payload = {
     success: true,
     city: cityLabel,
     days: measuredDays,
     unused: itinerary.unused.slice(0, 8),
     stopsPerDay,
     origin,
-    engine: allMeasured && neshanReady ? "نشان" : engine,
+    engine,
+    unmeasuredLegs: unmeasured,
     note: itinerary.note,
     poiNote,
     sources,
     totals: { km: totalKm, driveMinutes: totalDriveMinutes, stops: measuredDays.reduce((sum, day) => sum + day.stops.length, 0), days: measuredDays.length },
     generatedAt: new Date().toISOString(),
-  });
+  };
+  if (unmeasured === 0) {
+    // A complete answer is worth keeping for an hour; a partial one is not,
+    // so the next visitor gets a fresh attempt instead of old gaps.
+    await setProviderCache(cacheKey, payload as unknown as Record<string, unknown>, 3_600);
+  }
+  return NextResponse.json(payload);
 }

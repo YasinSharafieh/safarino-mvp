@@ -222,23 +222,21 @@ export function buildItinerary(
     buckets[target].push(place);
   });
 
-  // Balance: no day may hold more than `stopsPerDay`, and none may stay empty
-  // while another day overflows.
-  const leftovers: ItineraryPlace[] = [];
+  // Balance: no day may hold more than `stopsPerDay`. Everything that does not
+  // fit is reported as "not in this plan" instead of stretching a day to 14
+  // stops — an overloaded day is a worse trip, not a fuller one.
+  const overflow: ItineraryPlace[] = [];
   buckets.forEach((bucket) => {
-    if (bucket.length > stopsPerDay) leftovers.push(...bucket.splice(stopsPerDay));
+    // Keep the most notable places when a cluster is too big.
+    bucket.sort((a, b) => popularity(b) - popularity(a));
+    if (bucket.length > stopsPerDay) overflow.push(...bucket.splice(stopsPerDay));
   });
-  leftovers.forEach((place) => {
-    let target = -1;
-    let smallest = stopsPerDay;
-    buckets.forEach((bucket, index) => {
-      if (bucket.length < smallest) {
-        smallest = bucket.length;
-        target = index;
-      }
-    });
-    if (target >= 0) buckets[target].push(place);
-    else if (buckets.length) buckets[0].push(place);
+  // A day that ended up empty can still take a place from the overflow.
+  overflow.slice().forEach((place) => {
+    const emptyIndex = buckets.findIndex((bucket, index) => bucket.length === 0 && index < dayCount);
+    if (emptyIndex < 0) return;
+    buckets[emptyIndex].push(place);
+    overflow.splice(overflow.indexOf(place), 1);
   });
 
   const usedIds = new Set<string>();
@@ -278,7 +276,9 @@ export function buildItinerary(
 
   return {
     days: itineraryDays,
-    unused: clean.filter((place) => !usedIds.has(place.id)),
+    unused: [...clean.filter((place) => !usedIds.has(place.id)), ...overflow].filter(
+      (place, index, list) => list.findIndex((candidate) => candidate.id === place.id) === index,
+    ),
     stopsPerDay,
     note: "چینش روزها بر اساس نزدیکی واقعی مکان‌ها و ترتیب بازدید از نزدیک به دور از اقامتگاه است؛ فاصله و زمان هر مسیر با نشان حساب می‌شود.",
   };

@@ -38,6 +38,8 @@ type ItineraryResponse = {
   note: string;
   poiNote: string;
   totals: { km: number; driveMinutes: number; stops: number; days: number };
+  unmeasuredLegs?: number;
+  cached?: boolean;
   generatedAt: string;
   error?: string;
 };
@@ -362,6 +364,11 @@ function ItineraryContent() {
                 {data.unused.length ? (
                   <p className="mt-4 text-[10px] leading-6 text-slate-500">
                     {fa(data.unused.length)} مکان دیگر هم پیدا شد که در این تعداد روز جا نشد: {data.unused.map((place) => place.name).join("، ")}.
+                  </p>
+                ) : null}
+                {data.unmeasuredLegs ? (
+                  <p className="mt-2 rounded-xl border border-amber-400/25 bg-amber-400/10 p-2.5 text-[10px] leading-6 text-amber-100">
+                    {fa(data.unmeasuredLegs)} مسیر اندازه‌گیری نشد (سرویس مسیریابی در آن لحظه پاسخ نداد)؛ برای همان مسیرها از دکمهٔ «مسیریابی با نشان» استفاده کنید تا مسیر واقعی همان لحظه باز شود.
                   </p>
                 ) : null}
                 <p className="mt-2 text-[10px] leading-6 text-slate-500">{data.note}</p>

@@ -240,3 +240,51 @@ export async function computePoiDistances(
     note: "مسیر رانندگی از سرور عمومی در دسترس نبود؛ این عددها فاصلهٔ خط مستقیم‌اند، نه مسیر رانندگی.",
   };
 }
+
+export type RoutePair = { from: Coordinates; to: Coordinates };
+
+/**
+ * Fallback for point-to-point legs when Neshan cannot answer: OpenStreetMap's
+ * routing table, asked once for many pairs. Explicitly labelled as OSRM
+ * elsewhere, so the traveller always knows which engine produced a number.
+ */
+export async function osrmPairDistances(
+  pairs: RoutePair[],
+  options: { timeoutMs?: number; chunkSize?: number } = {},
+): Promise<(DistanceEntry | null)[]> {
+  const timeoutMs = options.timeoutMs ?? 12_000;
+  const size = Math.max(1, Math.min(options.chunkSize ?? 6, 8));
+  const clean = pairs.filter((pair) => pair?.from && pair?.to);
+  const results: (DistanceEntry | null)[] = new Array(clean.length).fill(null);
+  for (let index = 0; index < clean.length; index += size) {
+    const group = clean.slice(index, index + size);
+    const coordinates = [...group.map((pair) => pair.from), ...group.map((pair) => pair.to)]
+      .map((point) => `${point.longitude},${point.latitude}`)
+      .join(";");
+    const sources = group.map((_, position) => position).join(";");
+    const destinations = group.map((_, position) => position + group.length).join(";");
+    const url = `https://router.project-osrm.org/table/v1/driving/${coordinates}?sources=${sources}&destinations=${destinations}&annotations=distance,duration`;
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "Safarino/1.0" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) continue;
+      const payload = (await response.json()) as { distances?: number[][]; durations?: number[][] };
+      group.forEach((_, position) => {
+        const meters = Number(payload?.distances?.[position]?.[position]);
+        const seconds = Number(payload?.durations?.[position]?.[position]);
+        if (!Number.isFinite(meters) || meters <= 0) return;
+        results[index + position] = {
+          id: String(index + position),
+          distanceKm: Math.round(meters / 100) / 10,
+          durationMinutes: Number.isFinite(seconds) ? Math.max(1, Math.round(seconds / 60)) : null,
+        };
+      });
+    } catch {
+      // A failed chunk leaves those legs unmeasured rather than guessed.
+    }
+  }
+  return results;
+}
