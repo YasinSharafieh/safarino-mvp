@@ -13,6 +13,13 @@
 
 import { getProviderCache, setProviderCache } from "./provider-cache";
 
+/** Picture plus a short, practical description of the place itself. */
+export type PlaceInfo = {
+  photo: PlacePhoto | null;
+  /** Two or three plain sentences taken from the place's own article. */
+  description: string;
+};
+
 export type PlacePhoto = {
   url: string;
   label: string;
@@ -70,46 +77,112 @@ async function fetchJson<T>(url: string, timeoutMs = 12_000, attempt = 0): Promi
 
 type PageImagesPayload = {
   query?: {
-    pages?: { title?: string; missing?: boolean; thumbnail?: { source?: string } }[];
+    pages?: { title?: string; missing?: boolean; thumbnail?: { source?: string }; extract?: string }[];
     normalized?: { from?: string; to?: string }[];
     redirects?: { from?: string; to?: string }[];
   };
 };
 
-/** Lead pictures of several articles in ONE request (Wikipedia API, with redirects). */
-export async function wikipediaThumbnails(titles: string[], lang = "fa"): Promise<Map<string, PlacePhoto>> {
+const SENTENCE_END = /[.!؟?…]\s*$/;
+const MAX_DESCRIPTION = 300;
+
+/**
+ * Turns an article's opening into two or three sentences a traveller can use.
+ * Nothing is invented: only the article's own words, shortened at a sentence end.
+ */
+export function shortDescription(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let text = raw
+    .replace(/\r/g, " ")
+    .replace(/\s+/g, " ")
+    // Pronunciation and foreign-name footnotes are noise in a card.
+    .replace(/\s*\([^()]*(?:انگلیسی|لاتین|آوانگاری|تلفظ)[^()]*\)/g, "")
+    .trim();
+  if (!text) return "";
+  const sentences = text.match(/[^.!؟?…]+[.!؟?…]*/g) || [];
+  let out = "";
+  for (const sentence of sentences) {
+    const next = `${out} ${sentence.trim()}`.trim();
+    if (out && next.length > MAX_DESCRIPTION) break;
+    out = next;
+    if (out.length >= 150) break;
+  }
+  if (!out) out = text.slice(0, MAX_DESCRIPTION);
+  if (out.length > MAX_DESCRIPTION) {
+    const cut = out.slice(0, MAX_DESCRIPTION);
+    const lastEnd = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("؟"), cut.lastIndexOf("!"), cut.lastIndexOf("…"));
+    out = lastEnd > 120 ? cut.slice(0, lastEnd + 1) : `${cut.replace(/\s+\S*$/, "")}…`;
+  }
+  return SENTENCE_END.test(out) || out.endsWith("…") ? out : `${out}…`;
+}
+
+/**
+ * Pictures AND short descriptions of several articles in ONE request.
+ * Every title that was asked for is answered, following redirects.
+ */
+export async function wikipediaInfo(titles: string[], lang = "fa"): Promise<Map<string, PlaceInfo>> {
   const unique = Array.from(new Set(titles.map(normalizeTitle).filter(Boolean)));
-  const found = new Map<string, PlacePhoto>();
-  for (let index = 0; index < unique.length; index += BATCH) {
-    const slice = unique.slice(index, index + BATCH);
+  const found = new Map<string, PlaceInfo>();
+  const missing: string[] = [];
+
+  // Anything looked up in the last week comes from the shared store.
+  await Promise.all(
+    unique.map(async (title) => {
+      const cached = await getProviderCache<PlaceInfo | "none">(`safarino:place-info:v1:${lang}:${title}`);
+      if (cached === "none") {
+        found.set(title, { photo: null, description: "" });
+      } else if (cached) {
+        found.set(title, cached);
+      } else {
+        missing.push(title);
+      }
+    }),
+  );
+
+  for (let index = 0; index < missing.length; index += BATCH) {
+    const slice = missing.slice(index, index + BATCH);
     const url =
-      `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageimages` +
-      `&piprop=thumbnail&pithumbsize=800&titles=${encodeURIComponent(slice.join("|"))}`;
+      `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1` +
+      `&prop=pageimages|extracts&piprop=thumbnail&pithumbsize=800&exintro=1&explaintext=1&exsentences=5` +
+      `&titles=${encodeURIComponent(slice.join("|"))}`;
     const payload = await fetchJson<PageImagesPayload>(url);
-    if (!payload?.query?.pages) continue;
     const alias = new Map<string, string>();
-    [...(payload.query.normalized || []), ...(payload.query.redirects || [])].forEach((entry) => {
+    const byTitle = new Map<string, PlaceInfo>();
+    [...(payload?.query?.normalized || []), ...(payload?.query?.redirects || [])].forEach((entry) => {
       if (entry.from && entry.to) alias.set(normalizeTitle(entry.from), normalizeTitle(entry.to));
     });
-    const byTitle = new Map<string, PlacePhoto>();
-    payload.query.pages.forEach((page) => {
-      const source = page?.thumbnail?.source || "";
-      if (!page?.title || page.missing || !isWikimedia(source)) return;
-      byTitle.set(normalizeTitle(page.title), {
-        url: source,
-        label: "عکس از ویکی‌پدیا",
-        source: "wikipedia",
-        creditUrl: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
-      });
+    (payload?.query?.pages || []).forEach((page) => {
+      if (!page?.title) return;
+      const source = page.thumbnail?.source || "";
+      const photo: PlacePhoto | null = !page.missing && isWikimedia(source)
+        ? {
+            url: source,
+            label: "عکس از ویکی‌پدیا",
+            source: "wikipedia",
+            creditUrl: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
+          }
+        : null;
+      const description = page.missing ? "" : shortDescription(page.extract);
+      if (photo || description) byTitle.set(normalizeTitle(page.title), { photo, description });
     });
     slice.forEach((requested) => {
-      const direct = byTitle.get(requested);
-      const viaAlias = byTitle.get(alias.get(requested) || "");
-      const photo = direct || viaAlias;
-      if (photo) found.set(requested, photo);
+      const info = byTitle.get(requested) || byTitle.get(alias.get(requested) || "") || null;
+      const value: PlaceInfo = info || { photo: null, description: "" };
+      found.set(requested, value);
+      void setProviderCache(`safarino:place-info:v1:${lang}:${requested}`, value.photo || value.description ? value : "none", value.photo || value.description ? PHOTO_TTL : NEGATIVE_TTL);
     });
   }
   return found;
+}
+
+/** Lead pictures of several articles in ONE request (kept for simple callers). */
+export async function wikipediaThumbnails(titles: string[], lang = "fa"): Promise<Map<string, PlacePhoto>> {
+  const info = await wikipediaInfo(titles, lang);
+  const photos = new Map<string, PlacePhoto>();
+  info.forEach((value, title) => {
+    if (value.photo) photos.set(title, value.photo);
+  });
+  return photos;
 }
 
 type CommonsPayload = {
@@ -231,6 +304,31 @@ export function neshanStaticMapUrl(
   return `/api/neshan/static?${params.toString()}`;
 }
 
+type DescriptionsPayload = {
+  entities?: Record<string, { descriptions?: Record<string, { value?: string }> }>;
+};
+
+/**
+ * One-line descriptions of several Wikidata items in ONE request.
+ * Used only when the place has no Persian article to quote.
+ */
+export async function wikidataDescriptions(ids: string[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => /^Q\d+$/.test(id))));
+  const found = new Map<string, string>();
+  for (let index = 0; index < unique.length; index += BATCH) {
+    const slice = unique.slice(index, index + BATCH);
+    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&formatversion=2&props=descriptions&languages=fa|en&ids=${slice.join("|")}`;
+    const payload = await fetchJson<DescriptionsPayload>(url);
+    if (!payload?.entities) continue;
+    slice.forEach((id) => {
+      const text = payload.entities?.[id]?.descriptions?.fa?.value || payload.entities?.[id]?.descriptions?.en?.value || "";
+      const clean = shortDescription(text);
+      if (clean) found.set(id, clean);
+    });
+  }
+  return found;
+}
+
 type PlaceWithMaybePhoto = {
   id: string;
   name: string;
@@ -242,6 +340,9 @@ type PlaceWithMaybePhoto = {
   imageKind?: "photo" | "map" | "none";
   imageLabel?: string;
   imageCreditUrl?: string | null;
+  /** Two or three sentences about the place itself. */
+  description?: string;
+  descriptionSource?: string;
 };
 
 /**
@@ -249,7 +350,7 @@ type PlaceWithMaybePhoto = {
  * exists, otherwise a real Neshan map image of exactly that coordinate.
  * Two batched requests cover any list length, so it stays fast and polite.
  */
-export async function attachPlaceImages<T extends PlaceWithMaybePhoto>(
+export async function attachPlaceDetails<T extends PlaceWithMaybePhoto>(
   places: T[],
   options: { maxPhotos?: number; mapZoom?: number } = {},
 ): Promise<T[]> {
@@ -262,29 +363,41 @@ export async function attachPlaceImages<T extends PlaceWithMaybePhoto>(
     return fromUrl;
   };
 
-  const photos = await wikipediaThumbnails(target.map(titleOf));
+  const info = await wikipediaInfo(target.map(titleOf));
 
-  const missingItems = target.filter((place) => !photos.has(titleOf(place)) && wikidataOf(place));
-  const commons = missingItems.length ? await wikidataImages(missingItems.map(wikidataOf)) : new Map<string, PlacePhoto>();
+  const needCommons = target.filter((place) => !info.get(titleOf(place))?.photo && wikidataOf(place));
+  const commons = needCommons.length ? await wikidataImages(needCommons.map(wikidataOf)) : new Map<string, PlacePhoto>();
+
+  const needWords = target.filter((place) => !info.get(titleOf(place))?.description && wikidataOf(place));
+  const words = needWords.length ? await wikidataDescriptions(needWords.map(wikidataOf)) : new Map<string, string>();
 
   target.forEach((place) => {
-    if (place.imageUrl) return;
-    const photo = photos.get(titleOf(place)) || commons.get(wikidataOf(place));
-    if (photo) {
-      place.imageUrl = `/api/provider-assets?src=${encodeURIComponent(photo.url)}`;
-      place.imageKind = "photo";
-      place.imageLabel = photo.label;
-      place.imageCreditUrl = photo.creditUrl;
-      return;
+    const placeInfo = info.get(titleOf(place));
+    if (!place.imageUrl) {
+      const photo = placeInfo?.photo || commons.get(wikidataOf(place));
+      if (photo) {
+        place.imageUrl = `/api/provider-assets?src=${encodeURIComponent(photo.url)}`;
+        place.imageKind = "photo";
+        place.imageLabel = photo.label;
+        place.imageCreditUrl = photo.creditUrl;
+      } else if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && place.latitude !== 0 && place.longitude !== 0) {
+        place.imageUrl = neshanStaticMapUrl({ latitude: place.latitude, longitude: place.longitude }, { width: 400, height: 250 }, options.mapZoom ?? 15);
+        place.imageKind = "map";
+        place.imageLabel = "نقشهٔ نشان برای همین نقطه";
+        place.imageCreditUrl = place.sourceUrl || null;
+      } else {
+        place.imageKind = "none";
+      }
     }
-    if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && place.latitude !== 0 && place.longitude !== 0) {
-      place.imageUrl = neshanStaticMapUrl({ latitude: place.latitude, longitude: place.longitude }, { width: 400, height: 250 }, options.mapZoom ?? 15);
-      place.imageKind = "map";
-      place.imageLabel = "نقشهٔ نشان برای همین نقطه";
-      place.imageCreditUrl = place.sourceUrl || null;
-      return;
+    if (!place.description) {
+      const fromArticle = placeInfo?.description || "";
+      const fromItem = words.get(wikidataOf(place)) || "";
+      place.description = fromArticle || fromItem;
+      place.descriptionSource = fromArticle ? "ویکی‌پدیای فارسی" : fromItem ? "ویکی‌داده" : "";
     }
-    place.imageKind = "none";
   });
   return places;
 }
+
+/** Old name kept so older callers and tests keep working. */
+export const attachPlaceImages = attachPlaceDetails;

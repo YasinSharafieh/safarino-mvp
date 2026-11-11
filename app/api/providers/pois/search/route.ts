@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchCityPois } from "../../../../../lib/poi-search";
 import { readWithRefresh, snapshotKey, writeSnapshot } from "../../../../../lib/snapshot-store";
-import { attachPlaceImages } from "../../../../../lib/place-photos";
+import { attachPlaceDetails } from "../../../../../lib/place-photos";
 
 /** Attractions of a city barely change, so a saved copy is good for a day. */
 const FRESH_SECONDS = 86_400;
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       if (saved.source === "stale-cache" && saved.refreshed) void saved.refreshed();
       // Pictures are added on the way out, so an older saved copy also gets them.
       const value = { ...saved.snapshot.value } as { pois?: Record<string, unknown>[] };
-      if (Array.isArray(value.pois)) value.pois = (await attachPlaceImages(value.pois as unknown as Parameters<typeof attachPlaceImages>[0], { maxPhotos: limit })) as unknown as Record<string, unknown>[];
+      if (Array.isArray(value.pois)) value.pois = (await attachPlaceDetails(value.pois as unknown as Parameters<typeof attachPlaceDetails>[0], { maxPhotos: limit })) as unknown as Record<string, unknown>[];
       return NextResponse.json(
         { success: true, cached: true, fromStore: saved.source === "stale-cache" ? "last-saved" : "just-fetched", savedAt: saved.snapshot.storedAt, ...value },
         { headers: { "X-Safarino-Source": saved.source, "X-Safarino-Ms": String(Date.now() - started) } },
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const result = await searchCityPois(city, limit);
     await writeSnapshot(base, result as unknown as Record<string, unknown>, FRESH_SECONDS, KEEP_SECONDS);
     // Pictures are cached separately for a week, so they are not stored in the daily snapshot.
-    const withPhotos = { ...result, pois: await attachPlaceImages([...result.pois], { maxPhotos: limit }) };
+    const withPhotos = { ...result, pois: await attachPlaceDetails([...result.pois], { maxPhotos: limit }) };
     return NextResponse.json({ success: true, cached: false, fromStore: "crawled-now", ...withPhotos }, {
       headers: { "X-Safarino-Source": "live", "X-Safarino-Ms": String(Date.now() - started) },
     });

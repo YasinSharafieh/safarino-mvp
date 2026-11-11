@@ -19,6 +19,7 @@ import {
   Lightbulb,
   LoaderCircle,
   MapPin,
+  Navigation,
   RefreshCw,
   Share2,
   Shirt,
@@ -32,8 +33,9 @@ import ProviderBadge from "@/components/ProviderBadge";
 import type { AccommodationProvider } from "@/lib/accommodation-types";
 import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "../context/TravelContext";
-import NeshanKeyCard from "@/components/NeshanKeyCard";
-import { readNeshanKey } from "@/lib/neshan-key";
+import PlaceCard from "@/components/PlaceCard";
+import { openNeshanNavigation } from "@/lib/neshan-deeplink";
+import type { PlaceCardData } from "@/components/PlaceCard";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = {
@@ -59,6 +61,7 @@ type BudgetAnalysis = {
 };
 type PlanPoi = {
   id: string;
+  description?: string;
   name: string;
   category: string;
   latitude: number;
@@ -67,6 +70,10 @@ type PlanPoi = {
   source: "openstreetmap" | "wikidata" | "wikipedia";
   sourceUrl: string;
   wikipediaUrl: string | null;
+  imageUrl?: string | null;
+  imageKind?: "photo" | "map" | "none";
+  imageLabel?: string;
+  imageCreditUrl?: string | null;
 };
 
 type PlanPoiWithStay = PlanPoi & { fromStayKm?: number | null; fromStayMinutes?: number | null };
@@ -204,12 +211,6 @@ export default function PlanPage() {
   const [poiDistances, setPoiDistances] = useState<Record<string, { distanceKm: number; durationMinutes: number | null }>>({});
   const [distanceMeta, setDistanceMeta] = useState<{ engineLabel: string; engine: string; note: string; neshanConfigured: boolean } | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
-  const [neshanKey, setNeshanKey] = useState("");
-
-  useEffect(() => {
-    setNeshanKey(readNeshanKey());
-  }, []);
-
   const stayLatitude = Number(accommodationDetails.latitude);
   const stayLongitude = Number(accommodationDetails.longitude);
   const hasStayPin =
@@ -342,7 +343,6 @@ export default function PlanPage() {
       body: JSON.stringify({
         origin: { latitude: stayLatitude, longitude: stayLongitude },
         targets: pois.map((poi) => ({ id: poi.id, latitude: poi.latitude, longitude: poi.longitude })),
-        neshanApiKey: neshanKey || undefined,
       }),
       signal: controller.signal,
     })
@@ -366,7 +366,7 @@ export default function PlanPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [poiData, canMeasureFromStay, stayLatitude, stayLongitude, neshanKey]);
+  }, [poiData, canMeasureFromStay, stayLatitude, stayLongitude]);
 
   useEffect(() => {
     if (!Object.keys(poiDistances).length) return;
@@ -585,33 +585,39 @@ export default function PlanPage() {
               {nearestPois.length ? (
                 <ol className="mt-4 space-y-2.5">
                   {nearestPois.map((poi, index) => (
-                    <li key={poi.id}>
-                      <a href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex flex-wrap items-center justify-between gap-3 p-3 transition hover:bg-white/[0.07]">
-                        <span className="flex min-w-0 items-center gap-3">
-                          <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
-                            {(poi as PlanPoiWithStay & PoiPicture).imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={(poi as PlanPoiWithStay & PoiPicture).imageUrl as string}
-                                alt={(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" ? `نقشهٔ موقعیت ${poi.name}` : poi.name}
-                                loading="lazy"
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span className="grid h-full w-full place-items-center rounded-full bg-cyan-400/15 text-[11px] font-black text-cyan-200">{formatNumber(index + 1)}</span>
-                            )}
-                          </span>
-                          <span className="min-w-0">
-                            <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
-                            <span className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500"><span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>{poi.wikipediaUrl ? "دارای مقالهٔ ویکی‌پدیا" : "از نقشهٔ عمومی"}</span>
-                          </span>
+                    <li key={poi.id} className="glass-soft flex flex-wrap items-center justify-between gap-3 p-3 transition hover:bg-white/[0.07]">
+                      <a href={poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="group flex min-w-0 flex-1 items-center gap-3">
+                        <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+                          {poi.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={poi.imageUrl}
+                              alt={poi.imageKind === "map" ? `نقشهٔ موقعیت ${poi.name}` : poi.name}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-full w-full place-items-center rounded-full bg-cyan-400/15 text-[11px] font-black text-cyan-200">{formatNumber(index + 1)}</span>
+                          )}
                         </span>
-                        <span className="flex items-center gap-3 text-[11px] font-bold text-slate-300">
-                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-cyan-100">{formatKm(poi.fromStayKm as number)} کیلومتر</span>
-                          {typeof poi.fromStayMinutes === "number" && <span className="text-slate-400">≈ {formatNumber(poi.fromStayMinutes)} دقیقه رانندگی</span>}
-                          <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
+                        <span className="min-w-0">
+                          <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
+                          <span className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                            <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>
+                            <span className="rounded-lg border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-cyan-100">{formatKm(poi.fromStayKm as number)} کیلومتر</span>
+                            {typeof poi.fromStayMinutes === "number" && <span>≈ {formatNumber(poi.fromStayMinutes)} دقیقه</span>}
+                          </span>
                         </span>
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => openNeshanNavigation({ latitude: stayLatitude, longitude: stayLongitude }, { latitude: poi.latitude, longitude: poi.longitude })}
+                        className="flex shrink-0 items-center gap-1.5 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1.5 text-[10px] font-extrabold text-cyan-100 transition hover:bg-cyan-400/20"
+                        aria-label={`مسیریابی با نشان تا ${poi.name}`}
+                      >
+                        <Navigation className="h-3.5 w-3.5" />
+                        مسیریابی
+                      </button>
                     </li>
                   ))}
                 </ol>
@@ -625,7 +631,7 @@ export default function PlanPage() {
                 {distanceMeta && !distanceMeta.neshanConfigured ? " چون کلید نشان وصل نیست، مسیریابی از OpenStreetMap گرفته می‌شود." : ""}
               </p>
               <div className="mt-4">
-                <NeshanKeyCard compact onChanged={setNeshanKey} />
+  
               </div>
             </section>
           )}
@@ -639,38 +645,31 @@ export default function PlanPage() {
             </div>
             {poiData?.pois.length ? (
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                {enrichedPois.map((poi) => (
-                  <a key={poi.id} href={(poi as PlanPoiWithStay & PoiPicture).imageCreditUrl || poi.wikipediaUrl || poi.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group overflow-hidden transition hover:bg-white/[0.07]">
-                    <span className="relative block h-28 w-full overflow-hidden bg-slate-900/70">
-                      {(poi as PlanPoiWithStay & PoiPicture).imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={(poi as PlanPoiWithStay & PoiPicture).imageUrl as string}
-                          alt={(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" ? `نقشهٔ موقعیت ${poi.name}` : poi.name}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
-                        />
-                      ) : (
-                        <span className="grid h-full w-full place-items-center text-slate-600"><ImageIcon className="h-5 w-5" /></span>
-                      )}
-                      {(poi as PlanPoiWithStay & PoiPicture).imageKind === "map" && (
-                        <span className="absolute bottom-1 left-1 rounded-md bg-slate-950/80 px-1.5 py-0.5 text-[8px] font-bold text-cyan-200">نقشه</span>
-                      )}
-                      <span className="absolute top-1 right-1 rounded-md bg-slate-950/70 px-1.5 py-0.5 text-[8px] font-bold text-slate-200">
-                        {typeof poi.fromStayKm === "number" ? `${formatKm(poi.fromStayKm)} کیلومتر` : `${formatKm(poi.distanceKm)} کیلومتر`}
-                      </span>
-                    </span>
-                    <span className="flex items-center justify-between gap-2 p-3">
-                      <span className="min-w-0">
-                        <b className="block truncate text-xs font-extrabold text-white">{poi.name}</b>
-                        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                          <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{poi.category}</span>
-                          <span>{typeof poi.fromStayKm === "number" ? "از اقامتگاه شما" : "از مرکز شهر"}</span>
-                        </span>
-                      </span>
-                      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-200" />
-                    </span>
-                  </a>
+                {enrichedPois.map((poi, index) => (
+                  <PlaceCard
+                    key={poi.id}
+                    rank={index + 1}
+                    place={{
+                      id: poi.id,
+                      name: poi.name,
+                      category: poi.category,
+                      latitude: poi.latitude,
+                      longitude: poi.longitude,
+                      distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+                      durationMinutes: typeof poi.fromStayMinutes === "number" ? poi.fromStayMinutes : null,
+                      distanceEngine: typeof poi.fromStayKm === "number" ? distanceMeta?.engineLabel || "" : "از مرکز شهر",
+                      sourceLabel: poi.source === "wikidata" ? "ویکی‌داده" : poi.source === "wikipedia" ? "ویکی‌پدیای فارسی" : "OpenStreetMap",
+                      sourceUrl: poi.sourceUrl,
+                      wikipediaUrl: poi.wikipediaUrl,
+                      imageUrl: poi.imageUrl ?? null,
+                      imageKind: poi.imageKind ?? "none",
+                      imageLabel: poi.imageLabel,
+                      imageCreditUrl: poi.imageCreditUrl ?? null,
+                      description: poi.description,
+                    } satisfies PlaceCardData}
+                    origin={canMeasureFromStay ? { latitude: stayLatitude, longitude: stayLongitude } : null}
+                    originLabel="اقامتگاه انتخاب‌شده"
+                  />
                 ))}
               </div>
             ) : (

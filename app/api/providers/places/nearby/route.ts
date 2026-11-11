@@ -9,7 +9,7 @@ import {
   resolveNeshanKey,
   type NeshanPlace,
 } from "../../../../../lib/neshan";
-import { attachPlaceImages } from "../../../../../lib/place-photos";
+import { attachPlaceDetails } from "../../../../../lib/place-photos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +33,9 @@ type NearbyPlace = {
   imageKind: "photo" | "map" | "none";
   imageLabel: string;
   imageCreditUrl: string | null;
+  /** Two or three sentences about the place, from its own source. */
+  description: string;
+  descriptionSource: string;
 };
 
 function nameKey(name: string): string {
@@ -113,6 +116,8 @@ function fromPoi(poi: PoiWithMeta): NearbyPlace {
     imageKind: "none",
     imageLabel: "",
     imageCreditUrl: null,
+    description: "",
+    descriptionSource: "",
   };
 }
 
@@ -142,6 +147,8 @@ function fromNeshanNearby(place: {
     imageKind: "none",
     imageLabel: "",
     imageCreditUrl: null,
+    description: "",
+    descriptionSource: "",
   };
 }
 
@@ -163,6 +170,8 @@ function fromNeshanSearch(place: NeshanPlace): NearbyPlace {
     imageKind: "none",
     imageLabel: "",
     imageCreditUrl: null,
+    description: "",
+    descriptionSource: "",
   };
 }
 
@@ -262,13 +271,17 @@ export async function POST(request: NextRequest) {
     const ordered = [...withDistance, ...withoutDistance].slice(0, limit);
 
     // Real pictures: each place's own Wikipedia/Wikimedia photo, otherwise a real Neshan map image.
-    await attachPlaceImages(ordered, { maxPhotos: ordered.length });
+    await attachPlaceDetails(ordered, { maxPhotos: ordered.length });
 
     const reverse = hasOrigin ? await neshanReverse({ latitude, longitude }, { key: requestKey }) : null;
 
     const note = distance
       ? distance.note
       : "برای محاسبهٔ فاصله، اول یک اقامتگاه را انتخاب کنید.";
+    const neshanMeasured = ordered.filter((place) => place.distanceEngine === "نشان").length;
+    const descriptionNote = ordered.some((place) => place.description)
+      ? "توضیح هر مکان از همان منبعی است که لینکش را دارد؛ خلاصه و بدون جملهٔ اضافه."
+      : "برای این مکان‌ها توضیح کوتاهی در منبع پیدا نشد؛ چیزی از خودمان اضافه نمی‌کنیم.";
 
     return NextResponse.json({
       success: true,
@@ -283,6 +296,8 @@ export async function POST(request: NextRequest) {
       poiSources: poiResult.sources,
       poiNote: poiResult.note,
       note,
+      neshanMeasured,
+      descriptionNote,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {

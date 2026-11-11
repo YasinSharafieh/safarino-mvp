@@ -338,3 +338,96 @@ export async function neshanReverse(point: NeshanCoords, options: { key?: string
     return null;
   }
 }
+
+export type NeshanRouteStep = {
+  instruction: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  /** "turn" | "depart" | "arrive" | … as Neshan names it. */
+  maneuver: string;
+};
+
+export type NeshanRoute = {
+  distanceKm: number;
+  durationMinutes: number;
+  steps: NeshanRouteStep[];
+  /** Encoded polyline, kept for maps and future itinerary drawings. */
+  polyline: string;
+};
+
+export type NeshanRouteResult = { status: "ok"; route: NeshanRoute } | { status: Exclude<NeshanStatus, "ok"> };
+
+/** Strip Neshan's HTML tags from an instruction, keeping only readable text. */
+function plainInstruction(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The real route from A to B with live traffic, straight from Neshan:
+ * distance, time and the turn-by-turn steps. This is the same service that
+ * powers the Neshan app, so the numbers Safarino shows match what the
+ * traveller will see after tapping «مسیریابی با نشان».
+ */
+export async function neshanDirection(
+  origin: NeshanCoords,
+  destination: NeshanCoords,
+  options: { key?: string; type?: "car" | "motorcycle"; timeoutMs?: number; steps?: number } = {},
+): Promise<NeshanRouteResult> {
+  const key = resolveNeshanKey(options.key);
+  if (!key) return { status: "not_configured" };
+  if (!validCoords(origin) || !validCoords(destination)) return { status: "invalid" };
+  const type = options.type === "motorcycle" ? "motorcycle" : "car";
+  try {
+    const response = await fetch(
+      `${API_BASE}/v4/direction?type=${type}&origin=${encodeURIComponent(pair(origin))}&destination=${encodeURIComponent(pair(destination))}`,
+      { headers: { "Api-Key": key, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(options.timeoutMs ?? 12_000) },
+    );
+    if (!response.ok) return { status: neshanStatusFromHttp(response.status) };
+    const payload = (await response.json()) as {
+      routes?: {
+        overview_polyline?: string;
+        legs?: {
+          distance?: { value?: number };
+          duration?: { value?: number };
+          steps?: { instruction?: string; distance?: { value?: number }; duration?: { value?: number }; type?: string }[];
+        }[];
+      }[];
+    };
+    const route = payload?.routes?.[0];
+    if (!route || !Array.isArray(route.legs) || !route.legs.length) return { status: "failed" };
+    let distanceMeters = 0;
+    let durationSeconds = 0;
+    const steps: NeshanRouteStep[] = [];
+    route.legs.forEach((leg) => {
+      distanceMeters += Number(leg?.distance?.value) || 0;
+      durationSeconds += Number(leg?.duration?.value) || 0;
+      (leg?.steps || []).forEach((step) => {
+        const instruction = plainInstruction(step?.instruction);
+        if (!instruction) return;
+        steps.push({
+          instruction,
+          distanceMeters: Number(step?.distance?.value) || 0,
+          durationSeconds: Number(step?.duration?.value) || 0,
+          maneuver: typeof step?.type === "string" ? step.type : "",
+        });
+      });
+    });
+    if (!distanceMeters) return { status: "failed" };
+    const limit = options.steps ?? 12;
+    return {
+      status: "ok",
+      route: {
+        distanceKm: Math.round(distanceMeters / 100) / 10,
+        durationMinutes: Math.max(1, Math.round(durationSeconds / 60)),
+        steps: steps.slice(0, limit),
+        polyline: typeof route.overview_polyline === "string" ? route.overview_polyline : "",
+      },
+    };
+  } catch {
+    return { status: "failed" };
+  }
+}

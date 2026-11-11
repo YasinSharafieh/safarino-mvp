@@ -90,27 +90,10 @@ const AMENITY_RULES: { label: string; pattern: RegExp }[] = [
   { label: "آشپزخانه", pattern: /آشپزخانه|آشپزخونه|kitchen/i },
 ];
 
-import NeshanKeyCard from "@/components/NeshanKeyCard";
-import { readNeshanKey } from "@/lib/neshan-key";
+import PlaceCard, { type PlaceCardData } from "@/components/PlaceCard";
+import PlaceNavigator from "@/components/PlaceNavigator";
 
-type NearbyPlace = {
-  id: string;
-  name: string;
-  category: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  distanceKm: number | null;
-  durationMinutes: number | null;
-  distanceEngine?: string;
-  sourceLabel: string;
-  sourceUrl: string;
-  wikipediaUrl: string | null;
-  imageUrl?: string | null;
-  imageKind?: "photo" | "map" | "none";
-  imageLabel?: string;
-  imageCreditUrl?: string | null;
-};
+type NearbyPlace = PlaceCardData;
 
 export default function AccommodationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -130,11 +113,7 @@ export default function AccommodationDetailPage() {
   const [nearby, setNearby] = useState<NearbyPlace[] | null>(null);
   const [nearbyMeta, setNearbyMeta] = useState<{ engineLabel: string | null; note: string; neshanConfigured: boolean; neshanSearchNote: string; originArea?: string } | null>(null);
   const [nearbyLoading, setNearbyLoading] = useState(false);
-  const [neshanKey, setNeshanKey] = useState("");
 
-  useEffect(() => {
-    setNeshanKey(readNeshanKey());
-  }, []);
   const fetchedOnce = useRef(false);
 
   const loadFromSnapshot = useCallback(() => {
@@ -238,7 +217,6 @@ export default function AccommodationDetailPage() {
         latitude: offer.latitude,
         longitude: offer.longitude,
         limit: 10,
-        neshanApiKey: neshanKey || undefined,
       }),
       signal: controller.signal,
     })
@@ -264,7 +242,7 @@ export default function AccommodationDetailPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [offer?.id, offer?.latitude, offer?.longitude, snapshot?.city, neshanKey]);
+  }, [offer?.id, offer?.latitude, offer?.longitude, snapshot?.city]);
 
   const contexts = useMemo(() => {
     if (!snapshot) return null;
@@ -598,6 +576,11 @@ export default function AccommodationDetailPage() {
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       </div>
+                      <div className="mt-3">
+                        <PlaceNavigator
+                          place={{ name: offer.name, latitude: offer.latitude as number, longitude: offer.longitude as number, category: "اقامتگاه شما" }}
+                        />
+                      </div>
                     </>
                   ) : (
                     <p className="mt-3 text-[11px] leading-6 text-slate-500">
@@ -620,52 +603,17 @@ export default function AccommodationDetailPage() {
                 </div>
 
                 {nearby && nearby.length ? (
-                  <ol className="mt-4 grid gap-2.5 sm:grid-cols-2">
-                    {nearby.map((place) => (
-                      <li key={place.id}>
-                        <a href={place.imageCreditUrl || place.wikipediaUrl || place.sourceUrl} target="_blank" rel="noreferrer noopener" className="glass-soft group flex h-full items-stretch gap-3 overflow-hidden p-2.5 transition hover:bg-white/[0.07]">
-                          <span className="relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
-                            {place.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={place.imageUrl}
-                                alt={place.imageKind === "map" ? `نقشهٔ موقعیت ${place.name}` : `${place.name}`}
-                                loading="lazy"
-                                className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                              />
-                            ) : (
-                              <span className="grid h-full w-full place-items-center text-slate-600"><ImageIcon className="h-5 w-5" /></span>
-                            )}
-                            {place.imageKind === "map" && (
-                              <span className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-1 py-0.5 text-center text-[8px] font-bold text-cyan-200">نقشه</span>
-                            )}
-                          </span>
-                          <span className="flex min-w-0 flex-1 flex-col justify-between gap-1.5">
-                            <span className="min-w-0">
-                              <b className="block truncate text-xs font-extrabold text-white">{place.name}</b>
-                              <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                                <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{place.category}</span>
-                                <span>{place.sourceLabel}</span>
-                              </span>
-                              {place.imageLabel ? <span className="mt-1 block truncate text-[9px] text-slate-600">{place.imageLabel}</span> : null}
-                            </span>
-                            <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                              {place.distanceKm !== null ? (
-                                <>
-                                  <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 text-cyan-100">{formatKm(place.distanceKm)} کیلومتر</span>
-                                  {place.durationMinutes !== null && <span className="text-slate-400">≈ {formatNumber(place.durationMinutes)} د</span>}
-                                  {place.distanceEngine ? <span className="text-[9px] text-slate-600">{place.distanceEngine}</span> : null}
-                                </>
-                              ) : (
-                                <span className="text-slate-500">فاصله نامعلوم</span>
-                              )}
-                              <ExternalLink className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-200" />
-                            </span>
-                          </span>
-                        </a>
-                      </li>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {nearby.map((place, index) => (
+                      <PlaceCard
+                        key={place.id}
+                        place={place}
+                        rank={index + 1}
+                        origin={mapHasPin ? { latitude: offer!.latitude as number, longitude: offer!.longitude as number } : null}
+                        originLabel={`اقامتگاه ${offer?.name || "انتخاب‌شده"}`}
+                      />
                     ))}
-                  </ol>
+                  </div>
                 ) : (
                   <p className="mt-3 text-[11px] leading-6 text-slate-500">
                     {nearbyLoading
@@ -680,14 +628,9 @@ export default function AccommodationDetailPage() {
                   {nearbyMeta?.note || "مکان‌ها از OpenStreetMap، ویکی‌داده و ویکی‌پدیای فارسی خوانده می‌شوند و فاصله از مختصات واقعی همین اقامتگاه حساب می‌شود."}
                   {nearbyMeta && !nearbyMeta.neshanConfigured ? " کلید نشان روی سرور تنظیم نشده، بنابراین مسیریابی از OpenStreetMap گرفته می‌شود." : ""}
                   {nearbyMeta?.originArea ? ` این نقطه در «${nearbyMeta.originArea}» است.` : ""}
-                  {" عکس هر مکان از مقالهٔ ویکی‌پدیای همان مکان یا ویکی‌انبار می‌آید؛ اگر عکسی نباشد، نقشهٔ واقعی نشان برای همان نقطه نمایش داده می‌شود و با برچسب «نقشه» مشخص است."}
+                  {" توضیح هر مکان از مقالهٔ ویکی‌پدیای همان مکان (یا ویکی‌داده) و عکسش از ویکی‌پدیا/ویکی‌انبار می‌آید؛ اگر عکسی نباشد، نقشهٔ واقعی نشان برای همان نقطه با برچسب «نقشه» نمایش داده می‌شود. دکمهٔ «مسیریابی با نشان» همان نقطه را در مسیریاب نشان باز می‌کند — بدون نیاز به رمز یا ثبت‌نام."}
                   {nearbyMeta?.neshanSearchNote ? ` ${nearbyMeta.neshanSearchNote}` : ""}
                 </p>
-                {mapHasPin && (
-                  <div className="mt-4">
-                    <NeshanKeyCard compact onChanged={setNeshanKey} />
-                  </div>
-                )}
               </section>
 
               {/* Honest review note */}
