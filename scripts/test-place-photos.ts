@@ -56,6 +56,13 @@ function check(label: string, ok: boolean, extra = "") {
     articleIsAboutPlace({ latitude: 0, longitude: 0 }, { latitude: 36.28, longitude: 59.61 }) === false,
   );
 
+  const photoSource = fs.readFileSync("lib/place-photos.ts", "utf8");
+  check(
+    "a link only counts when the place came from Wikipedia itself",
+    photoSource.includes('linkedTitleOf(place)) && place.source === "wikipedia"'),
+    "open-data items can carry a wrong same-name link",
+  );
+
   console.log("Every place gets a picture");
   const places = await attachPlaceImages<{ id: string; name: string; latitude: number; longitude: number; imageKind?: "photo" | "map" | "none"; imageUrl?: string | null }>([
     { id: "a", name: "مسجد گوهرشاد", latitude: 36.2878, longitude: 59.6153 },

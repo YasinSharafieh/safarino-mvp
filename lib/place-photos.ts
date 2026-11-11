@@ -383,6 +383,8 @@ export async function wikidataDescriptions(ids: string[]): Promise<Map<string, s
 type PlaceWithMaybePhoto = {
   id: string;
   name: string;
+  /** Where the place itself came from: wikipedia | wikidata | openstreetmap. */
+  source?: string;
   latitude: number;
   longitude: number;
   sourceUrl?: string | null;
@@ -426,7 +428,10 @@ export async function attachPlaceDetails<T extends PlaceWithMaybePhoto>(
   target.forEach((place) => {
     const rawInfo = info.get(titleOf(place));
     // A same-named article far away belongs to another place: borrow nothing from it.
-    const trusted = rawInfo && articleIsAboutPlace(place, rawInfo, { linkedDirectly: Boolean(linkedTitleOf(place)) });
+    // A link only counts as proof when the place was found in Wikipedia itself;
+    // an open-data item can carry a link to a same-named article elsewhere.
+    const linkedDirectly = Boolean(linkedTitleOf(place)) && place.source === "wikipedia";
+    const trusted = rawInfo && articleIsAboutPlace(place, rawInfo, { linkedDirectly });
     const placeInfo = trusted ? rawInfo : null;
     if (!place.imageUrl) {
       const photo = placeInfo?.photo || commons.get(wikidataOf(place));
