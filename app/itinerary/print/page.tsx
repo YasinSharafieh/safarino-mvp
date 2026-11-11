@@ -17,6 +17,7 @@ type SavedItinerary = {
   engine: string;
   note: string;
   generatedAt: string;
+  weather?: { mode: "forecast" | "normals"; days: { date: string; icon: string; label: string; maxC: number | null; minC: number | null; rainProbability: number | null; advice: string }[]; note: string };
 };
 
 function fa(value: number): string {
@@ -193,6 +194,18 @@ export default function ItineraryPrintPage() {
                 {day.theme} · {fa(day.totalKm)} کیلومتر · {fa(day.totalDriveMinutes)} دقیقه رانندگی
               </p>
             </div>
+
+            {saved.weather?.days?.[day.day - 1] ? (
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700">
+                <b className="font-black">
+                  {saved.weather.days[day.day - 1].icon} {saved.weather.days[day.day - 1].label}
+                </b>
+                {saved.weather.days[day.day - 1].maxC !== null ? ` · بیشینه ${fa(saved.weather.days[day.day - 1].maxC as number)}° و کمینه ${fa((saved.weather.days[day.day - 1].minC ?? 0) as number)}°` : ""}
+                {saved.weather.days[day.day - 1].rainProbability !== null ? ` · احتمال باران ${fa(saved.weather.days[day.day - 1].rainProbability as number)}٪` : ""}
+                {" — "}
+                {saved.weather.days[day.day - 1].advice}
+              </p>
+            ) : null}
 
             {maps[day.day] ? (
               <div className="day-map mt-3 overflow-hidden rounded-xl border border-slate-200 print:break-inside-avoid" dangerouslySetInnerHTML={{ __html: maps[day.day] }} />

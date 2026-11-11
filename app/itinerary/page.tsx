@@ -24,8 +24,11 @@ import {
 import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
+import { CloudSun, Droplets, Thermometer, Wind } from "lucide-react";
 import { drawDayMap } from "@/lib/day-map";
 import type { ItineraryDay } from "@/lib/itinerary";
+import type { WeatherDay } from "@/lib/weather";
+import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 
 type ItineraryResponse = {
@@ -67,6 +70,13 @@ function ItineraryContent() {
   const [data, setData] = useState<ItineraryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [weather, setWeather] = useState<{
+    mode: "forecast" | "normals";
+    days: WeatherDay[];
+    note: string;
+    suggestion: { order: number[]; reason: string; changed: boolean } | null;
+  } | null>(null);
+  const [weatherOrderApplied, setWeatherOrderApplied] = useState(false);
   const [activeDay, setActiveDay] = useState(0);
 
   const build = useCallback(async () => {
@@ -110,6 +120,65 @@ function ItineraryContent() {
     // Build once per city and length; the buttons rebuild on demand.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated, city, days, stopsPerDay]);
+
+  useEffect(() => {
+    if (!data?.days.length) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    fetch("/api/weather/trip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        city: data.city,
+        days: data.days.length,
+        startDate: travelData.departureDate || null,
+        latitude: hasStayPin ? stayLatitude : null,
+        longitude: hasStayPin ? stayLongitude : null,
+        planDays: data.days.map((day) => ({ dayNumber: day.day, categories: Array.from(new Set(day.stops.map((stop) => stop.place.category))) })),
+      }),
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (cancelled || !payload?.success || !Array.isArray(payload.days)) return;
+        setWeather({ mode: payload.mode, days: payload.days, note: payload.note, suggestion: payload.suggestion || null });
+        try {
+          const stored = window.sessionStorage.getItem(ITINERARY_STORAGE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored) as Record<string, unknown>;
+            parsed.weather = { mode: payload.mode, days: payload.days, note: payload.note };
+            window.sessionStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(parsed));
+          }
+        } catch {
+          /* the printable page will simply omit the weather line */
+        }
+      })
+      .catch(() => {
+        /* weather is a bonus; the plan stays usable without it */
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [data, hasStayPin, stayLatitude, stayLongitude, travelData.departureDate]);
+
+  const weatherForDay = (index: number): WeatherDay | null => weather?.days[index] || null;
+
+  /** Moves the plan days onto the best dates, keeping every stop as it is. */
+  const applyWeatherOrder = () => {
+    if (!data || !weather?.suggestion?.changed) return;
+    const byNumber = new Map(data.days.map((day) => [day.day, day]));
+    const reordered = weather.suggestion.order
+      .map((dayNumber, index) => {
+        const original = byNumber.get(dayNumber);
+        return original ? { ...original, day: index + 1 } : null;
+      })
+      .filter(Boolean) as ItineraryDay[];
+    if (reordered.length !== data.days.length) return;
+    setData({ ...data, days: reordered });
+    setWeatherOrderApplied(true);
+    setActiveDay(0);
+  };
 
   const currentDay: ItineraryDay | null = data?.days[activeDay] || null;
   const dayMap = useMemo(() => {
@@ -240,6 +309,73 @@ function ItineraryContent() {
                   ))}
                 </div>
 
+                {/* Weather for the same dates, and what to do about it */}
+                {weather && weather.days.length ? (
+                  <div className="mt-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[11px] font-black text-cyan-100">
+                        <CloudSun className="h-4 w-4" />
+                        {weather.mode === "forecast" ? "هوای روزهای سفر (پیش‌بینی واقعی)" : "هوای معمول این روزها در سال‌های گذشته"}
+                      </p>
+                      <span className="text-[9.5px] text-slate-400">
+                        {weather.mode === "forecast" ? "منبع: Open-Meteo" : "میانگین پنج سال گذشته — نه پیش‌بینی"}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {weather.days.map((item, index) => (
+                        <button
+                          key={item.date}
+                          type="button"
+                          onClick={() => setActiveDay(index)}
+                          className={`rounded-xl border p-2 text-right transition ${
+                            item.tone === "bad"
+                              ? "border-rose-400/25 bg-rose-400/10"
+                              : item.tone === "warn"
+                                ? "border-amber-400/25 bg-amber-400/10"
+                                : item.tone === "good"
+                                  ? "border-emerald-400/25 bg-emerald-400/10"
+                                  : "border-white/10 bg-white/[0.04]"
+                          } hover:brightness-110`}
+                        >
+                          <span className="flex items-center justify-between gap-1 text-[10px] font-bold text-slate-200">
+                            <span>روز {fa(index + 1)}</span>
+                            <span className="text-[9px] text-slate-400">{formatJalaliDate(item.date)}</span>
+                          </span>
+                          <span className="mt-1 flex items-center gap-1.5 text-[11px] font-black text-white">
+                            <span className="text-base leading-none">{item.icon}</span>
+                            {item.label}
+                          </span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-slate-300">
+                            {item.maxC !== null ? (
+                              <span className="flex items-center gap-0.5"><Thermometer className="h-3 w-3 text-rose-300" />{fa(item.maxC)}° / {item.minC !== null ? fa(item.minC) : "—"}°</span>
+                            ) : null}
+                            {item.rainProbability !== null ? (
+                              <span className="flex items-center gap-0.5"><Droplets className="h-3 w-3 text-sky-300" />{fa(item.rainProbability)}٪</span>
+                            ) : item.rainMm !== null ? (
+                              <span className="flex items-center gap-0.5"><Droplets className="h-3 w-3 text-sky-300" />{fa(item.rainMm)} میلی‌متر</span>
+                            ) : null}
+                            {item.windKmh !== null ? (
+                              <span className="flex items-center gap-0.5"><Wind className="h-3 w-3 text-slate-400" />{fa(item.windKmh)}</span>
+                            ) : null}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] leading-6 text-slate-300">{weather.days[activeDay]?.advice || ""}</p>
+                    {weather.suggestion?.changed && !weatherOrderApplied ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-slate-950/30 p-2">
+                        <p className="min-w-0 flex-1 text-[10px] leading-6 text-cyan-100">{weather.suggestion.reason}</p>
+                        <button type="button" onClick={applyWeatherOrder} className="rounded-lg border border-cyan-400/30 bg-cyan-400/15 px-2.5 py-1.5 text-[10px] font-extrabold text-cyan-100 transition hover:bg-cyan-400/25">
+                          چیدمان بر اساس هوا
+                        </button>
+                      </div>
+                    ) : weather.suggestion?.reason ? (
+                      <p className="mt-2 text-[10px] leading-6 text-slate-400">{weatherOrderApplied ? "روزها بر اساس هوا چیده شدند." : weather.suggestion.reason}</p>
+                    ) : null}
+                    <p className="mt-1 text-[9.5px] leading-5 text-slate-500">{weather.note}</p>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 flex flex-wrap gap-2">
                   {data.days.map((day, index) => (
                     <button
@@ -252,6 +388,7 @@ function ItineraryContent() {
                           : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
                       }`}
                     >
+                      {weatherForDay(index)?.icon ? <span className="me-1">{weatherForDay(index)?.icon}</span> : null}
                       روز {fa(day.day)} · {fa(day.stops.length)} مکان
                     </button>
                   ))}
@@ -267,7 +404,10 @@ function ItineraryContent() {
                     <div className="glass-soft overflow-hidden p-3">
                       <div className="flex items-center justify-between gap-2">
                         <h2 className="text-sm font-black text-white">نقشهٔ روز {fa(currentDay.day)}</h2>
-                        <span className="text-[10px] text-slate-500">{currentDay.theme}</span>
+                        <span className="text-[10px] text-slate-500">
+                          {weatherForDay(activeDay)?.icon ? `${weatherForDay(activeDay)?.icon} ${weatherForDay(activeDay)?.label} · ` : ""}
+                          {currentDay.theme}
+                        </span>
                       </div>
                       {dayMap ? (
                         <div className="mt-2 overflow-hidden rounded-xl border border-white/10" dangerouslySetInnerHTML={{ __html: dayMap.svg }} />
