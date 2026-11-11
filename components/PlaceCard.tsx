@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ExternalLink, ChevronDown, Info, Navigation2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ExternalLink, ChevronDown, Heart, Info, Navigation2 } from "lucide-react";
+import { FAVORITES_EVENT, isFavoritePlace, toggleFavorite } from "@/lib/favorites";
 import PlaceNavigator from "./PlaceNavigator";
 import type { NavPoint } from "@/lib/neshan-deeplink";
 
@@ -49,6 +50,30 @@ export default function PlaceCard({
   rank?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setSaved(isFavoritePlace(place.id));
+    sync();
+    window.addEventListener(FAVORITES_EVENT, sync);
+    return () => window.removeEventListener(FAVORITES_EVENT, sync);
+  }, [place.id]);
+
+  const saveOrRemove = () => {
+    toggleFavorite({
+      id: place.id,
+      name: place.name,
+      category: place.category,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      address: place.address,
+      description: place.description,
+      imageUrl: place.imageUrl,
+      imageKind: place.imageKind,
+      wikipediaUrl: place.wikipediaUrl,
+      sourceUrl: place.sourceUrl,
+    });
+  };
   const description = (place.description || "").trim();
   const isLong = description.length > 150;
   const articleLink = place.imageCreditUrl || place.wikipediaUrl || place.sourceUrl || null;
@@ -91,6 +116,17 @@ export default function PlaceCard({
           <h3 className="min-w-0 text-sm font-black leading-6 text-white">
             <b className="line-clamp-2">{place.name}</b>
           </h3>
+          <span className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={saveOrRemove}
+              aria-pressed={saved}
+              aria-label={saved ? `حذف ${place.name} از علاقه‌مندی‌ها` : `افزودن ${place.name} به علاقه‌مندی‌ها`}
+              title={saved ? "در علاقه‌مندی‌هاست" : "افزودن به علاقه‌مندی‌ها"}
+              className={`mt-0.5 rounded-lg border p-1.5 transition ${saved ? "border-rose-400/50 bg-rose-400/15 text-rose-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-rose-200"}`}
+            >
+              <Heart className={`h-3 w-3 ${saved ? "fill-current" : ""}`} />
+            </button>
           {articleLink ? (
             <a
               href={articleLink}
@@ -102,6 +138,7 @@ export default function PlaceCard({
               <ExternalLink className="h-3 w-3" />
             </a>
           ) : null}
+          </span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
           <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{place.category}</span>

@@ -35,6 +35,9 @@ import type { AccommodationProvider } from "@/lib/accommodation-types";
 import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "../context/TravelContext";
 import PlaceCard from "@/components/PlaceCard";
+import PlaceToolbar from "@/components/PlaceToolbar";
+import { filterPlaces, type FilterOptions } from "@/lib/place-filter";
+import { FAVORITES_EVENT, favoriteIds } from "@/lib/favorites";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import type { PlaceCardData } from "@/components/PlaceCard";
 
@@ -212,6 +215,17 @@ export default function PlanPage() {
   const [poiDistances, setPoiDistances] = useState<Record<string, { distanceKm: number; durationMinutes: number | null }>>({});
   const [distanceMeta, setDistanceMeta] = useState<{ engineLabel: string; engine: string; note: string; neshanConfigured: boolean } | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
+  const [placeFilters, setPlaceFilters] = useState<FilterOptions>({ query: "", categories: [], sort: "distance" });
+  const [favoriteList, setFavoriteList] = useState<string[]>([]);
+
+  useEffect(() => {
+    const sync = () => setFavoriteList(favoriteIds());
+    sync();
+    window.addEventListener(FAVORITES_EVENT, sync);
+    return () => window.removeEventListener(FAVORITES_EVENT, sync);
+  }, []);
+
+
   const stayLatitude = Number(accommodationDetails.latitude);
   const stayLongitude = Number(accommodationDetails.longitude);
   const hasStayPin =
@@ -237,6 +251,28 @@ export default function PlanPage() {
     fromStayKm: poiDistances[poi.id]?.distanceKm ?? null,
     fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null,
   }));
+
+  /** The places exactly as the cards render them, so search and filters agree with what is shown. */
+  const cardPlaces = useMemo(
+    () =>
+      enrichedPois.map((poi) => ({
+        id: poi.id,
+        name: poi.name,
+        category: poi.category,
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+        imageKind: poi.imageKind ?? ("none" as const),
+        wikipediaUrl: poi.wikipediaUrl,
+        description: poi.description,
+      })),
+    [enrichedPois],
+  );
+  const visiblePlaces = useMemo(
+    () => filterPlaces(cardPlaces, { ...placeFilters, favorites: favoriteList }),
+    [cardPlaces, placeFilters, favoriteList],
+  );
+  const visibleIds = useMemo(() => new Set(visiblePlaces.map((place) => place.id)), [visiblePlaces]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -645,8 +681,23 @@ export default function PlanPage() {
               </span>
             </div>
             {poiData?.pois.length ? (
+              <PlaceToolbar
+                places={cardPlaces}
+                options={placeFilters}
+                onChange={setPlaceFilters}
+                total={cardPlaces.length}
+                shown={visiblePlaces.length}
+                favoriteCount={favoriteList.filter((id) => cardPlaces.some((place) => place.id === id)).length}
+              />
+            ) : null}
+            {poiData?.pois.length && !visiblePlaces.length ? (
+              <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-[11px] leading-6 text-amber-100">
+                با این جست‌وجو و فیلترها مکانی پیدا نشد. یکی از فیلترها را بردارید یا نام دیگری امتحان کنید.
+              </p>
+            ) : null}
+            {poiData?.pois.length ? (
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                {enrichedPois.map((poi, index) => (
+                {enrichedPois.filter((poi) => visibleIds.has(poi.id)).map((poi, index) => (
                   <PlaceCard
                     key={poi.id}
                     rank={index + 1}

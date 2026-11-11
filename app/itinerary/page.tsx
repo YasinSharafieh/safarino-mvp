@@ -24,9 +24,12 @@ import {
 import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
-import { CloudSun, Droplets, Thermometer, Wind } from "lucide-react";
+import { CloudSun, Droplets, Thermometer, Wind, Heart, PlusCircle, Trash2, Wand2, Ruler } from "lucide-react";
 import { drawDayMap } from "@/lib/day-map";
 import type { ItineraryDay } from "@/lib/itinerary";
+import PlaceToolbar from "@/components/PlaceToolbar";
+import { filterPlaces, type FilterOptions } from "@/lib/place-filter";
+import { FAVORITES_EVENT, readFavorites, toggleFavorite, type FavoritePlace } from "@/lib/favorites";
 import type { WeatherDay } from "@/lib/weather";
 import WeatherGlyph from "@/components/WeatherGlyph";
 import { formatJalaliDate } from "@/lib/jalali";
@@ -45,6 +48,7 @@ type ItineraryResponse = {
   unmeasuredLegs?: number;
   cached?: boolean;
   generatedAt: string;
+  origin?: { latitude: number; longitude: number } | null;
   error?: string;
 };
 
@@ -78,6 +82,133 @@ function ItineraryContent() {
     suggestion: { order: number[]; reason: string; changed: boolean } | null;
   } | null>(null);
   const [weatherOrderApplied, setWeatherOrderApplied] = useState(false);
+  const [favorites, setFavorites] = useState<FavoritePlace[]>([]);
+  const [favoriteFilters, setFavoriteFilters] = useState<FilterOptions>({ query: "", categories: [], sort: "distance" });
+  const [editNote, setEditNote] = useState("");
+  const [remeasuring, setRemeasuring] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setFavorites(readFavorites());
+    sync();
+    window.addEventListener(FAVORITES_EVENT, sync);
+    return () => window.removeEventListener(FAVORITES_EVENT, sync);
+  }, []);
+  const favoriteIds = favorites.map((place) => place.id);
+
+  /** Which day holds a place right now (so the panel can say so). */
+  const dayOfPlace = (placeId: string): number | null => {
+    const day = data?.days.find((item) => item.stops.some((stop) => stop.place.id === placeId));
+    return day ? day.day : null;
+  };
+
+  /** Adds a saved place to the end of a day; its driving time is measured next. */
+  const addFavoriteToDay = (favorite: FavoritePlace, dayNumber: number) => {
+    if (!data) return;
+    const exists = data.days.some((day) => day.stops.some((stop) => stop.place.id === favorite.id));
+    if (exists) {
+      setEditNote(`«${favorite.name}» همین حالا در برنامهٔ شما هست.`);
+      return;
+    }
+    const updated = data.days.map((day) =>
+      day.day !== dayNumber
+        ? day
+        : {
+            ...day,
+            stops: [
+              ...day.stops,
+              {
+                place: {
+                  id: favorite.id,
+                  name: favorite.name,
+                  category: favorite.category,
+                  latitude: favorite.latitude,
+                  longitude: favorite.longitude,
+                  address: favorite.address,
+                  description: favorite.description,
+                  imageUrl: favorite.imageUrl ?? null,
+                  imageKind: favorite.imageKind ?? "none",
+                  wikipediaUrl: favorite.wikipediaUrl ?? null,
+                  sourceUrl: favorite.sourceUrl ?? "",
+                },
+                order: day.stops.length + 1,
+                startTime: day.stops[day.stops.length - 1]?.startTime || "۰۹:۰۰",
+                visitMinutes: 50,
+                legKm: null,
+                legMinutes: null,
+                legEngine: "اندازه‌گیری نشد",
+              },
+            ],
+          },
+    );
+    setData({ ...data, days: updated });
+    setEditNote(`«${favorite.name}» به روز ${fa(dayNumber)} اضافه شد. با دکمهٔ «اندازه‌گیری دوبارهٔ مسیرها» فاصله‌ها به‌روز می‌شود.`);
+  };
+
+  const removeStop = (dayNumber: number, placeId: string) => {
+    if (!data) return;
+    const updated = data.days.map((day) =>
+      day.day !== dayNumber ? day : { ...day, stops: day.stops.filter((stop) => stop.place.id !== placeId).map((stop, index) => ({ ...stop, order: index + 1 })) },
+    );
+    setData({ ...data, days: updated });
+    setEditNote("ایستگاه از برنامه حذف شد. با دکمهٔ «اندازه‌گیری دوبارهٔ مسیرها» فاصله و زمان‌ها به‌روز می‌شود.");
+  };
+
+  /** Asks the server to measure the edited plan again (Neshan first). */
+  const remeasure = async () => {
+    if (!data) return;
+    setRemeasuring(true);
+    setEditNote("");
+    try {
+      const legs = data.days.flatMap((day) => day.stops.map((stop) => ({ latitude: stop.place.latitude, longitude: stop.place.longitude })));
+      const response = await fetch("/api/itinerary/legs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: data.origin || null, legs }),
+      });
+      const payload = await response.json();
+      const measured = Array.isArray(payload?.legs) ? (payload.legs as ({ distanceKm: number; durationMinutes: number; engine?: string } | null)[]) : [];
+      let cursor = 0;
+      const updatedDays = data.days.map((day) => {
+        const stops = day.stops.map((stop) => {
+          const item = measured[cursor];
+          cursor += 1;
+          return {
+            ...stop,
+            legKm: item ? item.distanceKm : null,
+            legMinutes: item ? item.durationMinutes : null,
+            legEngine: item ? item.engine || "اندازه‌گیری‌شده" : "اندازه‌گیری نشد",
+          };
+        });
+        return {
+          ...day,
+          stops,
+          totalKm: Math.round(stops.reduce((sum, stop) => sum + (stop.legKm || 0), 0) * 10) / 10,
+          totalDriveMinutes: stops.reduce((sum, stop) => sum + (stop.legMinutes || 0), 0),
+        };
+      });
+      setData({ ...data, days: updatedDays, engine: payload?.engine || data.engine });
+      setEditNote(typeof payload?.note === "string" ? payload.note : "مسیرها دوباره اندازه‌گیری شد.");
+    } catch {
+      setEditNote("اندازه‌گیری دوباره انجام نشد؛ با دکمهٔ «مسیریابی با نشان» هر مسیر را می‌توانید مستقیم باز کنید.");
+    } finally {
+      setRemeasuring(false);
+    }
+  };
+
+  /** The saved places, searchable the same way as the main list. */
+  const visibleFavorites = filterPlaces(
+    favorites.map((place) => ({
+      id: place.id,
+      name: place.name,
+      category: place.category,
+      address: place.address,
+      imageKind: place.imageKind ?? ("none" as const),
+      wikipediaUrl: place.wikipediaUrl,
+      description: place.description,
+      distanceKm: null,
+    })),
+    favoriteFilters,
+  );
   const [activeDay, setActiveDay] = useState(0);
 
   const build = useCallback(async () => {
@@ -399,6 +530,119 @@ function ItineraryContent() {
                   </span>
                 </div>
 
+                {editNote ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] p-2.5">
+                    <p className="min-w-0 flex-1 text-[10px] leading-6 text-cyan-100">{editNote}</p>
+                    <button
+                      type="button"
+                      onClick={() => void remeasure()}
+                      disabled={remeasuring}
+                      className="flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/15 px-2.5 py-1.5 text-[10px] font-extrabold text-cyan-100 transition hover:bg-cyan-400/25 disabled:opacity-50"
+                    >
+                      {remeasuring ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Ruler className="h-3 w-3" />}
+                      اندازه‌گیری دوبارهٔ مسیرها
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Saved places: a personal shortlist that can be dropped into a day */}
+                <div className="mt-3 rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 text-[11px] font-black text-rose-100">
+                      <Heart className="h-4 w-4" />
+                      علاقه‌مندی‌های من {favorites.length ? `(${fa(favorites.length)})` : ""}
+                    </p>
+                    <span className="text-[9.5px] text-slate-400">فقط روی همین دستگاه ذخیره می‌شود</span>
+                  </div>
+                  {favorites.length ? (
+                    <>
+                      <PlaceToolbar
+                        places={favorites.map((place) => ({
+                          id: place.id,
+                          name: place.name,
+                          category: place.category,
+                          address: place.address,
+                          imageKind: place.imageKind ?? ("none" as const),
+                          wikipediaUrl: place.wikipediaUrl,
+                          description: place.description,
+                          distanceKm: null,
+                        }))}
+                        options={favoriteFilters}
+                        onChange={setFavoriteFilters}
+                        total={favorites.length}
+                        shown={visibleFavorites.length}
+                      />
+                      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {visibleFavorites.map((place) => {
+                          const saved = favorites.find((item) => item.id === place.id);
+                          const inDay = dayOfPlace(place.id);
+                          if (!saved) return null;
+                          return (
+                            <li key={place.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/30 p-2">
+                              {saved.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={saved.imageUrl} alt={saved.name} loading="lazy" className="h-10 w-10 shrink-0 rounded-lg border border-white/10 object-cover" />
+                              ) : null}
+                              <span className="min-w-0 flex-1">
+                                <b className="block truncate text-[11px] font-extrabold text-white">{saved.name}</b>
+                                <span className="block text-[9px] text-slate-500">{saved.category}</span>
+                              </span>
+                              {inDay ? (
+                                <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[9.5px] font-bold text-emerald-200">در روز {fa(inDay)}</span>
+                              ) : (
+                                <label className="flex items-center gap-1 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-1.5 py-1 text-[9.5px] font-bold text-cyan-100">
+                                  <PlusCircle className="h-3 w-3" />
+                                  <select
+                                    aria-label={`افزودن ${saved.name} به یک روز`}
+                                    defaultValue=""
+                                    onChange={(event) => {
+                                      const dayNumber = Number(event.target.value);
+                                      if (dayNumber) addFavoriteToDay(saved, dayNumber);
+                                      event.target.value = "";
+                                    }}
+                                    className="bg-transparent text-[9.5px] font-bold text-cyan-100 outline-none [&>option]:bg-slate-900"
+                                  >
+                                    <option value="">افزودن به روز…</option>
+                                    {data.days.map((day) => (
+                                      <option key={day.day} value={day.day}>روز {fa(day.day)}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  toggleFavorite({
+                                    id: saved.id,
+                                    name: saved.name,
+                                    category: saved.category,
+                                    latitude: saved.latitude,
+                                    longitude: saved.longitude,
+                                    address: saved.address,
+                                    description: saved.description,
+                                    imageUrl: saved.imageUrl,
+                                    imageKind: saved.imageKind,
+                                    wikipediaUrl: saved.wikipediaUrl,
+                                    sourceUrl: saved.sourceUrl,
+                                  });
+                                }}
+                                aria-label={`حذف ${saved.name} از علاقه‌مندی‌ها`}
+                                className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-slate-400 transition hover:text-rose-200"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-[10px] leading-6 text-slate-400">
+                      روی قلب کنار هر مکان در صفحهٔ «برنامهٔ هوشمند» بزنید تا اینجا ذخیره شود؛ بعد با یک انتخاب، آن را به روز دلخواه اضافه کنید.
+                    </p>
+                  )}
+                </div>
+
                 {currentDay && (
                   <motion.div key={currentDay.day} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-4 grid gap-4 lg:grid-cols-[1.05fr_1fr]">
                     {/* Map of the day */}
@@ -467,6 +711,15 @@ function ItineraryContent() {
                                   ) : (
                                     <span className="text-[9.5px] text-slate-500">فاصلهٔ این مسیر اندازه‌گیری نشد</span>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeStop(currentDay.day, stop.place.id)}
+                                    aria-label={`حذف ${stop.place.name} از این روز`}
+                                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[9.5px] font-bold text-slate-300 transition hover:border-rose-400/30 hover:text-rose-200"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    حذف
+                                  </button>
                                   {hasStayPin || index > 0 ? (
                                     <button
                                       type="button"
