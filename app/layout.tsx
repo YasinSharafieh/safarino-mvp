@@ -43,11 +43,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* The font is served by Safarino itself: no third-party font server, so
+            Persian text is identical everywhere and never blocked inside Iran. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap"
-          rel="stylesheet"
+          rel="preload"
+          href="/fonts/Vazirmatn-Variable.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
         />
       </head>
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">

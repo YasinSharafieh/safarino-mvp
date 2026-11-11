@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * The site's own copy of Vazirmatn.
+ *
+ * The font used to be loaded from Google Fonts, which is blocked or very slow
+ * for most travellers inside Iran: the page then fell back to a system font
+ * and the Persian text looked wrong (different shapes, uneven weight, broken
+ * numbers). The font now travels with the site, in one variable file that
+ * covers every weight, so the letters are identical on every device and the
+ * page never waits for a third-party server.
+ */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Variable.woff2") format("woff2-variations"),
+       url("/fonts/Vazirmatn-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0600-06FF, U+0750-077F, U+200C-200F, U+2010-205E, U+FB50-FDFF, U+FE70-FEFF;
+}
+
 :root {
   color-scheme: dark;
   --ring-glow: 0 0 0 1px rgba(255, 255, 255, 0.08);

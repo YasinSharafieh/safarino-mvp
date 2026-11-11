@@ -105,16 +105,16 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
 
   // Brand
   ctx.fillStyle = "#5eead4";
-  ctx.font = "700 20px system-ui, 'Segoe UI', Tahoma, sans-serif";
+  ctx.font = "700 20px Vazirmatn, system-ui, Tahoma, sans-serif";
   ctx.fillText("سفرینو · SAFARINO", right, 68);
 
   // Title
   ctx.fillStyle = "#ffffff";
-  ctx.font = "900 62px system-ui, 'Segoe UI', Tahoma, sans-serif";
+  ctx.font = "900 62px Vazirmatn, system-ui, Tahoma, sans-serif";
   ctx.fillText(fit(ctx, `برنامهٔ سفر ${trip.city}`, WIDTH - 128, 26), right, 150);
 
   ctx.fillStyle = "rgba(203,229,240,0.72)";
-  ctx.font = "600 24px system-ui, 'Segoe UI', Tahoma, sans-serif";
+  ctx.font = "600 24px Vazirmatn, system-ui, Tahoma, sans-serif";
   ctx.fillText(
     `${fa(trip.totals.days)} روز · ${fa(trip.totals.stops)} ایستگاه · ${fa(trip.totals.km)} کیلومتر رانندگی`,
     right,
@@ -138,28 +138,28 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
     ctx.stroke();
 
     ctx.fillStyle = "#5eead4";
-    ctx.font = "900 24px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "900 24px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.textAlign = "right";
     ctx.fillText(`روز ${fa(day.d)}`, x + cardWidth - 20, y + 40);
 
     ctx.fillStyle = "rgba(203,229,240,0.62)";
-    ctx.font = "600 16px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "600 16px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.fillText(`${fa(day.km)} کیلومتر · ${fa(day.mn)} دقیقه`, x + cardWidth - 20, y + 66);
 
     ctx.fillStyle = "#eaf6fb";
-    ctx.font = "700 19px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "700 19px Vazirmatn, system-ui, Tahoma, sans-serif";
     day.stops.slice(0, 4).forEach((stop, stopIndex) => {
       const lineY = y + 104 + stopIndex * 32;
       ctx.fillStyle = "rgba(94,234,212,0.85)";
-      ctx.font = "900 16px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      ctx.font = "900 16px Vazirmatn, system-ui, Tahoma, sans-serif";
       ctx.fillText(faDigits(String(stopIndex + 1)), x + cardWidth - 20, lineY);
       ctx.fillStyle = "#eaf6fb";
-      ctx.font = "700 19px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      ctx.font = "700 19px Vazirmatn, system-ui, Tahoma, sans-serif";
       ctx.fillText(fit(ctx, stop.n, cardWidth - 60, 22), x + cardWidth - 44, lineY);
     });
     if (day.stops.length > 4) {
       ctx.fillStyle = "rgba(203,229,240,0.5)";
-      ctx.font = "600 15px system-ui, 'Segoe UI', Tahoma, sans-serif";
+      ctx.font = "600 15px Vazirmatn, system-ui, Tahoma, sans-serif";
       ctx.fillText(`و ${fa(day.stops.length - 4)} جای دیگر`, x + cardWidth - 44, y + height - 18);
     }
   });
@@ -169,13 +169,13 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   if (trip.money) {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(203,229,240,0.66)";
-    ctx.font = "600 20px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "600 20px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.fillText("هزینهٔ تقریبی این سفر", right, moneyY);
     ctx.fillStyle = "#ffffff";
-    ctx.font = "900 38px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "900 38px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.fillText(money(trip.money.total), right, moneyY + 44);
     ctx.fillStyle = "rgba(148,197,214,0.7)";
-    ctx.font = "600 17px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "600 17px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.fillText(
       "قیمت واقعی اقامتگاه و حمل‌ونقل + تخمین خوراک و بلیت",
       right,
@@ -188,26 +188,44 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   if (firstWeather) {
     ctx.textAlign = "left";
     ctx.fillStyle = "rgba(203,229,240,0.72)";
-    ctx.font = "600 19px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "600 19px Vazirmatn, system-ui, Tahoma, sans-serif";
     const shape = firstWeather.maxC !== null ? `${fa(firstWeather.maxC)}° ` : "";
     const rain = firstWeather.rainProbability !== null ? ` · باران ${fa(firstWeather.rainProbability)}٪` : "";
     ctx.fillText(`${firstWeather.label} ${shape}${rain}`.trim(), 64, moneyY + 6);
     ctx.fillStyle = "rgba(148,197,214,0.6)";
-    ctx.font = "600 15px system-ui, 'Segoe UI', Tahoma, sans-serif";
+    ctx.font = "600 15px Vazirmatn, system-ui, Tahoma, sans-serif";
     ctx.fillText(trip.weather?.mode === "forecast" ? "پیش‌بینی واقعی هوا" : "میانگین سال‌های گذشته — نه پیش‌بینی", 64, moneyY + 32);
   }
 
   // Footer
   ctx.textAlign = "right";
   ctx.fillStyle = "rgba(94,234,212,0.85)";
-  ctx.font = "700 19px system-ui, 'Segoe UI', Tahoma, sans-serif";
+  ctx.font = "700 19px Vazirmatn, system-ui, Tahoma, sans-serif";
   ctx.fillText("safarino-mvp.vercel.app", right, HEIGHT - 22);
 
   return canvas;
 }
 
+/** Waits (briefly) for the site's own font, so the card matches the site. */
+export async function waitForCardFont(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return;
+  try {
+    await Promise.race([
+      Promise.all([
+        document.fonts.load('400 24px Vazirmatn'),
+        document.fonts.load('700 24px Vazirmatn'),
+        document.fonts.load('900 32px Vazirmatn'),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  } catch {
+    /* the card is still readable with a fallback font */
+  }
+}
+
 /** The card as a PNG file, ready to send or save. */
 export async function shareCardBlob(trip: ShareTrip): Promise<Blob | null> {
+  await waitForCardFont();
   const canvas = drawShareCard(trip);
   if (!canvas) return null;
   return new Promise((resolve) => {
