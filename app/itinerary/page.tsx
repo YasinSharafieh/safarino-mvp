@@ -28,6 +28,7 @@ import { CloudSun, Droplets, Thermometer, Wind } from "lucide-react";
 import { drawDayMap } from "@/lib/day-map";
 import type { ItineraryDay } from "@/lib/itinerary";
 import type { WeatherDay } from "@/lib/weather";
+import WeatherGlyph from "@/components/WeatherGlyph";
 import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 
@@ -342,7 +343,7 @@ function ItineraryContent() {
                             <span className="text-[9px] text-slate-400">{formatJalaliDate(item.date)}</span>
                           </span>
                           <span className="mt-1 flex items-center gap-1.5 text-[11px] font-black text-white">
-                            <span className="text-base leading-none">{item.icon}</span>
+                            <WeatherGlyph code={item.code} className="h-4 w-4" />
                             {item.label}
                           </span>
                           <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-slate-300">
@@ -388,7 +389,7 @@ function ItineraryContent() {
                           : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
                       }`}
                     >
-                      {weatherForDay(index)?.icon ? <span className="me-1">{weatherForDay(index)?.icon}</span> : null}
+                      {weatherForDay(index) ? <span className="me-1 inline-flex align-middle"><WeatherGlyph code={weatherForDay(index)!.code} className="h-3.5 w-3.5" /></span> : null}
                       روز {fa(day.day)} · {fa(day.stops.length)} مکان
                     </button>
                   ))}
@@ -405,7 +406,7 @@ function ItineraryContent() {
                       <div className="flex items-center justify-between gap-2">
                         <h2 className="text-sm font-black text-white">نقشهٔ روز {fa(currentDay.day)}</h2>
                         <span className="text-[10px] text-slate-500">
-                          {weatherForDay(activeDay)?.icon ? `${weatherForDay(activeDay)?.icon} ${weatherForDay(activeDay)?.label} · ` : ""}
+                          {weatherForDay(activeDay) ? `${weatherForDay(activeDay)?.label} · ` : ""}
                           {currentDay.theme}
                         </span>
                       </div>

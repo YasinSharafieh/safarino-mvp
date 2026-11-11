@@ -198,7 +198,7 @@ export default function ItineraryPrintPage() {
             {saved.weather?.days?.[day.day - 1] ? (
               <p className="mt-2 rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700">
                 <b className="font-black">
-                  {saved.weather.days[day.day - 1].icon} {saved.weather.days[day.day - 1].label}
+                  {saved.weather.days[day.day - 1].label}
                 </b>
                 {saved.weather.days[day.day - 1].maxC !== null ? ` · بیشینه ${fa(saved.weather.days[day.day - 1].maxC as number)}° و کمینه ${fa((saved.weather.days[day.day - 1].minC ?? 0) as number)}°` : ""}
                 {saved.weather.days[day.day - 1].rainProbability !== null ? ` · احتمال باران ${fa(saved.weather.days[day.day - 1].rainProbability as number)}٪` : ""}
