@@ -9,6 +9,7 @@ import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
 import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
+import { CHECKLIST_GROUPS, allItems, readChecklist, type ChecklistState } from "@/lib/checklist";
 
 type SavedItinerary = {
   success: boolean;
@@ -20,6 +21,10 @@ type SavedItinerary = {
   generatedAt: string;
   weather?: { mode: "forecast" | "normals"; days: { date: string; icon: string; label: string; maxC: number | null; minC: number | null; rainProbability: number | null; advice: string }[]; note: string };
 };
+
+function tomanChecklistDone(done: number, total: number): string {
+  return `${new Intl.NumberFormat("fa-IR").format(done)} از ${new Intl.NumberFormat("fa-IR").format(total)} مورد انجام شده`;
+}
 
 function fa(value: number): string {
   return new Intl.NumberFormat("fa-IR").format(value);
@@ -39,9 +44,11 @@ export default function ItineraryPrintPage() {
   const [saved, setSaved] = useState<SavedItinerary | null>(null);
   const [missing, setMissing] = useState(false);
   const [assumptions, setAssumptions] = useState<BudgetAssumptions | null>(null);
+  const [checklist, setChecklist] = useState<ChecklistState>({ done: [], custom: [] });
 
   useEffect(() => {
     setAssumptions(readBudgetAssumptions());
+    setChecklist(readChecklist());
     try {
       const raw = window.sessionStorage.getItem(ITINERARY_STORAGE_KEY);
       if (raw) {
@@ -76,6 +83,9 @@ export default function ItineraryPrintPage() {
     transport: transport ? { label: String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.kind as string) || ""), totalToman: transportCost || null } : null,
     assumptions: budgetPlanAssumptions,
   });
+
+  const checklistItems = allItems(checklist);
+  const checklistDone = new Set(checklist.done);
 
   const maps = useMemo(() => {
     if (!saved) return {};
@@ -317,6 +327,33 @@ export default function ItineraryPrintPage() {
             قیمت‌های اقامتگاه و حمل‌ونقل همان چیزی است که در لحظهٔ انتخاب از منبع اصلی خوانده شد؛ ممکن است تغییر کند. هیچ هزینه‌ای تخمینی به‌عنوان واقعیت نوشته نشده است.
           </p>
           <p className="mt-1 text-[10px] leading-6 text-slate-500">{saved.note}</p>
+        </section>
+
+        {/* The list not to forget, printed with the book */}
+        <section className="sheet mt-4 rounded-2xl bg-white p-6 shadow-sm print:mt-0 print:break-before-page">
+          <h2 className="text-xl font-black text-slate-900">چک‌لیست سفر</h2>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {tomanChecklistDone(checklistDone.size, checklistItems.length)} — همین چک‌لیست در نسخهٔ آنلاین قابل تیک‌زدن است.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {CHECKLIST_GROUPS.map((group) => {
+              const items = checklistItems.filter((item) => item.group === group.id);
+              if (!items.length) return null;
+              return (
+                <div key={group.id} className="break-inside-avoid rounded-xl border border-slate-200 p-3">
+                  <p className="text-[11px] font-black text-slate-800">{group.label}</p>
+                  <ul className="mt-1.5 space-y-1">
+                    {items.map((item) => (
+                      <li key={item.id} className="flex items-start gap-1.5 text-[10.5px] leading-5">
+                        <span className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border text-[8px] ${checklistDone.has(item.id) ? "border-slate-400 bg-slate-200 text-slate-700" : "border-slate-300 text-transparent"}`}>✓</span>
+                        <span className={checklistDone.has(item.id) ? "text-slate-400 line-through" : "text-slate-700"}>{item.title}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         </section>
       </div>
     </main>

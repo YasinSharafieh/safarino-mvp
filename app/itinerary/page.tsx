@@ -36,6 +36,7 @@ import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
+import TripChecklist from "@/components/TripChecklist";
 import {
   buildBudgetPlan,
   readBudgetAssumptions,
@@ -825,6 +826,7 @@ function ItineraryContent() {
 
                 <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
                 {sharePayload ? <ShareTrip trip={sharePayload} /> : null}
+                <TripChecklist departureDate={travelData.departureDate} />
 
                 {data.unused.length ? (
                   <p className="mt-4 text-[10px] leading-6 text-slate-500">
