@@ -83,18 +83,17 @@ export function drawDayMap(points: MapPoint[], options: { title?: string } = {})
     .map((point, index) => {
       const cx = x(point.longitude);
       const cy = y(point.latitude);
-      const label = point.label.length > 24 ? `${point.label.slice(0, 23)}…` : point.label;
-      // Keep the label inside the drawing: flip it to the other side near the
-      // right edge, and lift it above the pin when two stops sit on top of each other.
-      const toTheLeft = cx > WIDTH - 170;
-      const labelX = toTheLeft ? cx - 18 : cx + 18;
-      const labelY = cy + (index % 2 === 0 ? 4 : -9);
-      const anchor = toTheLeft ? "end" : "start";
+      const label = point.label.length > 20 ? `${point.label.slice(0, 19)}…` : point.label;
+      // Labels sit under their pin, centred, which reads correctly in Persian
+      // whichever side of the drawing the pin is on. Near the bottom edge the
+      // label moves above the pin so nothing is clipped.
+      const below = cy < HEIGHT - 44;
+      const labelY = below ? cy + 26 : cy - 18;
       return `
     <g>
       <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="13" fill="#0e7490" stroke="#67e8f9" stroke-width="2" />
       <text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="#ecfeff">${toPersian(String(index + 1))}</text>
-      <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}" font-size="10.5" fill="#e2e8f0">${escapeXml(label)}</text>
+      <text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" font-size="10" fill="#e2e8f0" stroke="#071521" stroke-width="3" paint-order="stroke">${escapeXml(label)}</text>
     </g>`;
     })
     .join("");
