@@ -165,7 +165,7 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   });
 
   // Money line, with its honesty label.
-  const moneyY = 512;
+  const moneyY = 468;
   if (trip.money) {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(203,229,240,0.66)";
@@ -173,13 +173,13 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
     ctx.fillText("هزینهٔ تقریبی این سفر", right, moneyY);
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 38px system-ui, 'Segoe UI', Tahoma, sans-serif";
-    ctx.fillText(money(trip.money.total), right, moneyY + 46);
+    ctx.fillText(money(trip.money.total), right, moneyY + 44);
     ctx.fillStyle = "rgba(148,197,214,0.7)";
     ctx.font = "600 17px system-ui, 'Segoe UI', Tahoma, sans-serif";
     ctx.fillText(
-      `شامل قیمت واقعی اقامتگاه و حمل‌ونقل + تخمین خوراک و بلیت`,
+      "قیمت واقعی اقامتگاه و حمل‌ونقل + تخمین خوراک و بلیت",
       right,
-      moneyY + 76,
+      moneyY + 72,
     );
   }
 
@@ -201,7 +201,7 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   ctx.textAlign = "right";
   ctx.fillStyle = "rgba(94,234,212,0.85)";
   ctx.font = "700 19px system-ui, 'Segoe UI', Tahoma, sans-serif";
-  ctx.fillText("safarino-mvp.vercel.app", right, HEIGHT - 26);
+  ctx.fillText("safarino-mvp.vercel.app", right, HEIGHT - 22);
 
   return canvas;
 }
