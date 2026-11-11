@@ -110,6 +110,14 @@ check("only the known fields exist", Object.keys(compact).sort().join(",") === "
 const stopKeys = Object.keys(compact.days[0].stops[0]).sort().join(",");
 check("a stop has only its planned fields", stopKeys === "c,d,i,km,la,lo,mn,n,t,v", stopKeys);
 
+console.log("Compacting twice changes nothing");
+const twice = compactTrip(JSON.parse(JSON.stringify(compact)));
+check("an already compacted plan is accepted", twice !== null);
+check("the days survived the second pass", twice?.days.length === compact.days.length);
+check("the stops survived the second pass", twice?.totals.stops === compact.totals.stops);
+check("the kilometres survived the second pass", twice?.days[0].stops[0].km === 1.4);
+check("the money survived the second pass", twice?.money?.total === compact.money?.total);
+
 console.log("Nonsense in, nothing out");
 check("an empty object is refused", compactTrip({}) === null);
 check("a plan without days is refused", compactTrip({ city: "مشهد", days: [] }) === null);

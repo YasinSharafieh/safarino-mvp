@@ -117,36 +117,38 @@ export function compactTrip(input: unknown): ShareTrip | null {
     for (const stopItem of rawStops.slice(0, SHARE_MAX_STOPS_PER_DAY)) {
       const stop = stopItem as Record<string, unknown>;
       const place = (stop.place || {}) as Record<string, unknown>;
-      const latitude = coord(place.latitude, 90);
-      const longitude = coord(place.longitude, 180);
-      const name = short(place.name, 90);
+      // Accept a raw plan (place.latitude, stop.place.name) and an already
+      // compacted one (la/lo/n) — the same validator guards both doors.
+      const latitude = coord(place.latitude ?? stop.la, 90);
+      const longitude = coord(place.longitude ?? stop.lo, 180);
+      const name = short(place.name ?? stop.n, 90);
       if (latitude === null || longitude === null || !name) continue;
       const entry: ShareStop = {
         n: name,
-        c: short(place.category, 40),
+        c: short(place.category ?? stop.c, 40),
         la: latitude,
         lo: longitude,
-        t: short(stop.startTime, 8) || "—",
-        v: Math.max(0, Math.round(finite(stop.visitMinutes) ?? 0)),
+        t: short(stop.startTime ?? stop.t, 8) || "—",
+        v: Math.max(0, Math.round(finite(stop.visitMinutes ?? stop.v) ?? 0)),
       };
-      const description = short(place.description, 240);
+      const description = short(place.description ?? stop.d, 240);
       if (description) entry.d = description;
-      const image = short(place.imageUrl, 400);
+      const image = short(place.imageUrl ?? stop.i, 400);
       if (image) entry.i = image;
-      const km = finite(stop.legKm);
+      const km = finite(stop.legKm ?? stop.km);
       if (km !== null && km >= 0) entry.km = Math.round(km * 10) / 10;
-      const minutes = finite(stop.legMinutes);
+      const minutes = finite(stop.legMinutes ?? stop.mn);
       if (minutes !== null && minutes >= 0) entry.mn = Math.round(minutes);
       stops.push(entry);
     }
     if (!stops.length) continue;
-    const lunch = Math.round(finite(day.lunchAfter) ?? 0);
+    const lunch = Math.round(finite(day.lunchAfter ?? day.lunch) ?? 0);
     days.push({
-      d: Math.round(finite(day.day) ?? days.length + 1),
-      th: short(day.theme, 60),
-      ar: short(day.area, 60),
-      km: Math.round((finite(day.totalKm) ?? stops.reduce((sum, stop) => sum + (stop.km || 0), 0)) * 10) / 10,
-      mn: Math.round(finite(day.totalDriveMinutes) ?? stops.reduce((sum, stop) => sum + (stop.mn || 0), 0)),
+      d: Math.round(finite(day.day ?? day.d) ?? days.length + 1),
+      th: short(day.theme ?? day.th, 60),
+      ar: short(day.area ?? day.ar, 60),
+      km: Math.round((finite(day.totalKm ?? day.km) ?? stops.reduce((sum, stop) => sum + (stop.km || 0), 0)) * 10) / 10,
+      mn: Math.round(finite(day.totalDriveMinutes ?? day.mn) ?? stops.reduce((sum, stop) => sum + (stop.mn || 0), 0)),
       ...(lunch > 0 ? { lunch } : {}),
       stops,
     });

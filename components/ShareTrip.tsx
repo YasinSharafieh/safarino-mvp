@@ -36,7 +36,7 @@ export default function ShareTrip({ trip }: Props) {
       const response = await fetch("/api/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(trip),
       });
       const data = await response.json();
       if (data?.success && typeof data.url === "string") {
