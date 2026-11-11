@@ -2,7 +2,7 @@
  * Checks the picture pipeline: real Wikipedia/Wikimedia photos, a real Neshan
  * map image as the fallback, the image proxy allow-list, and the event filter.
  */
-import { placePhoto, wikipediaPhoto, neshanStaticMapUrl, attachPlaceImages } from "../lib/place-photos";
+import { articleIsAboutPlace, placePhoto, wikipediaPhoto, neshanStaticMapUrl, attachPlaceImages } from "../lib/place-photos";
 import fs from "node:fs";
 
 let failures = 0;
@@ -25,6 +25,31 @@ function check(label: string, ok: boolean, extra = "") {
   const mapUrl = neshanStaticMapUrl({ latitude: 36.2972, longitude: 59.6067 });
   check("map fallback points at the Safarino map proxy", mapUrl.startsWith("/api/neshan/static?"));
   check("map fallback keeps the exact coordinates", mapUrl.includes("lat=36.29720") && mapUrl.includes("lng=59.60670"));
+
+  console.log("An article must be about the same place");
+  const mashhad = { latitude: 36.2879, longitude: 59.6156 };
+  check(
+    "an article in the same city is accepted",
+    articleIsAboutPlace(mashhad, { latitude: 36.2885, longitude: 59.6172 }) === true,
+  );
+  check(
+    "a same-named article in another city is refused",
+    articleIsAboutPlace(mashhad, { latitude: 33.5, longitude: 51.9 }) === false,
+    "نطنز ≠ مشهد",
+  );
+  check(
+    "an article without coordinates cannot be proven, so it is refused",
+    articleIsAboutPlace(mashhad, { latitude: null, longitude: null }) === false,
+  );
+  check("a missing article is refused", articleIsAboutPlace(mashhad, null) === false);
+  check(
+    "an article the place itself linked to is trusted",
+    articleIsAboutPlace(mashhad, { latitude: 33.5, longitude: 51.9 }, { linkedDirectly: true }) === true,
+  );
+  check(
+    "a place without coordinates gets no borrowed words",
+    articleIsAboutPlace({ latitude: 0, longitude: 0 }, { latitude: 36.28, longitude: 59.61 }) === false,
+  );
 
   console.log("Every place gets a picture");
   const places = await attachPlaceImages<{ id: string; name: string; latitude: number; longitude: number; imageKind?: "photo" | "map" | "none"; imageUrl?: string | null }>([

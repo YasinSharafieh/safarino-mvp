@@ -18,6 +18,9 @@ export type PlaceInfo = {
   photo: PlacePhoto | null;
   /** Two or three plain sentences taken from the place's own article. */
   description: string;
+  /** Where the article says its subject is, so we can prove it is the same place. */
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type PlacePhoto = {
@@ -26,6 +29,9 @@ export type PlacePhoto = {
   source: "wikipedia" | "commons" | "map";
   creditUrl: string;
 };
+
+/** Beyond this the article is about a different place that happens to share a name. */
+export const SAME_PLACE_MAX_KM = 40;
 
 const PHOTO_TTL = 7 * 86_400;
 const NEGATIVE_TTL = 6 * 3_600;
@@ -77,7 +83,13 @@ async function fetchJson<T>(url: string, timeoutMs = 12_000, attempt = 0): Promi
 
 type PageImagesPayload = {
   query?: {
-    pages?: { title?: string; missing?: boolean; thumbnail?: { source?: string }; extract?: string }[];
+    pages?: {
+      title?: string;
+      missing?: boolean;
+      thumbnail?: { source?: string };
+      extract?: string;
+      coordinates?: { lat?: number; lon?: number }[];
+    }[];
     normalized?: { from?: string; to?: string }[];
     redirects?: { from?: string; to?: string }[];
   };
@@ -117,6 +129,42 @@ export function shortDescription(raw: string | null | undefined): string {
 }
 
 /**
+ * True when the article really is about this place.
+ *
+ * A name is not enough: «مسجد امام حسن» in Mashhad and a mosque of the same
+ * name in Natanz are two different places, and borrowing one's words for the
+ * other is a lie. So an article found by name must place itself within a
+ * reasonable distance of the attraction. An article that the place itself
+ * linked to (its own wikipediaUrl) is trusted as it is.
+ */
+export function articleIsAboutPlace(
+  place: { latitude?: number | null; longitude?: number | null },
+  article: { latitude?: number | null; longitude?: number | null } | null | undefined,
+  options: { linkedDirectly?: boolean; maxKm?: number } = {},
+): boolean {
+  if (!article) return false;
+  if (options.linkedDirectly) return true;
+  const placeLat = Number(place.latitude);
+  const placeLon = Number(place.longitude);
+  const articleLat = Number(article.latitude);
+  const articleLon = Number(article.longitude);
+  const valid = (latitude: number, longitude: number) =>
+    Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0 && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+  if (!valid(placeLat, placeLon)) return false;
+  // No coordinate in the article: we cannot prove it is the same place.
+  if (!valid(articleLat, articleLon)) return false;
+  return haversineKm(placeLat, placeLon, articleLat, articleLon) <= (options.maxKm ?? SAME_PLACE_MAX_KM);
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
  * Pictures AND short descriptions of several articles in ONE request.
  * Every title that was asked for is answered, following redirects.
  */
@@ -128,9 +176,9 @@ export async function wikipediaInfo(titles: string[], lang = "fa"): Promise<Map<
   // Anything looked up in the last week comes from the shared store.
   await Promise.all(
     unique.map(async (title) => {
-      const cached = await getProviderCache<PlaceInfo | "none">(`safarino:place-info:v1:${lang}:${title}`);
+      const cached = await getProviderCache<PlaceInfo | "none">(`safarino:place-info:v2:${lang}:${title}`);
       if (cached === "none") {
-        found.set(title, { photo: null, description: "" });
+        found.set(title, { photo: null, description: "", latitude: null, longitude: null });
       } else if (cached) {
         found.set(title, cached);
       } else {
@@ -143,7 +191,7 @@ export async function wikipediaInfo(titles: string[], lang = "fa"): Promise<Map<
     const slice = missing.slice(index, index + BATCH);
     const url =
       `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1` +
-      `&prop=pageimages|extracts&piprop=thumbnail&pithumbsize=800&exintro=1&explaintext=1&exsentences=5` +
+      `&prop=pageimages|extracts|coordinates&piprop=thumbnail&pithumbsize=800&exintro=1&explaintext=1&exsentences=5&colimit=1` +
       `&titles=${encodeURIComponent(slice.join("|"))}`;
     const payload = await fetchJson<PageImagesPayload>(url);
     const alias = new Map<string, string>();
@@ -163,13 +211,16 @@ export async function wikipediaInfo(titles: string[], lang = "fa"): Promise<Map<
           }
         : null;
       const description = page.missing ? "" : shortDescription(page.extract);
-      if (photo || description) byTitle.set(normalizeTitle(page.title), { photo, description });
+      const point = page.coordinates?.[0];
+      const latitude = typeof point?.lat === "number" ? point.lat : null;
+      const longitude = typeof point?.lon === "number" ? point.lon : null;
+      if (photo || description) byTitle.set(normalizeTitle(page.title), { photo, description, latitude, longitude });
     });
     slice.forEach((requested) => {
       const info = byTitle.get(requested) || byTitle.get(alias.get(requested) || "") || null;
-      const value: PlaceInfo = info || { photo: null, description: "" };
+      const value: PlaceInfo = info || { photo: null, description: "", latitude: null, longitude: null };
       found.set(requested, value);
-      void setProviderCache(`safarino:place-info:v1:${lang}:${requested}`, value.photo || value.description ? value : "none", value.photo || value.description ? PHOTO_TTL : NEGATIVE_TTL);
+      void setProviderCache(`safarino:place-info:v2:${lang}:${requested}`, value.photo || value.description ? value : "none", value.photo || value.description ? PHOTO_TTL : NEGATIVE_TTL);
     });
   }
   return found;
@@ -357,7 +408,8 @@ export async function attachPlaceDetails<T extends PlaceWithMaybePhoto>(
   const target = places.slice(0, options.maxPhotos ?? places.length);
   if (!target.length) return places;
 
-  const titleOf = (place: T) => wikiTitleFromUrl(place.wikipediaUrl) || normalizeTitle(place.name || "");
+  const linkedTitleOf = (place: T) => wikiTitleFromUrl(place.wikipediaUrl);
+  const titleOf = (place: T) => linkedTitleOf(place) || normalizeTitle(place.name || "");
   const wikidataOf = (place: T) => {
     const fromUrl = typeof place.sourceUrl === "string" ? (place.sourceUrl.match(/Q\d+/) || [""])[0] : "";
     return fromUrl;
@@ -372,7 +424,10 @@ export async function attachPlaceDetails<T extends PlaceWithMaybePhoto>(
   const words = needWords.length ? await wikidataDescriptions(needWords.map(wikidataOf)) : new Map<string, string>();
 
   target.forEach((place) => {
-    const placeInfo = info.get(titleOf(place));
+    const rawInfo = info.get(titleOf(place));
+    // A same-named article far away belongs to another place: borrow nothing from it.
+    const trusted = rawInfo && articleIsAboutPlace(place, rawInfo, { linkedDirectly: Boolean(linkedTitleOf(place)) });
+    const placeInfo = trusted ? rawInfo : null;
     if (!place.imageUrl) {
       const photo = placeInfo?.photo || commons.get(wikidataOf(place));
       if (photo) {
