@@ -16,7 +16,8 @@
     "test:budget": "tsx scripts/test-budget.ts",
     "test:share": "tsx scripts/test-share.ts",
     "test:font": "tsx scripts/test-font.ts",
-    "test:checklist": "tsx scripts/test-checklist.ts"
+    "test:checklist": "tsx scripts/test-checklist.ts",
+    "test:site": "tsx scripts/test-site.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

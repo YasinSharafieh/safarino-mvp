@@ -201,7 +201,8 @@ export function drawShareCard(trip: ShareTrip): HTMLCanvasElement | null {
   ctx.textAlign = "right";
   ctx.fillStyle = "rgba(94,234,212,0.85)";
   ctx.font = "700 19px Vazirmatn, system-ui, Tahoma, sans-serif";
-  ctx.fillText("safarino-mvp.vercel.app", right, HEIGHT - 22);
+  const host = typeof window !== "undefined" && window.location.host ? window.location.host : "safarino";
+  ctx.fillText(host, right, HEIGHT - 22);
 
   return canvas;
 }

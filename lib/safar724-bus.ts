@@ -1,5 +1,6 @@
 import { jalaliFromGregorian } from "./jalali";
 import { citySlug, type TransportOffer, type TransportSearchResult } from "./transport-types";
+import { siteReference } from "./site";
 
 /**
  * Safar724 publishes its dated intercity-bus list through a public, no-auth
@@ -9,7 +10,7 @@ import { citySlug, type TransportOffer, type TransportSearchResult } from "./tra
 
 const WEB = "https://www.safar724.com";
 const SERVICE = "https://service.safar724.com";
-const USER_AGENT = "Mozilla/5.0 (compatible; Safarino/1.0; +https://safarino-mvp.vercel.app)";
+const USER_AGENT = `Mozilla/5.0 (compatible; ${siteReference()})`;
 const DIGITS = /[۰-۹٠-٩]/g;
 
 type RouteCodes = { originCode: string; destinationCode: string };

@@ -32,12 +32,15 @@ async function readTrip({ params, searchParams }: PageProps): Promise<ShareTrip 
 
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const trip = await readTrip(props);
-  if (!trip) return { title: "برنامه پیدا نشد · سفرینو" };
+  if (!trip) return { title: "برنامه پیدا نشد · سفرینو", robots: { index: false, follow: false } };
   const description = shareSummary(trip);
   return {
     title: `برنامهٔ سفر ${trip.city} · سفرینو`,
     description,
-    openGraph: { title: `برنامهٔ سفر ${trip.city}`, description, siteName: "سفرینو" },
+    // A shared plan is one traveller's trip: readable by whoever receives the
+    // link, never collected by search engines.
+    robots: { index: false, follow: false },
+    openGraph: { title: `برنامهٔ سفر ${trip.city}`, description, siteName: "سفرینو", type: "article" },
   };
 }
 

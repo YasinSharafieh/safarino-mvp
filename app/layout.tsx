@@ -1,9 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { siteUrl } from "@/lib/site";
 import type { ReactNode } from "react";
 import { TravelProvider } from "./context/TravelContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  // Everything below is relative to this address, so moving to the real domain
+  // is one setting (NEXT_PUBLIC_SITE_URL) and nothing else changes.
+  metadataBase: new URL(siteUrl()),
   title: {
     default: "سفرینو | همسفر هوشمند سفرهای ایرانی",
     template: "%s | سفرینو",
@@ -19,7 +23,10 @@ export const metadata: Metadata = {
     "آژانس مسافرتی ایرانی",
   ],
   authors: [{ name: "تیم سفرینو" }],
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
   openGraph: {
+    url: "/",
     title: "سفرینو | همسفر هوشمند سفرهای ایرانی",
     description: "رزرو پرواز، هتل و تور با تجربه‌ای سریع، شفاف و مدرن.",
     type: "website",

@@ -21,7 +21,7 @@ export const maxDuration = 60;
  *
  * Schedule: `vercel.json` runs it daily (Hobby limit). For hourly freshness any
  * external scheduler can hit this URL, e.g. every hour:
- *   https://safarino-mvp.vercel.app/api/cron/refresh
+ *   <your-domain>/api/cron/refresh
  */
 
 const CITIES = ["مشهد", "تهران", "شیراز", "اصفهان", "کیش", "رامسر", "تبریز", "یزد"];

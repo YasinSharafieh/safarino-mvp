@@ -1,4 +1,5 @@
 import { alibabaCdnUrl } from "./alibaba-assets";
+import { siteReference } from "./site";
 
 const API_ROOT = "https://ws.alibaba.ir/api";
 const SITE_ROOT = "https://www.alibaba.ir";
@@ -79,7 +80,7 @@ export async function alibabaRequest(path: string, init?: { body?: unknown }): P
           "Content-Type": "application/json",
           Origin: SITE_ROOT,
           Referer: `${SITE_ROOT}/`,
-          "User-Agent": "Safarino/1.0 (+https://safarino-mvp.vercel.app)",
+          "User-Agent": siteReference(),
         },
         body: init?.body ? JSON.stringify(init.body) : undefined,
         cache: "no-store",

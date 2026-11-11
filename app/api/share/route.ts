@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { INLINE_URL_LIMIT, compactTrip, encodeTripToToken, saveSharedTrip } from "@/lib/share";
+import { siteUrlFrom } from "@/lib/site";
 
 /**
  * Makes a shareable link for the plan the traveller is looking at.
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   const code = await saveSharedTrip(trip);
-  const origin = new URL(request.url).origin;
+  const origin = siteUrlFrom(request);
 
   if (code) {
     return NextResponse.json({

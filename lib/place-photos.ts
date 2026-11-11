@@ -12,6 +12,7 @@
  */
 
 import { getProviderCache, setProviderCache } from "./provider-cache";
+import { siteReference } from "./site";
 
 /** Picture plus a short, practical description of the place itself. */
 export type PlaceInfo = {
@@ -36,7 +37,7 @@ export const SAME_PLACE_MAX_KM = 40;
 const PHOTO_TTL = 7 * 86_400;
 const NEGATIVE_TTL = 6 * 3_600;
 const BATCH = 20;
-const USER_AGENT = "SafarinoTravelPlanner/1.0 (https://safarino-mvp.vercel.app; contact: safarino@example.com)";
+const USER_AGENT = `${siteReference()} SafarinoTravelPlanner/1.0 (contact: safarino@example.com)`;
 
 function commonsFilePath(file: string, width = 800): string {
   const clean = file.replace(/^File:/i, "").trim();

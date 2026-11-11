@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { siteUrl } from "../../../lib/site";
 import {
   AiBudgetError,
   reserveAiBudget,
@@ -212,7 +213,7 @@ async function requestModel(model: string, input: TravelInput, apiKey: string) {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+        "HTTP-Referer": siteUrl(),
         "X-Title": "Safarino AI Travel Planner",
       },
       body: JSON.stringify({

@@ -202,7 +202,7 @@ check("the shared page reads both link shapes", page.includes("loadSharedTrip(")
 check("a missing plan is a real 404", page.includes("notFound()"));
 check("the shared page labels what is real and what is estimated", page.includes("واقعی") && page.includes("تخمین"));
 check("the card is drawn locally, no external images", !card.includes("<img") && !card.includes("http://") && !card.includes("https://unpkg"));
-check("the card names the site", card.includes("safarino-mvp.vercel.app"));
+check("the card names the site the visitor is actually on", card.includes("window.location.host"));
 check("the panel talks to our own api only", component.includes('fetch("/api/share"'));
 check("the panel writes nothing to storage", !component.includes("localStorage") && !component.includes("sessionStorage"));
 
