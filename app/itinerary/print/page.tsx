@@ -109,8 +109,11 @@ export default function ItineraryPrintPage() {
         @media print {
           .no-print { display: none !important; }
           .sheet { box-shadow: none !important; margin: 0 !important; border: 0 !important; }
-          .day-block { break-inside: avoid; page-break-inside: avoid; break-before: page; }
-          .stop-row { break-inside: avoid; }
+          .day-block { break-before: page; }
+          .stop-row { break-inside: avoid; page-break-inside: avoid; }
+          .day-map { max-height: 56mm; overflow: hidden; }
+          .day-map svg { max-height: 56mm; }
+          .stop-text { font-size: 9.5pt; line-height: 1.55; }
           body { background: #fff !important; }
         }
       `}</style>
@@ -183,7 +186,7 @@ export default function ItineraryPrintPage() {
 
         {/* One page per day */}
         {saved.days.map((day) => (
-          <section key={day.day} className="sheet day-block mt-4 rounded-2xl bg-white p-6 shadow-sm print:mt-0">
+          <section key={day.day} className="sheet day-block mt-4 rounded-2xl bg-white p-6 shadow-sm print:mt-0 print:p-4 print:shadow-none">
             <div className="flex items-baseline justify-between gap-3 border-b border-slate-200 pb-3">
               <h2 className="text-xl font-black text-slate-900">روز {fa(day.day)}</h2>
               <p className="text-[11px] text-slate-500">
@@ -192,19 +195,19 @@ export default function ItineraryPrintPage() {
             </div>
 
             {maps[day.day] ? (
-              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 print:break-inside-avoid" dangerouslySetInnerHTML={{ __html: maps[day.day] }} />
+              <div className="day-map mt-3 overflow-hidden rounded-xl border border-slate-200 print:break-inside-avoid" dangerouslySetInnerHTML={{ __html: maps[day.day] }} />
             ) : null}
 
-            <ol className="mt-4 space-y-3">
+            <ol className="mt-3 space-y-2">
               {day.stops.map((stop, index) => (
-                <li key={stop.place.id} className="stop-row flex gap-3 rounded-xl border border-slate-200 p-3">
+                <li key={stop.place.id} className="stop-row flex gap-3 rounded-xl border border-slate-200 p-3 print:p-2">
                   <div className="shrink-0 text-center">
                     <span className="grid h-7 w-7 place-items-center rounded-full bg-cyan-600 text-[11px] font-black text-white">{fa(stop.order)}</span>
                     <span className="mt-1 block text-[10px] font-bold text-slate-500">{stop.startTime}</span>
                   </div>
                   {stop.place.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={stop.place.imageUrl} alt={stop.place.name} className="h-20 w-24 shrink-0 rounded-lg border border-slate-200 object-cover" />
+                    <img src={stop.place.imageUrl} alt={stop.place.name} className="h-20 w-24 shrink-0 rounded-lg border border-slate-200 object-cover print:h-16 print:w-20" />
                   ) : null}
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black text-slate-900">{stop.place.name}</p>
@@ -212,14 +215,14 @@ export default function ItineraryPrintPage() {
                       {stop.place.category} · {fa(stop.visitMinutes)} دقیقه بازدید
                       {stop.legKm !== null ? ` · ${index === 0 ? "از اقامتگاه" : "از ایستگاه قبل"} ${fa(stop.legKm)} کیلومتر / ${fa(stop.legMinutes || 0)} دقیقه (${stop.legEngine})` : ""}
                     </p>
-                    {stop.place.description ? <p className="mt-1 text-[11px] leading-6 text-slate-700">{stop.place.description}</p> : null}
+                    {stop.place.description ? <p className="stop-text mt-1 line-clamp-4 text-[11px] leading-6 text-slate-700">{stop.place.description.split(/(?<=[.!؟…])\s+/).slice(0, 3).join(" ")}</p> : null}
                   </div>
                 </li>
               ))}
             </ol>
 
             {day.stops.some((stop) => stop.order === day.lunchAfter) ? (
-              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900">
                 بعد از ایستگاه {fa(day.lunchAfter)} ناهار و کمی استراحت در برنامه دیده شده است.
               </p>
             ) : null}

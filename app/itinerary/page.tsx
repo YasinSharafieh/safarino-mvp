@@ -321,6 +321,8 @@ function ItineraryContent() {
                                       <Car className="h-3 w-3" />
                                       {index === 0 ? "از اقامتگاه" : "از ایستگاه قبل"} {fa(stop.legKm)} کیلومتر · {fa(stop.legMinutes || 0)} دقیقه
                                     </span>
+                                  ) : index === 0 && !hasStayPin ? (
+                                    <span className="text-[9.5px] text-slate-500">برای سنجش این مسیر، اول اقامتگاه را انتخاب کنید</span>
                                   ) : (
                                     <span className="text-[9.5px] text-slate-500">فاصلهٔ این مسیر اندازه‌گیری نشد</span>
                                   )}
