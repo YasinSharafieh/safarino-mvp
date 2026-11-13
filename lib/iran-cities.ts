@@ -177,12 +177,14 @@ function normalize(value: string): string {
 
 export function resolveIranianCity(value: string): IranianCity | undefined {
   const normalized = normalize(value);
+  // An empty value must never match the first city that has no English name.
+  if (!normalized) return undefined;
   return IRANIAN_CITIES.find((city) =>
     city.code.toLowerCase() === normalized
     || city.flightCode?.toLowerCase() === normalized
     || city.groundCode?.toLowerCase() === normalized
     || normalize(city.name) === normalized
-    || normalize(city.englishName || "") === normalized,
+    || (city.englishName ? normalize(city.englishName) === normalized : false),
   );
 }
 
