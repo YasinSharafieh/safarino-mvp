@@ -217,6 +217,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   useEffect(() => {
     if (!active || autoSearched.current || !originCity || !destinationCity || !travelData.departureDate) return;
     autoSearched.current = true;
+    lastSearchedDate.current = travelData.departureDate;
     void search();
   }, [active, destinationCity, originCity, search, travelData.departureDate]);
 
