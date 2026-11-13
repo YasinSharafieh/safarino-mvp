@@ -19,6 +19,31 @@ const photoSrc = (value: string | null) => {
   return `/api/provider-assets?src=${encodeURIComponent(value)}`;
 };
 
+/**
+ * A provider photo, with an honest fallback: some providers publish dead image
+ * links, and an empty grey box looks like a bug on our side.
+ */
+function DealPhoto({ src, alt }: { src: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <span className="absolute inset-0 grid place-items-center bg-gradient-to-br from-cyan-500/15 to-teal-700/20 text-cyan-200/35">
+        <Building2 className="h-9 w-9" />
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 const money = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
 
 const faDate = (iso: string) => {
@@ -145,22 +170,7 @@ export default function HomeDeals() {
                 className="glass glass-hover group overflow-hidden p-0"
               >
                 <div className="relative h-36 overflow-hidden bg-gradient-to-br from-cyan-500/20 to-teal-700/20">
-                  {photoSrc(deal.photo) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={photoSrc(deal.photo) as string}
-                      alt={deal.name}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <span className="absolute inset-0 grid place-items-center text-cyan-200/40">
-                      <Building2 className="h-10 w-10" />
-                    </span>
-                  )}
+                  <DealPhoto src={photoSrc(deal.photo)} alt={deal.name} />
                   <span className="absolute right-2.5 top-2.5 rounded-full bg-slate-950/70 px-2 py-0.5 text-[9px] font-bold text-cyan-200 backdrop-blur">
                     {deal.providerLabel}
                   </span>
