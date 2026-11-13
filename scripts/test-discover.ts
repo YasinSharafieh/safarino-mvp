@@ -56,6 +56,12 @@ const grid = fs.readFileSync("components/DiscoverGrid.tsx", "utf8");
 check("the list page has its own title and canonical address", list.includes('canonical: "/discover"'));
 check("the list page is readable by search engines", list.includes("ItemList"));
 check("every city gets a page", detail.includes("generateStaticParams"));
+check(
+  "the static paths are plain names, not encoded twice",
+  /return DISCOVER_CITIES\.map\(\(city\) => \(\{ city: city\.name \}\)\)/.test(detail),
+  "Next encodes the segment itself",
+);
+check("a city name is read whether or not it arrives encoded", detail.includes("cityFromParam"));
 check("each city page has its own metadata", detail.includes("generateMetadata") && detail.includes("canonical"));
 check("each city page describes the destination for search engines", detail.includes("TouristDestination"));
 check("the city page says whose advice it is", detail.includes("پیشنهاد سفرینو"));

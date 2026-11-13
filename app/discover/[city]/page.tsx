@@ -10,11 +10,25 @@ type PageProps = { params: { city: string } };
 
 /** Every recommended city is a real page, known before the first visit. */
 export function generateStaticParams() {
-  return DISCOVER_CITIES.map((city) => ({ city: encodeURIComponent(city.name) }));
+  // Next encodes the segment itself; the value here must be the plain name.
+  return DISCOVER_CITIES.map((city) => ({ city: city.name }));
+}
+
+/** The segment arrives already decoded; decode only if it still looks encoded. */
+function cityFromParam(raw: string): string {
+  if (!raw) return "";
+  if (/%[0-9A-Fa-f]{2}/.test(raw)) {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
 }
 
 export function generateMetadata({ params }: PageProps): Metadata {
-  const city = findCity(decodeURIComponent(params.city));
+  const city = findCity(cityFromParam(params.city));
   if (!city) return { title: "شهر پیدا نشد · سفرینو", robots: { index: false, follow: false } };
   const title = `سفر به ${city.name}`;
   const description = `${city.tagline}. ${city.highlights.join("، ")} — بهترین فصل: ${city.bestSeason}. جاذبه‌های واقعی ${city.name} و ساخت برنامهٔ سفر.`;
@@ -32,7 +46,7 @@ export function generateMetadata({ params }: PageProps): Metadata {
 }
 
 export default function DiscoverCityPage({ params }: PageProps) {
-  const city = findCity(decodeURIComponent(params.city));
+  const city = findCity(cityFromParam(params.city));
   if (!city) notFound();
 
   const fa = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
