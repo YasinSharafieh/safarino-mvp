@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/transport", priority: 0.9, changeFrequency: "daily" },
     { path: "/itinerary", priority: 0.8, changeFrequency: "weekly" },
     { path: "/quiz", priority: 0.6, changeFrequency: "monthly" },
+    { path: "/discover", priority: 0.95, changeFrequency: "weekly" },
   ];
   return pages.map((page) => ({
     url: `${base}${page.path}`,

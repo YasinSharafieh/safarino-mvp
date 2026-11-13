@@ -226,6 +226,61 @@ export async function tripWeather(input: {
   const withinForecast = startDate >= today && end <= forecastWindowEnd;
   const mode: WeatherMode = withinForecast ? "forecast" : "normals";
 
+
+  /**
+   * The same calendar dates over the last five years, averaged.
+   * A climate figure, never a forecast — and the caller says so on screen.
+   */
+  async function normalsResult(): Promise<WeatherResult & { startDate: string }> {
+    const perDate: WeatherDay[] = [];
+    for (let index = 0; index < days; index += 1) {
+      const target = addDays(startDate, index);
+      const samples: { code: number; maxC: number | null; minC: number | null; rainMm: number | null; windKmh: number | null }[] = [];
+      for (let yearOffset = 1; yearOffset <= 5; yearOffset += 1) {
+        const year = Number(target.slice(0, 4)) - yearOffset;
+        const date = `${year}${target.slice(4)}`;
+        const url =
+          `https://archive-api.open-meteo.com/v1/archive?latitude=${input.latitude.toFixed(4)}&longitude=${input.longitude.toFixed(4)}` +
+          `&start_date=${date}&end_date=${date}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=${encodeURIComponent(TIMEZONE)}`;
+        const payload = await getJson<OpenMeteoDaily>(url, 10_000);
+        const daily = payload?.daily;
+        if (!daily?.time?.length) continue;
+        samples.push({
+          code: Number(daily.weather_code?.[0]) || 0,
+          maxC: toNumber(daily.temperature_2m_max?.[0]),
+          minC: toNumber(daily.temperature_2m_min?.[0]),
+          rainMm: toNumber(daily.precipitation_sum?.[0]),
+          windKmh: toNumber(daily.wind_speed_10m_max?.[0]),
+        });
+      }
+      if (!samples.length) continue;
+      const average = (values: (number | null)[]): number | null => {
+        const clean = values.filter((value): value is number => typeof value === "number");
+        return clean.length ? Math.round((clean.reduce((sum, value) => sum + value, 0) / clean.length) * 10) / 10 : null;
+      };
+      const counts = new Map<number, number>();
+      samples.forEach((sample) => counts.set(sample.code, (counts.get(sample.code) || 0) + 1));
+      const commonCode = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+      perDate.push(
+        buildDay(target, {
+          code: commonCode,
+          maxC: average(samples.map((sample) => sample.maxC)),
+          minC: average(samples.map((sample) => sample.minC)),
+          rainProbability: null,
+          rainMm: average(samples.map((sample) => sample.rainMm)),
+          windKmh: average(samples.map((sample) => sample.windKmh)),
+        }),
+      );
+    }
+    return {
+      mode: withinForecast ? mode : "normals",
+      days: perDate,
+      note: "برای این تاریخ‌ها پیش‌بینی دقیق هنوز وجود ندارد؛ این اعداد میانگین همان روزها در پنج سال گذشته است، نه پیش‌بینی.",
+      sources: "Open-Meteo (داده‌های تاریخی)",
+      startDate,
+    };
+  }
+
   const cacheKey = `${CACHE_BASE}:${mode}:${input.latitude.toFixed(2)},${input.longitude.toFixed(2)}:${startDate}:${days}`;
   const cached = await getProviderCache<WeatherResult & { startDate: string }>(cacheKey);
   if (cached && Array.isArray(cached.days) && cached.days.length) return cached;
@@ -257,55 +312,19 @@ export async function tripWeather(input: {
       startDate,
     };
   } else {
-    // Long-term average: the same calendar dates over the last five years.
-    const perDate: WeatherDay[] = [];
-    for (let index = 0; index < days; index += 1) {
-      const target = addDays(startDate, index);
-      const samples: { code: number; maxC: number | null; minC: number | null; rainMm: number | null; windKmh: number | null }[] = [];
-      for (let yearOffset = 1; yearOffset <= 5; yearOffset += 1) {
-        const year = Number(target.slice(0, 4)) - yearOffset;
-        const date = `${year}${target.slice(4)}`;
-        const url =
-          `https://archive-api.open-meteo.com/v1/archive?latitude=${input.latitude.toFixed(4)}&longitude=${input.longitude.toFixed(4)}` +
-          `&start_date=${date}&end_date=${date}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=${encodeURIComponent(TIMEZONE)}`;
-        const payload = await getJson<OpenMeteoDaily>(url, 10_000);
-        const daily = payload?.daily;
-        if (!daily?.time?.length) continue;
-        samples.push({
-          code: Number(daily.weather_code?.[0]) || 0,
-          maxC: toNumber(daily.temperature_2m_max?.[0]),
-          minC: toNumber(daily.temperature_2m_min?.[0]),
-          rainMm: toNumber(daily.precipitation_sum?.[0]),
-          windKmh: toNumber(daily.wind_speed_10m_max?.[0]),
-        });
-      }
-      if (!samples.length) continue;
-      const average = (values: (number | null)[]): number | null => {
-        const clean = values.filter((value): value is number => typeof value === "number");
-        return clean.length ? Math.round((clean.reduce((sum, value) => sum + value, 0) / clean.length) * 10) / 10 : null;
+    result = await normalsResult();
+  }
+
+  // The forecast service may be down or silent. Rather than showing nothing,
+  // fall back to the clearly-labelled multi-year average for the same dates.
+  if (!result.days.length && withinForecast) {
+    const fallback = await normalsResult();
+    if (fallback.days.length) {
+      result = {
+        ...fallback,
+        note: "پیش‌بینی هوای این روزها در دسترس نبود؛ این اعداد میانگین همان روزها در پنج سال گذشته است، نه پیش‌بینی.",
       };
-      // The most common sky is more honest than an average of codes.
-      const counts = new Map<number, number>();
-      samples.forEach((sample) => counts.set(sample.code, (counts.get(sample.code) || 0) + 1));
-      const commonCode = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
-      perDate.push(
-        buildDay(target, {
-          code: commonCode,
-          maxC: average(samples.map((sample) => sample.maxC)),
-          minC: average(samples.map((sample) => sample.minC)),
-          rainProbability: null,
-          rainMm: average(samples.map((sample) => sample.rainMm)),
-          windKmh: average(samples.map((sample) => sample.windKmh)),
-        }),
-      );
     }
-    result = {
-      mode,
-      days: perDate,
-      note: "برای این تاریخ‌ها پیش‌بینی دقیق هنوز وجود ندارد؛ این اعداد میانگین همان روزها در پنج سال گذشته است، نه پیش‌بینی.",
-      sources: "Open-Meteo (داده‌های تاریخی)",
-      startDate,
-    };
   }
 
   if (result.days.length) {

@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/plan", "/accommodation", "/transport", "/itinerary", "/quiz"],
+        allow: ["/", "/plan", "/accommodation", "/transport", "/itinerary", "/quiz", "/discover"],
         disallow: ["/s/", "/api/"],
       },
     ],

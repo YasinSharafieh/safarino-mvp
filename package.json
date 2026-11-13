@@ -18,7 +18,8 @@
     "test:font": "tsx scripts/test-font.ts",
     "test:checklist": "tsx scripts/test-checklist.ts",
     "test:site": "tsx scripts/test-site.ts",
-    "test:offline": "tsx scripts/test-offline.ts"
+    "test:offline": "tsx scripts/test-offline.ts",
+    "test:discover": "tsx scripts/test-discover.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

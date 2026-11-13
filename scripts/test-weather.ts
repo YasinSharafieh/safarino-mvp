@@ -38,7 +38,14 @@ const today = new Date(Date.now() + 3.5 * 3_600_000).toISOString().slice(0, 10);
   console.log("Forecast window");
   const forecast = await tripWeather({ latitude: 36.29, longitude: 59.6, startDate: addDays(today, 2), days: 3 });
   check("near dates use the real forecast", forecast.mode === "forecast", forecast.mode);
-  check("three days answered", forecast.days.length === 3);
+  // If the forecast service is silent, the page must still show something
+  // honest (the labelled multi-year average) instead of an empty strip.
+  check("three days answered, forecast or clearly-labelled average", forecast.days.length === 3, `${forecast.mode} / ${forecast.days.length}`);
+  check(
+    "a silent forecast is never passed off as a forecast",
+    forecast.days.length === 0 || (forecast.mode === "forecast" ? true : /میانگین|پیش‌بینی در دسترس نبود/.test(forecast.note)),
+    forecast.mode,
+  );
   check("each day has a real date", forecast.days.every((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date)));
   check("each day has a score and advice", forecast.days.every((day) => typeof day.score === "number" && day.advice.length > 10));
   check("note says it is a forecast", forecast.note.includes("پیش‌بینی"));

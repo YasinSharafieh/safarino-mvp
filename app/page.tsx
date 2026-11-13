@@ -32,6 +32,7 @@ import {
 /* ------------------------------------------------------------------ data */
 
 const NAV_LINKS = [
+  { label: "کشف مقصد", href: "/discover" },
   { label: "خدمات", href: "#services" },
   { label: "مقاصد", href: "#destinations" },
   { label: "کوییز سفر", href: "/quiz" },
