@@ -12,6 +12,13 @@ type Response = {
   note: string;
 };
 
+/** Photos always load through the site's proxy, whatever the payload says. */
+const photoSrc = (value: string | null) => {
+  if (!value) return null;
+  if (value.startsWith("/")) return value;
+  return `/api/provider-assets?src=${encodeURIComponent(value)}`;
+};
+
 const money = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
 
 const faDate = (iso: string) => {
@@ -138,10 +145,10 @@ export default function HomeDeals() {
                 className="glass glass-hover group overflow-hidden p-0"
               >
                 <div className="relative h-36 overflow-hidden bg-gradient-to-br from-cyan-500/20 to-teal-700/20">
-                  {deal.photo ? (
+                  {photoSrc(deal.photo) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={deal.photo}
+                      src={photoSrc(deal.photo) as string}
                       alt={deal.name}
                       loading="lazy"
                       className="h-full w-full object-cover transition duration-500 group-hover:scale-105"

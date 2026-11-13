@@ -121,7 +121,7 @@ async function loadCity(entry: { city: string; kind: "hotel" | "stay" }, limit: 
   const nights = 2;
   const checkIn = isoIn(10);
   const checkOut = isoIn(10 + nights);
-  const base = snapshotKey("deals-home", { city: entry.city, kind: entry.kind, checkIn, nights });
+  const base = snapshotKey("deals-home-v2", { city: entry.city, kind: entry.kind, checkIn, nights });
 
   const { snapshot, source, refreshed } = await readWithRefresh<DealCity>(base, async () => {
     const result = await searchMultiProviderAccommodation({
