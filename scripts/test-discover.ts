@@ -70,6 +70,7 @@ check("attractions are never typed by hand", !attractions.includes("const places
 check("an empty city says so instead of inventing places", attractions.includes("هیچ مکانی از خودمان نمی‌سازیم"));
 check("search and filters are reused, not rewritten", attractions.includes("PlaceToolbar") && attractions.includes("filterPlaces"));
 check("the city page leads into building a plan", attractions.includes("/itinerary?city="));
+check("a long category stays on one line", attractions.includes("max-w-[9rem] truncate") && attractions.includes("slice(0, 24)"));
 check("the card picture is a real map, not a stock photo", grid.includes("/api/discover/map?city=") && grid.includes("نقشهٔ واقعی"));
 check("the map route refuses unknown cities", mapRoute.includes("404"));
 check("the map route never puts the key in the browser", !mapRoute.includes("Api-Key") && !mapRoute.includes("neshanApiKey"));

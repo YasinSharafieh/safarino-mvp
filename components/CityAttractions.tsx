@@ -157,7 +157,10 @@ export default function CityAttractions({ city, suggestedDays }: { city: string;
                   <div className="min-w-0 flex-1">
                     <b className="block truncate text-[11px] font-extrabold text-white">{full.name}</b>
                     <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
-                      <span className="rounded bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{full.category}</span>
+                      {/* A category name from Wikipedia can be a whole sentence; keep the chip one line. */}
+                      <span title={full.category} className="max-w-[9rem] truncate rounded bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">
+                        {full.category.split(/[(،,]/)[0].trim().slice(0, 24)}
+                      </span>
                       {full.imageKind === "map" ? <span>تصویر: نقشهٔ نشان</span> : null}
                       {full.wikipediaUrl ? <span>مقالهٔ ویکی‌پدیا</span> : null}
                     </span>
