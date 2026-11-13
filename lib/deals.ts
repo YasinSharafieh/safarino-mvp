@@ -84,6 +84,16 @@ function isoIn(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Provider photos are always served through Safarino's own proxy, like every
+ * other photo on the site: the provider CDNs refuse hot-linked requests and a
+ * few of them are not reachable from every network.
+ */
+function photoSource(url: string | null): string | null {
+  if (!url) return null;
+  return `/api/provider-assets?src=${encodeURIComponent(url)}`;
+}
+
 function toDeal(offer: AccommodationOffer, city: string, checkIn: string, checkOut: string, nights: number): Deal {
   return {
     id: offer.id,
@@ -92,7 +102,7 @@ function toDeal(offer: AccommodationOffer, city: string, checkIn: string, checkO
     kind: offer.kind,
     typeLabel: offer.typeLabel,
     location: offer.location,
-    photo: offer.imageUrl || offer.images[0] || null,
+    photo: photoSource(offer.imageUrl || offer.images[0] || null),
     rating: offer.rating,
     reviewCount: offer.reviewCount,
     pricePerNightToman: offer.pricePerNightToman,

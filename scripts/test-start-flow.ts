@@ -27,6 +27,7 @@ import {
 import { DISCOVER_CITIES } from "../lib/discover";
 import { cleanReviewText, parseReviewInput, validRating } from "../lib/reviews";
 import { resolveIranianCity } from "../lib/iran-cities";
+import { readFileSync } from "node:fs";
 import { DEAL_CITIES, todaysDealCities } from "../lib/deals";
 
 const FOREIGN = ["استانبول", "دبی", "آنتالیا", "کاپادوکیه", "کیش ", "ترکیه", "امارات"];
@@ -147,6 +148,11 @@ const tooLong = parseReviewInput({ city: "یزد", rating: 4, text: "ا".repeat(
 assert(!tooLong.ok, "an over-long review is refused");
 
 /* ---------------------------------------------------------------- deals */
+
+// Provider photos must go through the site's proxy: the CDNs refuse hot links.
+const dealsSource = readFileSync("lib/deals.ts", "utf8");
+assert(dealsSource.includes("/api/provider-assets?src="), "deal photos go through the image proxy");
+assert(!/photo:\s*offer\.imageUrl/.test(dealsSource), "no deal photo is linked to the provider directly");
 
 const pair = todaysDealCities();
 assertEqual(pair.length, 2, "two cities are featured every day");
