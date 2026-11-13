@@ -19,7 +19,7 @@ import {
 import ProviderLogo from "@/components/ProviderLogo";
 import { useTravel } from "@/app/context/TravelContext";
 import { resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
-import { formatProviderDateTime } from "@/lib/jalali";
+import { formatJalaliDate, formatProviderDateTime } from "@/lib/jalali";
 
 export type TicketMode = "plane" | "train" | "bus";
 
@@ -117,7 +117,7 @@ const normalise = (value: string) =>
  * sorting and a price ceiling, exactly like the accommodation list.
  */
 export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange }: Props) {
-  const { travelData } = useTravel();
+  const { travelData, setTravelData } = useTravel();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
   const [returnOffers, setReturnOffers] = useState<LiveOffer[]>([]);
   const [activeLeg, setActiveLeg] = useState<"outbound" | "return">("outbound");
@@ -130,7 +130,10 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const [duplicates, setDuplicates] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
+  const [nearbyDates, setNearbyDates] = useState<{ date: string; cheapest: number }[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
   const autoSearched = useRef(false);
+  const lastSearchedDate = useRef<string | null>(null);
 
   const originCity = resolveIranianCity(travelData.origin);
   const destinationCity = resolveIranianCity(travelData.destination);
@@ -145,6 +148,9 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       const response = await fetch("/api/providers/transport/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // The panel must always finish: a provider that never answers is a
+        // failure to report, not a spinner forever.
+        signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           mode,
           origin: transportCityCode(originCity, mode),
@@ -179,15 +185,27 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
         const working = (data.providerStatuses || []).filter((status) => status.status === "ok");
         setError(
           working.length
-            ? "برای این مسیر و تاریخ، بلیتی با صندلی و قیمت پیدا نشد. تاریخ دیگری را امتحان کنید."
+            ? "برای این مسیر و تاریخ، بلیتی با صندلی و قیمت پیدا نشد."
             : "هیچ منبعی برای این مسیر پاسخ نداد؛ وضعیت هر منبع پایین‌تر آمده است.",
         );
+        // Being empty on one date does not mean the route is dead: check the
+        // neighbouring days and offer the ones that do have tickets.
+        void findNearbyDates();
+      } else {
+        setNearbyDates([]);
       }
     } catch (caught) {
       setOffers([]);
       setReturnOffers([]);
       onCheapestChange(mode, null);
-      setError(caught instanceof Error ? caught.message : "جست‌وجو انجام نشد");
+      const timedOut = caught instanceof Error && (caught.name === "TimeoutError" || caught.name === "AbortError");
+      setError(
+        timedOut
+          ? "پاسخ منابع بلیت دیر رسید. یک بار دیگر «جست‌وجوی دوباره» را بزنید."
+          : caught instanceof Error
+            ? caught.message
+            : "جست‌وجو انجام نشد",
+      );
     } finally {
       setLoading(false);
     }
@@ -201,6 +219,62 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
     autoSearched.current = true;
     void search();
   }, [active, destinationCity, originCity, search, travelData.departureDate]);
+
+  // A date changed from the «nearby dates» list means search again right away.
+  useEffect(() => {
+    if (!active || !autoSearched.current) return;
+    if (lastSearchedDate.current === travelData.departureDate) return;
+    const timer = window.setTimeout(() => void search(), 200);
+    return () => window.clearTimeout(timer);
+    // The date is the only trigger here; the other inputs use the button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [travelData.departureDate]);
+
+  /** Looks at the days around the chosen one and keeps the ones with tickets. */
+  const findNearbyDates = useCallback(async () => {
+    if (!originCity || !destinationCity || !travelData.departureDate) return;
+    setNearbyLoading(true);
+    const offsets = [-3, -1, 1, 3, 7];
+    const base = Date.parse(`${travelData.departureDate}T00:00:00Z`);
+    try {
+      const results = await Promise.all(
+        offsets.map(async (offset) => {
+          const date = new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
+          try {
+            const response = await fetch("/api/providers/transport/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(20_000),
+              body: JSON.stringify({
+                mode,
+                origin: transportCityCode(originCity, mode),
+                destination: transportCityCode(destinationCity, mode),
+                date,
+                adults: travelData.travelers,
+                children: travelData.children,
+                infants: travelData.infants,
+              }),
+            });
+            const payload = (await response.json()) as SearchResponse;
+            const cheapest = (payload.offers || []).reduce<number | null>(
+              (best, offer) => (best === null || offer.priceToman < best ? offer.priceToman : best),
+              null,
+            );
+            return cheapest === null ? null : { date, cheapest };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setNearbyDates(results.filter((entry): entry is { date: string; cheapest: number } => Boolean(entry)).sort((a, b) => a.date.localeCompare(b.date)));
+    } finally {
+      setNearbyLoading(false);
+    }
+  }, [destinationCity, mode, originCity, travelData.children, travelData.departureDate, travelData.infants, travelData.travelers]);
+
+  useEffect(() => {
+    setNearbyDates([]);
+  }, [travelData.departureDate]);
 
   const legOffers = activeLeg === "return" ? returnOffers : offers;
   const needle = normalise(query.trim());
@@ -229,6 +303,11 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
     () => legOffers.reduce((max, offer) => Math.max(max, offer.priceToman), 0),
     [legOffers],
   );
+
+  /** Switches the trip to another departure date and searches it at once. */
+  const searchForDate = useCallback(async (date: string) => {
+    setTravelData((current) => ({ ...current, departureDate: date }));
+  }, [setTravelData]);
 
   function totalFor(offer: LiveOffer): number | null {
     if (travelData.children > 0 && !offer.childPriceToman) return null;
@@ -393,6 +472,38 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
 
       {error ? (
         <div className="m-4 rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-[10.5px] leading-6 text-rose-100">{error}</div>
+      ) : null}
+
+      {!loading && hasSearched && !legOffers.length && (nearbyDates.length > 0 || nearbyLoading) ? (
+        <div className="mx-4 mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
+          <b className="flex items-center gap-1.5 text-[10.5px] font-bold text-cyan-100">
+            <Clock3 className="h-3 w-3" />
+            اگر تاریخ انعطاف دارید، این روزها بلیت دارند
+          </b>
+          {nearbyLoading ? (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[9.5px] text-slate-400">
+              <LoaderCircle className="h-3 w-3 animate-spin" />
+              در حال بررسی روزهای نزدیک…
+            </p>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {nearbyDates.map((entry) => (
+                <button
+                  key={entry.date}
+                  type="button"
+                  onClick={() => {
+                    setNearbyDates([]);
+                    void searchForDate(entry.date);
+                  }}
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[9.5px] font-bold text-white transition hover:border-cyan-300/40 hover:bg-white/10"
+                >
+                  {formatJalaliDate(entry.date)}
+                  <span className="mr-1 text-cyan-300">{money(entry.cheapest)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : null}
 
       {loading && !legOffers.length ? (
