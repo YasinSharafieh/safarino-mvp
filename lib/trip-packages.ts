@@ -14,7 +14,7 @@
 import { searchMultiProviderAccommodation } from "./accommodation-search";
 import { PROVIDER_LABELS as STAY_PROVIDER_LABELS } from "./accommodation-types";
 import { IRANIAN_CITIES } from "./iran-cities";
-import { readWithRefresh, snapshotKey } from "./snapshot-store";
+import { readFreshSnapshot, readStaleSnapshot, snapshotKey, writeSnapshot } from "./snapshot-store";
 import { searchTransport, type TransportSearchPayload } from "./transport-search";
 import type { TransportMode, TransportOffer } from "./transport-types";
 
@@ -74,6 +74,9 @@ export type TripPackagesResult = {
   generatedAt: string;
   note: string;
 };
+
+const PACKAGE_TTL_SECONDS = 20 * 60;
+const PACKAGE_KEEP_SECONDS = 6 * 3_600;
 
 const MODE_LABELS: Record<TransportMode, string> = { train: "قطار", plane: "هواپیما", bus: "اتوبوس" };
 
@@ -291,18 +294,24 @@ async function buildPackage(
     return { ...draft, continueUrl: continueUrl(draft) };
   };
 
-  const { snapshot, source, refreshed } = await readWithRefresh<TripPackage | null>(base, build, {
-    ttlSeconds: 20 * 60,
-    keepSeconds: 6 * 3_600,
-  });
-  if (source === "live" && refreshed) {
-    const value = await refreshed();
-    return value ?? null;
+  // A saved package is served instantly. On a cold key the package is built
+  // right here and stored, so `refreshed` (which only writes the snapshot) is
+  // never awaited for its — empty — return value.
+  const fresh = await readFreshSnapshot<TripPackage>(base);
+  if (fresh) return { ...fresh, fromStoredCopy: false };
+
+  const stale = await readStaleSnapshot<TripPackage>(base);
+  if (stale?.value) {
+    // Show the last good package and rebuild in the background.
+    void build()
+      .then((value) => (value ? writeSnapshot(base, value, PACKAGE_TTL_SECONDS, PACKAGE_KEEP_SECONDS) : null))
+      .catch(() => null);
+    return { ...stale.value, fromStoredCopy: true };
   }
-  if (snapshot?.value) {
-    if (source === "stale-cache" && refreshed) void refreshed();
-    return { ...snapshot.value, fromStoredCopy: source === "stale-cache" };
-  }
+
+  const value = await build();
+  if (value) await writeSnapshot(base, value, PACKAGE_TTL_SECONDS, PACKAGE_KEEP_SECONDS).catch(() => null);
+  return value;
   return null;
 }
 
