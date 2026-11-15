@@ -30,6 +30,7 @@ import { resolveIranianCity } from "../lib/iran-cities";
 import { readFileSync } from "node:fs";
 import { todaysPackageDestinations } from "../lib/trip-packages";
 import { describeTrip } from "../lib/start-flow";
+import { parseTripLink } from "../lib/link-prefill";
 
 const FOREIGN = ["استانبول", "دبی", "آنتالیا", "کاپادوکیه", "کیش ", "ترکیه", "امارات"];
 const cityNames = iranianTravelCities();
@@ -183,6 +184,26 @@ assert(historyTrip?.result.moods[0].mood === "تاریخی", "history words win 
 const freeTextCities = suggestCities(seaTrip!.result, { limit: 4 });
 assert(freeTextCities.length >= 1, "the free-text path reaches real city suggestions");
 assert(freeTextCities.every((city) => isIranianTravelCity(city.name)), "free-text suggestions are Iranian cities");
+
+/* ------------------------------------------- the link a package produces */
+
+const link = parseTripLink("?from=%D8%AA%D9%87%D8%B1%D8%A7%D9%86&to=%D9%85%D8%B4%D9%87%D8%AF&date=2026-11-21&return=2026-11-24&mode=train&adults=2&nights=3&pkg=whatever");
+assert(link !== null, "a package link is understood");
+if (!link) throw new Error("the package link must parse");
+const pkgLink = link;
+assertEqual(pkgLink.origin, "تهران", "the origin survives the link");
+assertEqual(pkgLink.destination, "مشهد", "the destination survives the link");
+assertEqual(pkgLink.departureDate, "2026-11-21", "the departure date survives the link");
+assertEqual(pkgLink.returnDate, "2026-11-24", "the return date survives the link");
+assertEqual(pkgLink.mode, "train", "the chosen mode survives the link");
+assertEqual(pkgLink.days, 4, "three nights means a four-day trip");
+assertEqual(pkgLink.travellers, 2, "the number of travellers survives the link");
+assert(pkgLink.roundTrip, "a link with a return date is a round trip");
+assertEqual(parseTripLink(""), null, "an empty link changes nothing");
+assertEqual(parseTripLink("?adults=2"), null, "a party size alone is not a trip link");
+assertEqual(parseTripLink("?date=2026-13-45&mode=spaceship")?.mode, undefined, "an impossible mode is ignored");
+assertEqual(parseTripLink("?date=2026-13-45")?.departureDate, undefined, "an impossible date is never set");
+assertEqual(parseTripLink("?to=%D9%85%D8%B4%D9%87%D8%AF&adults=99")?.travellers, 9, "the party size is capped, not trusted blindly");
 
 if (failures) {
   console.error(`\n❌ ${failures} بررسی شکست خورد`);

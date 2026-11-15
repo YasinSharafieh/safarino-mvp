@@ -29,6 +29,7 @@ import ModeChooser, { MODE_OPTIONS, type TravelMode } from "@/components/transpo
 import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
+import { parseTripLink } from "@/lib/link-prefill";
 import SiteHeader from "@/components/SiteHeader";
 
 const STORAGE_KEY = "safarino-transport-selection-v1";
@@ -138,28 +139,19 @@ function TransportPageContent() {
       applied = false;
     }
     if (applied) return;
-    const params = new URLSearchParams(window.location.search);
-    const from = params.get("from");
-    const to = params.get("to");
-    const date = params.get("date");
-    const back = params.get("return");
-    const nights = Number(params.get("nights"));
-    const adults = Number(params.get("adults"));
-    const wantedMode = params.get("mode");
-    if (!from && !to && !date && !wantedMode) return;
+    const prefill = parseTripLink(window.location.search);
+    if (!prefill) return;
     setTravelData((current) => ({
       ...current,
-      ...(from ? { origin: from } : {}),
-      ...(to ? { destination: to } : {}),
-      ...(date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? { departureDate: date } : {}),
-      ...(back && /^\d{4}-\d{2}-\d{2}$/.test(back) ? { returnDate: back } : {}),
-      ...(Number.isFinite(nights) && nights > 0 ? { days: nights + 1 } : {}),
-      ...(Number.isFinite(adults) && adults > 0 ? { travelers: Math.min(9, adults) } : {}),
+      ...(prefill.origin ? { origin: prefill.origin } : {}),
+      ...(prefill.destination ? { destination: prefill.destination } : {}),
+      ...(prefill.departureDate ? { departureDate: prefill.departureDate } : {}),
+      ...(prefill.returnDate ? { returnDate: prefill.returnDate } : {}),
+      ...(prefill.days ? { days: prefill.days } : {}),
+      ...(prefill.travellers ? { travelers: prefill.travellers } : {}),
     }));
-    if (wantedMode === "plane" || wantedMode === "train" || wantedMode === "bus" || wantedMode === "car") {
-      setMode(wantedMode);
-    }
-    if (back) setRoundTrip(true);
+    if (prefill.mode) setMode(prefill.mode);
+    if (prefill.roundTrip) setRoundTrip(true);
     try {
       window.sessionStorage.setItem(LINK_APPLIED_KEY, "1");
     } catch {
