@@ -213,10 +213,11 @@ export function todaysPackageDestinations(origin: string, count: number, now = n
  * enough — two presses in the same minute would show the same four cards — so a
  * small per-origin counter is stored and advanced on each forced refresh.
  */
-async function nextRotation(origin: string): Promise<number> {
+async function nextRotation(origin: string, step: number): Promise<number> {
   const key = `safarino:deals:rotation:${origin}`;
   const stored = await getProviderCache<{ n: number }>(key);
-  const next = ((Number(stored?.n) || 0) + 1) % 10_000;
+  // Advancing by a whole row means no card from the last press repeats.
+  const next = ((Number(stored?.n) || 0) + Math.max(1, step)) % 100_000;
   await setProviderCache(key, { n: next }, 86_400);
   return next;
 }
@@ -391,7 +392,7 @@ export async function loadTripPackages(options: {
   const limit = Math.min(6, Math.max(2, Math.round(options.limit || 4)));
   // «به‌روزرسانی» also moves the list on: a fresh crawl shows other real
   // destinations from the same city, not the same four cards with new numbers.
-  const rotation = options.force ? (await nextRotation(origin)) : 0;
+  const rotation = options.force ? (await nextRotation(origin, limit)) : 0;
   const destinations = todaysPackageDestinations(origin, limit, new Date(), rotation);
   const offsets = [3, 6, 10, 14, 18, 21];
 

@@ -80,6 +80,8 @@ const base = new Date("2026-11-15T10:00:00Z");
 const todayCities = todaysPackageDestinations("تهران", 4, base, 0).map((entry) => entry.city);
 const refreshedCities = todaysPackageDestinations("تهران", 4, base, 1).map((entry) => entry.city);
 check("the list rotates when refreshed", todayCities.join("|") !== refreshedCities.join("|"));
+const nextPress = todaysPackageDestinations("تهران", 4, base, 4).map((entry) => entry.city);
+check("a second press shares no card with the first", nextPress.every((city) => !todayCities.includes(city)), nextPress.join("، "));
 check("the traveller's own city is never a destination", !todayCities.includes("تهران") && !refreshedCities.includes("تهران"));
 check("four distinct destinations each time", new Set(todayCities).size === 4 && new Set(refreshedCities).size === 4);
 
