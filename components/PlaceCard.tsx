@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, ChevronDown, Heart, Info, Navigation2 } from "lucide-react";
+import { ExternalLink, ChevronDown, Heart, Info, Navigation2, Plus, Check } from "lucide-react";
 import { FAVORITES_EVENT, isFavoritePlace, toggleFavorite } from "@/lib/favorites";
 import PlaceNavigator from "./PlaceNavigator";
 import type { NavPoint } from "@/lib/neshan-deeplink";
@@ -43,11 +43,16 @@ export default function PlaceCard({
   origin,
   originLabel,
   rank,
+  onAddToPlan,
+  addedToPlan,
 }: {
   place: PlaceCardData;
   origin?: NavPoint | null;
   originLabel?: string;
   rank?: number;
+  /** When given, the card offers «افزودن به برنامهٔ سفر». */
+  onAddToPlan?: (place: PlaceCardData) => void;
+  addedToPlan?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -167,7 +172,24 @@ export default function PlaceCard({
           </div>
         ) : null}
 
-        {/* 2. The way there, straight into the Neshan navigator */}
+        {/* 2. Put this place into the trip plan */}
+        {onAddToPlan ? (
+          <button
+            type="button"
+            onClick={() => onAddToPlan(place)}
+            aria-pressed={Boolean(addedToPlan)}
+            className={`mt-2 flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[10.5px] font-extrabold transition ${
+              addedToPlan
+                ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-200"
+                : "border-cyan-400/30 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20"
+            }`}
+          >
+            {addedToPlan ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            {addedToPlan ? "در برنامهٔ سفر هست" : "افزودن به برنامهٔ سفر"}
+          </button>
+        ) : null}
+
+        {/* 3. The way there, straight into the Neshan navigator */}
         <div className="mt-auto pt-2.5">
           <PlaceNavigator place={{ name: place.name, latitude: place.latitude, longitude: place.longitude, category: place.category, address: place.address }} origin={origin} originLabel={originLabel} compact />
         </div>

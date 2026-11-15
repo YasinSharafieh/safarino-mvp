@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Car, Compass, MapPin, WifiOff } from "lucide-react";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
+import SiteHeader from "@/components/SiteHeader";
 
 type SavedDay = {
   day: number;
@@ -49,25 +50,11 @@ export default function OfflinePage() {
   return (
     <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
         <div className="absolute inset-0 grid-lines opacity-60" />
       </div>
 
-      <header className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-        <Link href="/" className="group flex items-center gap-2.5">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow">
-            <Compass className="h-5 w-5" />
-          </span>
-          <span>
-            <b className="block text-sm font-black text-white">سفرینو</b>
-            <span className="block text-[10px] tracking-[0.3em] text-cyan-200/70">SAFARINO</span>
-          </span>
-        </Link>
-        <span className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[10px] font-bold text-amber-100">
-          <WifiOff className="h-3.5 w-3.5" />
-          بدون اینترنت
-        </span>
-      </header>
+      <SiteHeader minimal />
 
       <section className="mx-auto mt-6 max-w-3xl">
         <div className="glass p-5 sm:p-7">

@@ -92,6 +92,7 @@ const AMENITY_RULES: { label: string; pattern: RegExp }[] = [
 
 import PlaceCard, { type PlaceCardData } from "@/components/PlaceCard";
 import PlaceNavigator from "@/components/PlaceNavigator";
+import SiteHeader from "@/components/SiteHeader";
 
 type NearbyPlace = PlaceCardData;
 
@@ -302,7 +303,7 @@ export default function AccommodationDetailPage() {
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
             <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -310,21 +311,7 @@ export default function AccommodationDetailPage() {
           </div>
         </div>
 
-        <header className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            <span className="flex flex-col leading-none">
-              <b className="text-lg font-black text-white">سفرینو</b>
-              <small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small>
-            </span>
-          </Link>
-          <button type="button" onClick={backToResults} className="btn-ghost !px-4 !py-2.5 text-xs">
-            <ArrowRight className="h-4 w-4" />
-            بازگشت به نتایج اقامت
-          </button>
-        </header>
+        <SiteHeader minimal />
 
         <div className="mx-auto max-w-6xl pb-16 pt-8">
           {loading ? (

@@ -28,7 +28,8 @@ import { DISCOVER_CITIES } from "../lib/discover";
 import { cleanReviewText, parseReviewInput, validRating } from "../lib/reviews";
 import { resolveIranianCity } from "../lib/iran-cities";
 import { readFileSync } from "node:fs";
-import { DEAL_CITIES, todaysDealCities } from "../lib/deals";
+import { todaysPackageDestinations } from "../lib/trip-packages";
+import { describeTrip } from "../lib/start-flow";
 
 const FOREIGN = ["استانبول", "دبی", "آنتالیا", "کاپادوکیه", "کیش ", "ترکیه", "امارات"];
 const cityNames = iranianTravelCities();
@@ -81,7 +82,7 @@ assert(identicalRounds < 40, "drawing twice can produce a different set");
 /* --------------------------------------------------------- suggestions */
 
 const discoverNames = new Set(DISCOVER_CITIES.map((city) => city.name));
-for (const city of DEAL_CITIES) assert(discoverNames.has(city.city) || isIranianTravelCity(city.city), `${city.city} is an Iranian city`);
+assert(discoverNames.size > 5, "the discover list has real cities");
 
 let suggestionsSeen = 0;
 for (let run = 0; run < 25; run += 1) {
@@ -147,22 +148,41 @@ assert(!noRating.ok, "a review without a rating is refused");
 const tooLong = parseReviewInput({ city: "یزد", rating: 4, text: "ا".repeat(900) });
 assert(!tooLong.ok, "an over-long review is refused");
 
-/* ---------------------------------------------------------------- deals */
+/* ------------------------------------------------------------- packages */
 
 // Provider photos must go through the site's proxy: the CDNs refuse hot links.
-const dealsSource = readFileSync("lib/deals.ts", "utf8");
-assert(dealsSource.includes("/api/provider-assets?src="), "deal photos go through the image proxy");
-assert(!/photo:\s*offer\.imageUrl/.test(dealsSource), "no deal photo is linked to the provider directly");
+const packagesSource = readFileSync("lib/trip-packages.ts", "utf8");
+assert(packagesSource.includes("/api/provider-assets?src="), "package photos go through the image proxy");
+assert(!/photo:\s*(offer|stay)\.imageUrl\b/.test(packagesSource), "no package photo is linked to the provider directly");
+assert(packagesSource.includes("searchTransport("), "a package price comes from the real ticket search");
+assert(packagesSource.includes("searchMultiProviderAccommodation("), "a package price comes from the real hotel search");
 
-const pair = todaysDealCities();
-assertEqual(pair.length, 2, "two cities are featured every day");
-assert(pair[0].city !== pair[1].city, "the two featured cities are different");
-for (const entry of pair) {
+const today = todaysPackageDestinations("تهران", 4);
+assertEqual(today.length, 4, "four destinations are featured every day");
+assert(today.every((entry) => entry.city !== "تهران"), "the traveller's own city is never a destination");
+for (const entry of today) {
   assert(isIranianTravelCity(entry.city), `${entry.city} is an Iranian city`);
-  assert(entry.kind === "hotel" || entry.kind === "stay", "a deal city has a kind");
+  assert(["train", "plane", "bus"].includes(entry.mode), "a package has a real ticket mode");
+  assert(entry.days >= 2 && entry.days <= 5, "a package is 2 to 5 days");
 }
-const tomorrow = todaysDealCities(new Date(Date.now() + 86_400_000));
-assert(tomorrow[0].city !== pair[0].city, "the featured cities change tomorrow");
+assertEqual(new Set(today.map((entry) => entry.city)).size, today.length, "no destination is repeated");
+const tomorrow = todaysPackageDestinations("تهران", 4, new Date(Date.now() + 86_400_000));
+assert(tomorrow[0].city !== today[0].city, "the featured destinations change tomorrow");
+
+/* ------------------------------------------------------- free-text door */
+
+const seaTrip = describeTrip("دلم می‌خواهد ۴ روز کنار دریا باشم و شب‌ها کافه برویم، حدود ۲۰ میلیون");
+assert(seaTrip !== null, "a description with real words produces a result");
+assert(seaTrip!.result.moods.some((entry) => entry.mood === "ساحلی"), "«دریا» is read as a seaside taste");
+assert(seaTrip!.result.days === 4, "the number of days is read from the sentence");
+assert(seaTrip!.result.summary.includes("۲۰"), "the budget is repeated back to the traveller");
+assert(describeTrip("یه سفر خوب") === null, "a sentence without any taste word asks for more words");
+assert(describeTrip("") === null, "an empty box produces nothing");
+const historyTrip = describeTrip("تاریخ و معماری قدیم برایم مهم است");
+assert(historyTrip?.result.moods[0].mood === "تاریخی", "history words win when that is what was written");
+const freeTextCities = suggestCities(seaTrip!.result, { limit: 4 });
+assert(freeTextCities.length >= 1, "the free-text path reaches real city suggestions");
+assert(freeTextCities.every((city) => isIranianTravelCity(city.name)), "free-text suggestions are Iranian cities");
 
 if (failures) {
   console.error(`\n❌ ${failures} بررسی شکست خورد`);

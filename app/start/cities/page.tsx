@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, CalendarDays, Compass, LoaderCircle, MapPin, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Compass, LoaderCircle, MapPin, Users, Wallet } from "lucide-react";
 import CityCombobox from "@/components/CityCombobox";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
 import { useTravel } from "../../context/TravelContext";
 import { orderedTravelCities } from "@/lib/start-flow";
 import { formatJalaliDate } from "@/lib/jalali";
+import SiteHeader from "@/components/SiteHeader";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -38,6 +39,7 @@ export default function StartCitiesPage() {
   const [departureDate, setDepartureDate] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [travelers, setTravelers] = useState(2);
+  const [budget, setBudget] = useState(15);
   const [children, setChildren] = useState(0);
   const [infants, setInfants] = useState(0);
   const [query, setQuery] = useState("");
@@ -50,6 +52,7 @@ export default function StartCitiesPage() {
     setOrigin(travelData.origin || "");
     setDestination(travelData.destination || "");
     setTravelers(Math.max(1, Number(travelData.travelers) || 2));
+    setBudget(Math.max(1, Number(travelData.budget) || 15));
     setChildren(Math.max(0, Number(travelData.children) || 0));
     setInfants(Math.max(0, Number(travelData.infants) || 0));
     if (travelData.departureDate) {
@@ -62,7 +65,8 @@ export default function StartCitiesPage() {
 
   useEffect(() => {
     if (departureDate) return;
-    const next = addDays(todayIso(), 7);
+    // A traveller usually starts planning for «now»: the default is today.
+    const next = todayIso();
     setDepartureDate(next);
     setReturnDate(addDays(next, 2));
   }, [departureDate]);
@@ -135,6 +139,7 @@ export default function StartCitiesPage() {
       departureDate,
       returnDate,
       days: Math.max(1, nights),
+      budget,
       travelers,
       children,
       infants,
@@ -144,7 +149,7 @@ export default function StartCitiesPage() {
 
   if (!isHydrated) {
     return (
-      <main dir="rtl" className="grid min-h-screen place-items-center bg-[#071521] text-cyan-100">
+      <main dir="rtl" className="grid min-h-screen place-items-center bg-[#120a26] text-cyan-100">
         <span className="flex items-center gap-2 text-sm">
           <LoaderCircle className="h-4 w-4 animate-spin" />
           در حال آماده‌سازی…
@@ -156,7 +161,7 @@ export default function StartCitiesPage() {
   return (
     <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
         <div className="absolute inset-0 grid-lines opacity-60" />
         <div className="aurora">
           <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -164,21 +169,7 @@ export default function StartCitiesPage() {
         </div>
       </div>
 
-      <header className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-        <Link href="/start" className="flex items-center gap-2.5">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow">
-            <Compass className="h-5 w-5" />
-          </span>
-          <span>
-            <b className="block text-sm font-black text-white">سفرینو</b>
-            <span className="block text-[10px] tracking-[0.3em] text-cyan-200/70">SAFARINO</span>
-          </span>
-        </Link>
-        <Link href="/start" className="btn-ghost !px-3 !py-2 text-[11px]">
-          <ArrowRight className="h-3.5 w-3.5" />
-          شروع
-        </Link>
-      </header>
+      <SiteHeader />
 
       <section className="mx-auto mt-6 max-w-3xl">
         <div className="glass p-4 sm:p-6">
@@ -234,11 +225,12 @@ export default function StartCitiesPage() {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr]">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+          <div className="mt-3 grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+            <div className="relative z-30 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
               <p className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
                 <CalendarDays className="h-3.5 w-3.5 text-cyan-300" />
                 تاریخ رفت و برگشت
+                <span className="mr-auto text-[9px] font-normal text-slate-500">پیش‌فرض: امروز</span>
               </p>
               <JalaliRangeCalendar
                 departureDate={departureDate}
@@ -255,28 +247,72 @@ export default function StartCitiesPage() {
                 }}
               />
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
-              <PassengerSelector
-                adults={travelers}
-                children={children}
-                infants={infants}
-                onChange={(field, value) => {
-                  if (field === "travelers") setTravelers(Math.min(9, Math.max(1, value)));
-                  if (field === "children") setChildren(Math.max(0, value));
-                  if (field === "infants") setInfants(Math.max(0, Math.min(travelers, value)));
-                }}
-              />
-              <p className="mt-2 flex items-center gap-1.5 text-[9.5px] leading-5 text-slate-500">
-                <Users className="h-3 w-3 text-cyan-300" />
-                {travelers + children + infants} نفر · {nights > 0 ? `${new Intl.NumberFormat("fa-IR").format(nights)} شب` : "تاریخ را انتخاب کنید"}
-              </p>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                <PassengerSelector
+                  adults={travelers}
+                  children={children}
+                  infants={infants}
+                  onChange={(field, value) => {
+                    if (field === "travelers") setTravelers(Math.min(9, Math.max(1, value)));
+                    if (field === "children") setChildren(Math.max(0, value));
+                    if (field === "infants") setInfants(Math.max(0, Math.min(travelers, value)));
+                  }}
+                />
+                <p className="mt-2 flex items-center gap-1.5 text-[9.5px] leading-5 text-slate-500">
+                  <Users className="h-3 w-3 text-cyan-300" />
+                  {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر ·{" "}
+                  {nights > 0 ? `${new Intl.NumberFormat("fa-IR").format(nights)} شب` : "تاریخ را انتخاب کنید"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                <p className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
+                  <Wallet className="h-3.5 w-3.5 text-turquoise-300" />
+                  بودجهٔ کل سفر
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {[5, 10, 20, 40, 80].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setBudget(value)}
+                      aria-pressed={budget === value}
+                      className={`rounded-lg border px-2 py-1.5 text-[10px] font-bold transition ${
+                        budget === value
+                          ? "border-cyan-300/50 bg-cyan-300/12 text-cyan-100"
+                          : "border-white/10 bg-white/[0.03] text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {new Intl.NumberFormat("fa-IR").format(value)} میلیون
+                    </button>
+                  ))}
+                  <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-950/50 px-2 py-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={budget}
+                      onChange={(event) => setBudget(Math.max(1, Math.min(500, Number(event.target.value) || 1)))}
+                      aria-label="بودجهٔ کل سفر به میلیون تومان"
+                      className="w-12 bg-transparent text-center text-[10px] font-bold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      dir="ltr"
+                    />
+                    <span className="whitespace-nowrap text-[8.5px] text-slate-500">میلیون</span>
+                  </label>
+                </div>
+                <p className="mt-1.5 text-[9px] leading-5 text-slate-500">
+                  کل سفر برای همهٔ مسافران؛ در تقسیم بودجه و انتخاب اقامتگاه همین عدد سقف است.
+                </p>
+              </div>
             </div>
           </div>
 
           {origin && destination && nights > 0 ? (
             <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-2.5 text-[10px] leading-6 text-cyan-100">
               سفر شما: <b>{origin}</b> → <b>{destination}</b> · {formatJalaliDate(departureDate)} تا {formatJalaliDate(returnDate)} ·{" "}
-              {new Intl.NumberFormat("fa-IR").format(nights)} شب · {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر
+              {new Intl.NumberFormat("fa-IR").format(nights)} شب · {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر · بودجهٔ{" "}
+              {new Intl.NumberFormat("fa-IR").format(budget)} میلیون تومان
               {distance ? (
                 <span className="mt-1 block text-cyan-200/90">
                   مسیر جاده‌ای: {new Intl.NumberFormat("fa-IR").format(distance.km)} کیلومتر

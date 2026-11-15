@@ -1,6 +1,7 @@
 "use client";
 
 import SnapshotKeeper from "@/components/SnapshotKeeper";
+import ThemeToggle from "@/components/ThemeToggle";
 import HomeDeals from "@/components/HomeDeals";
 import HomeReviews from "@/components/HomeReviews";
 
@@ -154,7 +155,7 @@ export default function HomePage() {
       <SnapshotKeeper />
       {/* ---------------------------------------------------- background */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_55%)]" />
         <div className="absolute inset-0 grid-lines opacity-70" />
         <div className="aurora">
           <span className="h-[26rem] w-[26rem] -top-24 right-0 bg-teal-500/40 animate-float" />
@@ -186,8 +187,9 @@ export default function HomePage() {
             ))}
           </ul>
 
-          <div className="hidden lg:block">
-            <a href="/start" className="btn-primary !px-5 !py-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <a href="/start" className="btn-primary hidden !px-5 !py-2.5 text-xs lg:inline-flex">
               شروع برنامه‌ریزی
             </a>
           </div>

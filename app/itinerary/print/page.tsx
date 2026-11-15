@@ -9,6 +9,7 @@ import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
 import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
+import SiteHeader from "@/components/SiteHeader";
 import { CHECKLIST_GROUPS, allItems, readChecklist, type ChecklistState } from "@/lib/checklist";
 
 type SavedItinerary = {
@@ -127,6 +128,12 @@ export default function ItineraryPrintPage() {
 
   return (
     <main dir="rtl" className="min-h-screen bg-slate-100 pb-16 print:bg-white print:pb-0">
+      {/* The print sheet is still part of the site: the way home is one tap away. */}
+      <div className="print:hidden">
+        <div className="bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)] px-4 pb-4 pt-6 sm:px-6">
+          <SiteHeader minimal />
+        </div>
+      </div>
       <style>{`
         @page {
           size: A4;

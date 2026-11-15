@@ -1,24 +1,56 @@
-import { NextResponse } from "next/server";
-import { loadHomeDeals } from "@/lib/deals";
+import { NextRequest, NextResponse } from "next/server";
+import { loadTripPackages, normaliseCity, type TripPackagesResult } from "@/lib/trip-packages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * GET /api/deals — the home page's «پیشنهادهای ویژه».
- * Real rooms, real prices, real booking links; cached for a few hours.
+ * GET /api/deals — the home page's «پیشنهادهای ویژه», now real composed trips.
+ *
+ * The traveller's own city becomes the origin: from the explicit `from` query,
+ * else from the edge's city header (Vercel sets `x-vercel-ip-city`), else from a
+ * sensible default. Nothing personal is stored or returned beyond the city name
+ * the traveller could see in their own browser anyway.
  */
-export async function GET() {
+function originFromRequest(request: NextRequest): { origin: string; source: "request" | "geo" | "default" } {
+  const fromQuery = normaliseCity(request.nextUrl.searchParams.get("from"));
+  if (fromQuery) return { origin: fromQuery, source: "request" };
+
+  const headers = request.headers;
+  const candidates = [
+    headers.get("x-vercel-ip-city"),
+    headers.get("x-city"),
+    headers.get("cf-ipcity"),
+  ];
+  for (const candidate of candidates) {
+    const city = normaliseCity(candidate);
+    if (city) return { origin: city, source: "geo" };
+  }
+  return { origin: "تهران", source: "default" };
+}
+
+function emptyResult(origin: string, source: "request" | "geo" | "default", note: string): TripPackagesResult {
+  return {
+    success: true,
+    origin,
+    originSource: source,
+    packages: [],
+    generatedAt: new Date().toISOString(),
+    note,
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const { origin, source } = originFromRequest(request);
+  const travellers = Math.min(4, Math.max(1, Number(request.nextUrl.searchParams.get("travellers")) || 1));
   try {
-    const result = await loadHomeDeals();
-    return NextResponse.json({ success: true, ...result }, { headers: { "Cache-Control": "no-store" } });
+    const result = await loadTripPackages({ origin, originSource: source, travellers, limit: 4 });
+    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return NextResponse.json({
-      success: true,
-      cities: [],
-      generatedAt: new Date().toISOString(),
-      note: "منابع اقامتگاه الان پاسخ ندادند. یک بار دیگر تلاش کنید یا مستقیم جست‌وجوی اقامتگاه را باز کنید.",
-    });
+    return NextResponse.json(
+      emptyResult(origin, source, "ساخت بسته‌های سفر در این لحظه انجام نشد. یک بار دیگر تلاش کنید یا مستقیم جست‌وجو را باز کنید."),
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
 }

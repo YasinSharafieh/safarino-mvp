@@ -5,6 +5,7 @@ import { searchAlibabaBuses, searchAlibabaTrains } from "../../../../lib/alibaba
 import { searchSafar724Buses } from "../../../../lib/safar724-bus";
 import { searchCityPois } from "../../../../lib/poi-search";
 import { readFreshSnapshot, snapshotKey, writeSnapshot } from "../../../../lib/snapshot-store";
+import { loadTripPackages } from "../../../../lib/trip-packages";
 import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
 
 export const runtime = "nodejs";
@@ -26,6 +27,8 @@ export const maxDuration = 60;
 
 const CITIES = ["مشهد", "تهران", "شیراز", "اصفهان", "کیش", "رامسر", "تبریز", "یزد"];
 const STAY_CITIES = ["رامسر", "مشهد", "شیراز", "تهران", "ماسوله", "کیش"];
+/** Origins whose home-page packages are warmed ahead of the first visitor. */
+const PACKAGE_ORIGINS = ["تهران", "مشهد", "اصفهان", "شیراز"];
 const ROUTES: { mode: "plane" | "train" | "bus"; origin: string; destination: string }[] = [
   { mode: "plane", origin: "THR", destination: "MHD" },
   { mode: "plane", origin: "THR", destination: "SYZ" },
@@ -79,6 +82,21 @@ async function warmTransport(mode: "plane" | "train" | "bus", origin: string, de
   }
 }
 
+/**
+ * The home-page packages are built from two live searches each, so a cold visit
+ * would wait too long. Warming the biggest origins here keeps «پیشنهادهای ویژه»
+ * instant while the numbers still come from the providers.
+ */
+async function warmPackages(origin: string): Promise<Step> {
+  const started = Date.now();
+  try {
+    const result = await loadTripPackages({ origin, originSource: "default", travellers: 1, limit: 4 });
+    return { label: `packages:${origin}`, result: result.packages.length ? "refreshed" : "kept", ms: Date.now() - started };
+  } catch {
+    return { label: `packages:${origin}`, result: "failed", ms: Date.now() - started };
+  }
+}
+
 async function warmPois(city: string): Promise<Step> {
   const started = Date.now();
   const base = snapshotKey("pois", { city, limit: 24 });
@@ -99,18 +117,18 @@ const LOCK_KEY = "safarino:warm-lock";
 const LOCK_SECONDS = 3_600;
 
 export async function GET(request: NextRequest) {
-  return run(request, { hotels: 3, stays: 2, transports: 2, pois: 4 });
+  return run(request, { hotels: 2, stays: 2, transports: 2, pois: 3, packages: 1 });
 }
 
 export async function POST(request: NextRequest) {
-  return run(request, { hotels: 6, stays: 4, transports: 4, pois: 8 });
+  return run(request, { hotels: 6, stays: 4, transports: 4, pois: 8, packages: 3 });
 }
 
 /**
  * `budget*` bounds how much work one call does, so the job always finishes
  * inside the serverless time limit; the next call continues where it stopped.
  */
-async function run(request: NextRequest, budget: { hotels: number; stays: number; transports: number; pois: number }) {
+async function run(request: NextRequest, budget: { hotels: number; stays: number; transports: number; pois: number; packages?: number }) {
   const started = Date.now();
   const force = request.nextUrl.searchParams.get("force") === "1";
   if (!force) {
@@ -134,8 +152,10 @@ async function run(request: NextRequest, budget: { hotels: number; stays: number
   const stayJobs = STAY_CITIES.slice(0, budget.stays).map((city) => warmAccommodation("stay", city, checkIn, checkOut, 3));
   const transportJobs = ROUTES.slice(0, budget.transports).map((route) => warmTransport(route.mode, route.origin, route.destination, isoDate(3)));
   const poiJobs = CITIES.slice(0, budget.pois).map((city) => warmPois(city));
+  // Only the two biggest origins per call: the job must stay inside the limit.
+  const packageJobs = PACKAGE_ORIGINS.slice(0, budget.packages ?? 2).map((origin) => warmPackages(origin));
 
-  const settled = await Promise.allSettled([...hotelJobs, ...stayJobs, ...transportJobs, ...poiJobs]);
+  const settled = await Promise.allSettled([...hotelJobs, ...stayJobs, ...transportJobs, ...poiJobs, ...packageJobs]);
   settled.forEach((item) => {
     if (item.status === "fulfilled") steps.push(item.value);
     else steps.push({ label: "unknown", result: "failed", ms: 0 });

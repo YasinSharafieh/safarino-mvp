@@ -42,15 +42,23 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#071521",
+  themeColor: "#120a26",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fa" dir="rtl" suppressHydrationWarning>
+    <html lang="fa" dir="rtl" data-theme="dark" suppressHydrationWarning>
       <head>
+        {/* The theme is applied before the first paint, so the page never
+            flashes the wrong colours on a slow connection. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('safarino-theme');document.documentElement.dataset.theme=(t==='light'?'light':'dark');}catch(e){}",
+          }}
+        />
         {/* The font is served by Safarino itself: no third-party font server, so
             Persian text is identical everywhere and never blocked inside Iran. */}
         <link

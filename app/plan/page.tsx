@@ -20,7 +20,10 @@ import {
   LoaderCircle,
   MapPin,
   Navigation,
+  Plus,
   RefreshCw,
+  Trash2,
+  Wand2,
   Route,
   Share2,
   Shirt,
@@ -40,6 +43,9 @@ import { filterPlaces, type FilterOptions } from "@/lib/place-filter";
 import { FAVORITES_EVENT, favoriteIds } from "@/lib/favorites";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import type { PlaceCardData } from "@/components/PlaceCard";
+import SiteHeader from "@/components/SiteHeader";
+import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
+import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = {
@@ -196,6 +202,77 @@ function createLocalPlan(destination: string, budget: number, days: number, tran
   };
 }
 
+/** The hours a normal day can hold; the same grid every traveller understands. */
+const DAY_SLOTS = ["۰۸:۳۰", "۱۰:۳۰", "۱۲:۳۰", "۱۵:۰۰", "۱۷:۳۰", "۱۹:۳۰"];
+
+/**
+ * «خودت پیشنهاد بده» — no AI, no invention: the traveller's own places are put
+ * into real time slots, nearest to the stay first, with the arrival and the
+ * check-in at the top of the first day and food in the gaps.
+ */
+function slotDays(input: {
+  destination: string;
+  days: number;
+  places: PlanPoiWithStay[];
+  arrivalTime: string | null;
+}): PlanDay[] {
+  const pool = [...input.places].sort((a, b) => {
+    const first = typeof a.fromStayKm === "number" ? a.fromStayKm : a.distanceKm;
+    const second = typeof b.fromStayKm === "number" ? b.fromStayKm : b.distanceKm;
+    return first - second;
+  });
+  return Array.from({ length: Math.max(1, input.days) }, (_, index) => {
+    const day = index + 1;
+    const items: PlanItem[] = [];
+    if (day === 1) {
+      items.push({
+        time: input.arrivalTime || DAY_SLOTS[0],
+        title: `رسیدن به ${input.destination}`,
+        description: input.arrivalTime
+          ? "طبق ساعت بلیت انتخاب‌شده به مقصد می‌رسید؛ بارها را در اقامتگاه بگذارید و کمی استراحت کنید."
+          : "پس از رسیدن به مقصد، اول به سمت اقامتگاه بروید و بارها را بگذارید.",
+        type: "transport",
+      });
+      items.push({
+        time: "۱۳:۳۰",
+        title: "تحویل گرفتن اقامتگاه و استراحت",
+        description: "جا افتادن در اتاق، کمی استراحت و آماده شدن برای اولین بازدید.",
+        type: "rest",
+      });
+    } else {
+      items.push({ time: DAY_SLOTS[0], title: "صبحانه و شروع روز", description: "صبحانه و آماده‌شدن برای بازدیدهای امروز.", type: "food" });
+    }
+    let stop = 0;
+    for (const slot of DAY_SLOTS) {
+      const poi = pool.shift();
+      if (!poi) break;
+      stop += 1;
+      const km = typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm;
+      items.push({
+        time: slot,
+        title: poi.name,
+        description: `${poi.name} از جاذبه‌های ${poi.category} است؛ ${new Intl.NumberFormat("fa-IR").format(Math.round(km * 10) / 10)} کیلومتر از اقامتگاه شما${typeof poi.fromStayMinutes === "number" ? ` (حدود ${new Intl.NumberFormat("fa-IR").format(poi.fromStayMinutes)} دقیقه رانندگی)` : ""}.`,
+        type: "sightseeing",
+        poiId: poi.id,
+        poiCategory: poi.category,
+        poiSourceUrl: poi.wikipediaUrl || poi.sourceUrl,
+        poiWikipediaUrl: poi.wikipediaUrl,
+        poiDistanceKm: km,
+      });
+      if (stop === 2) {
+        items.push({ time: "۱۳:۰۰", title: "ناهار در همان محله", description: "ناهار ساده و محلی نزدیک جاذبه‌های همین محله.", type: "food" });
+      }
+    }
+    items.push({ time: "۲۰:۳۰", title: "شام و بازگشت به اقامتگاه", description: "پایان روز با شام سبک و استراحت.", type: "food" });
+    items.sort((a, b) => a.time.localeCompare(b.time, "fa"));
+    return {
+      day,
+      title: `روز ${new Intl.NumberFormat("fa-IR").format(day)} · ${input.destination}`,
+      items,
+    };
+  });
+}
+
 export default function PlanPage() {
   const { travelData, isHydrated } = useTravel();
   const [origin, setOrigin] = useState("تهران");
@@ -217,6 +294,18 @@ export default function PlanPage() {
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [placeFilters, setPlaceFilters] = useState<FilterOptions>({ query: "", categories: [], sort: "distance" });
   const [favoriteList, setFavoriteList] = useState<string[]>([]);
+  /** Places the traveller chose in this step; the plan is built from exactly these. */
+  const [chosenPlaces, setChosenPlaces] = useState<PlanPlace[]>([]);
+
+  useEffect(() => {
+    setChosenPlaces(readPlanPlaces());
+  }, []);
+
+  const chosenIds = useMemo(() => new Set(chosenPlaces.map((place) => place.id)), [chosenPlaces]);
+
+  const toggleChosen = (place: PlanPlace) => {
+    setChosenPlaces(togglePlanPlace(place));
+  };
 
   useEffect(() => {
     const sync = () => setFavoriteList(favoriteIds());
@@ -422,22 +511,79 @@ export default function PlanPage() {
     .slice(0, 8);
 
   const selectedDay = plan.days[Math.min(activeDay, plan.days.length - 1)] ?? plan.days[0];
+
+  /** The real arrival hour of the chosen ticket, when the provider gave one. */
+  const arrivalTime = useMemo(() => {
+    const candidates = [transportDetails.arrival, (transportDetails.details as Record<string, unknown> | undefined)?.arrival];
+    for (const value of candidates) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) continue;
+      const parts = new Intl.DateTimeFormat("fa-IR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tehran" }).formatToParts(date);
+      const hour = parts.find((part) => part.type === "hour")?.value;
+      const minute = parts.find((part) => part.type === "minute")?.value;
+      if (hour && minute) return `${hour}:${minute}`;
+    }
+    return null;
+  }, [transportDetails]);
+
+  /** Only the places the traveller added, matched to the live POI list. */
+  const chosenPois = useMemo(
+    () => enrichedPois.filter((poi) => chosenIds.has(poi.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [enrichedPois, chosenIds],
+  );
+
+  /** The diagram above the day list: arrival, bags, then the visits of that day. */
+  const daySteps: SchematicStep[] = useMemo(() => {
+    const items = selectedDay?.items ?? [];
+    const steps: SchematicStep[] = [];
+    if (selectedDay?.day === 1) {
+      steps.push({
+        time: arrivalTime || "—",
+        title: origin && destination ? `رسیدن از ${origin}` : "رسیدن به مقصد",
+        note: arrivalTime ? "ساعت بلیت انتخاب‌شده" : "ساعت ورود در بلیت ثبت نشده",
+        kind: "arrive",
+      });
+      const stayClock = typeof accommodationDetails.checkIn === "string" ? null : null;
+      void stayClock;
+      steps.push({ time: items.find((item) => item.type === "rest")?.time || "—", title: "تحویل اقامتگاه", note: typeof accommodationDetails.name === "string" ? accommodationDetails.name : undefined, kind: "hotel" });
+    }
+    items
+      .filter((item) => item.type === "sightseeing" || item.type === "food" || item.type === "activity")
+      .slice(0, 6)
+      .forEach((item) => {
+        steps.push({
+          time: item.time,
+          title: item.title,
+          note: item.poiCategory,
+          kind: item.type === "sightseeing" ? "visit" : item.type === "food" ? "food" : "other",
+        });
+      });
+    return steps;
+  }, [selectedDay, arrivalTime, origin, destination, accommodationDetails]);
+
   const totalSpent = useMemo(() => {
     const analysis = plan.budgetAnalysis;
     return analysis.transport + analysis.accommodation + analysis.food + analysis.activities;
   }, [plan]);
   const spentPercent = Math.round((totalSpent / Math.max(plan.budgetAnalysis.totalBudget, 1)) * 100);
 
-  const regenerate = async () => {
+  const regenerate = async (pool?: PlanPoiWithStay[]) => {
+    const requested = pool && pool.length ? pool : enrichedPois;
     setLoading(true);
     setNoticeTone("info");
-    setNotice("هوش مصنوعی در حال تحلیل بودجه و چیدن برنامه روزهاست…");
+    setNotice(requested.length
+      ? `هوش مصنوعی دارد برنامهٔ ${formatNumber(dayCount)} روز را از ${formatNumber(requested.length)} مکان انتخابی تو می‌چیند…`
+      : "هوش مصنوعی در حال تحلیل بودجه و چیدن برنامه روزهاست…");
     try {
       const endpoint = process.env.NEXT_PUBLIC_AI_PLAN_ENDPOINT || "/api/plan";
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          arrivalTime,
+          chosenPlaceIds: requested.map((poi) => poi.id),
           origin,
           destination,
           budget,
@@ -445,7 +591,7 @@ export default function PlanPage() {
           travelers: travelData.travelers,
           transport: transportDetails,
           accommodation: accommodationDetails,
-          pois: enrichedPois.map((poi) => ({ id: poi.id, name: poi.name, category: poi.category, latitude: poi.latitude, longitude: poi.longitude, distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm, sourceUrl: poi.sourceUrl, wikipediaUrl: poi.wikipediaUrl })),
+          pois: requested.map((poi) => ({ id: poi.id, name: poi.name, category: poi.category, latitude: poi.latitude, longitude: poi.longitude, distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm, sourceUrl: poi.sourceUrl, wikipediaUrl: poi.wikipediaUrl })),
           preferences: preferences.split(/[،,]/).map((item) => item.trim()).filter(Boolean),
         }),
       });
@@ -465,6 +611,27 @@ export default function PlanPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /** «خودت پیشنهاد بده»: the traveller's own places, fitted to real hours. */
+  const suggestMyself = () => {
+    const places = chosenPois.length ? chosenPois : nearestPois.length ? nearestPois : enrichedPois;
+    if (!places.length) {
+      setNoticeTone("warning");
+      setNotice("اول چند جاذبه را با «افزودن به برنامهٔ سفر» انتخاب کن، بعد ساعت‌ها را می‌چینم.");
+      return;
+    }
+    setPlan((current) => ({
+      ...current,
+      days: slotDays({ destination, days: dayCount, places, arrivalTime }),
+    }));
+    setActiveDay(0);
+    setNoticeTone("success");
+    setNotice(
+      chosenPois.length
+        ? `برنامه از ${formatNumber(places.length)} مکان انتخابی خودت و در ساعت‌های واقعی روز چیده شد.`
+        : "چون مکانی انتخاب نکرده بودی، نزدیک‌ترین جاذبه‌ها را در ساعت‌های روز چیدم.",
+    );
   };
 
   const sharePlan = async () => {
@@ -494,7 +661,7 @@ export default function PlanPage() {
   .screen-only { display: none !important; }
 }`}</style>
         <div className="pointer-events-none absolute inset-0 -z-10 print:hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
             <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -502,21 +669,7 @@ export default function PlanPage() {
           </div>
         </div>
 
-        <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 print:hidden">
-          <a href="/" className="group flex items-center gap-2.5">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            <span className="flex flex-col leading-none">
-              <b className="text-lg font-black text-white">سفرینو</b>
-              <small className="text-[10px] tracking-widest text-slate-400">AI TRAVEL PLAN</small>
-            </span>
-          </a>
-          <div className="flex gap-2">
-            <a href="/accommodation" className="btn-ghost !px-4 !py-2.5 text-xs"><ArrowRight className="h-4 w-4" />مرحله قبل</a>
-            <a href="/quiz" className="btn-ghost hidden !px-4 !py-2.5 text-xs sm:inline-flex"><RefreshCw className="h-4 w-4" />شروع سفر جدید</a>
-          </div>
-        </header>
+        <SiteHeader />
 
         <TravelSteps current={4} />
 
@@ -547,6 +700,71 @@ export default function PlanPage() {
             <label><span className="mb-1.5 block text-[10px] text-slate-500">بودجه به تومان</span><input type="number" min="1000000" step="500000" value={budget} onChange={(event) => setBudget(Number(event.target.value))} className="field !py-2.5" /></label>
             <label><span className="mb-1.5 block text-[10px] text-slate-500">تعداد روز</span><select value={dayCount} onChange={(event) => setDayCount(Number(event.target.value))} className="field cursor-pointer !py-2.5">{[1, 2, 3, 4, 5, 6, 7].map((day) => <option key={day} value={day}>{formatNumber(day)} روز</option>)}</select></label>
             <label className="sm:col-span-2 lg:col-span-1"><span className="mb-1.5 block text-[10px] text-slate-500">سلیقه سفر</span><input value={preferences} onChange={(event) => setPreferences(event.target.value)} className="field !py-2.5" /></label>
+          </section>
+
+          <section className="glass print-card mt-6 border border-cyan-400/20 p-5 sm:p-7 print:hidden" aria-label="جاذبه‌های انتخابی سفر">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-xl font-black text-white">
+                <Camera className="h-5 w-5 text-cyan-300" />
+                مکان‌هایی که برای این سفر انتخاب کردی
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold text-cyan-200">
+                  {formatNumber(chosenPlaces.length)}
+                </span>
+              </h2>
+              {chosenPlaces.length ? (
+                <button
+                  type="button"
+                  onClick={() => setChosenPlaces(clearPlanPlaces())}
+                  className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 transition hover:text-rose-200"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  پاک کردن فهرست
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-[11px] leading-6 text-slate-400">
+              روی هر جاذبه در فهرست پایین «افزودن به برنامهٔ سفر» را بزن. برنامهٔ روزها از همین مکان‌ها و تعداد روزی که در مرحلهٔ قبل انتخاب کردی ساخته می‌شود.
+            </p>
+            {chosenPlaces.length ? (
+              <>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {chosenPlaces.map((place) => (
+                    <button
+                      key={place.id}
+                      type="button"
+                      onClick={() => toggleChosen(place)}
+                      title="حذف از فهرست"
+                      className="flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-100 transition hover:border-rose-400/40 hover:text-rose-200"
+                    >
+                      {place.name}
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => void regenerate(chosenPois)}
+                    disabled={loading}
+                    className="btn-primary flex-1 !py-3 text-xs disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    ساخت برنامهٔ روزها از این مکان‌ها با هوش مصنوعی
+                  </button>
+                  <button type="button" onClick={suggestMyself} className="btn-ghost flex-1 !py-3 text-xs">
+                    <Wand2 className="h-4 w-4" />
+                    خودت پیشنهاد بده (بدون AI)
+                  </button>
+                </div>
+                <p className="mt-2 text-[9.5px] leading-5 text-slate-500">
+                  «خودت پیشنهاد بده» مکان‌های انتخابی تو را به ترتیب نزدیکی به اقامتگاه در ساعت‌های واقعی روز می‌چیند؛ هیچ مکان تازه‌ای ساخته نمی‌شود.
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 p-3 text-[10.5px] leading-6 text-amber-100">
+                هنوز مکانی انتخاب نکرده‌ای. از فهرست «جاذبه‌های واقعی {destination}» یا «نزدیک‌ترین جاذبه‌ها» شروع کن — یک یا چند مکان.
+              </p>
+            )}
           </section>
 
           <section className="glass print-card mt-6 p-5 sm:p-7">
@@ -655,6 +873,32 @@ export default function PlanPage() {
                         <Navigation className="h-3.5 w-3.5" />
                         مسیریابی
                       </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleChosen({
+                            id: poi.id,
+                            name: poi.name,
+                            category: poi.category,
+                            latitude: poi.latitude,
+                            longitude: poi.longitude,
+                            distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+                            wikipediaUrl: poi.wikipediaUrl,
+                            sourceUrl: poi.sourceUrl,
+                            description: poi.description,
+                          })
+                        }
+                        aria-pressed={chosenIds.has(poi.id)}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-extrabold transition ${
+                          chosenIds.has(poi.id)
+                            ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-200"
+                            : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
+                        }`}
+                        aria-label={`${chosenIds.has(poi.id) ? "حذف" : "افزودن"} ${poi.name} ${chosenIds.has(poi.id) ? "از" : "به"} برنامهٔ سفر`}
+                      >
+                        {chosenIds.has(poi.id) ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                        {chosenIds.has(poi.id) ? "در برنامه" : "افزودن"}
+                      </button>
                     </li>
                   ))}
                 </ol>
@@ -721,6 +965,20 @@ export default function PlanPage() {
                     } satisfies PlaceCardData}
                     origin={canMeasureFromStay ? { latitude: stayLatitude, longitude: stayLongitude } : null}
                     originLabel="اقامتگاه انتخاب‌شده"
+                    addedToPlan={chosenIds.has(poi.id)}
+                    onAddToPlan={() =>
+                      toggleChosen({
+                        id: poi.id,
+                        name: poi.name,
+                        category: poi.category,
+                        latitude: poi.latitude,
+                        longitude: poi.longitude,
+                        distanceKm: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+                        wikipediaUrl: poi.wikipediaUrl,
+                        sourceUrl: poi.sourceUrl,
+                        description: poi.description,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -737,7 +995,7 @@ export default function PlanPage() {
               <Route className="h-4 w-4" />
               ساخت برنامهٔ روزبه‌روز و نسخهٔ PDF
             </Link>
-            <button type="button" onClick={regenerate} disabled={loading || !origin.trim() || !destination.trim()} className="btn-primary w-full max-w-xl !py-4 text-sm disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => void regenerate()} disabled={loading || !origin.trim() || !destination.trim()} className="btn-primary w-full max-w-xl !py-4 text-sm disabled:cursor-wait disabled:opacity-60">
               {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
               {loading ? "در حال ساخت برنامه…" : "بازسازی هوشمند برنامه"}
             </button>
@@ -753,6 +1011,14 @@ export default function PlanPage() {
               {plan.days.map((day, index) => (
                 <button key={day.day} type="button" onClick={() => setActiveDay(index)} className={`shrink-0 rounded-xl border px-5 py-2.5 text-xs font-bold transition ${activeDay === index ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>روز {formatNumber(day.day)}</button>
               ))}
+            </div>
+
+            <div className="glass mt-4 p-4 print:hidden">
+              <p className="flex items-center gap-1.5 text-[11px] font-black text-white">
+                <Clock3 className="h-3.5 w-3.5 text-cyan-300" />
+                طرح‌وارهٔ روز {formatNumber(selectedDay?.day ?? 1)}
+              </p>
+              <TimelineSchematic steps={daySteps} />
             </div>
 
             <AnimatePresence mode="wait">

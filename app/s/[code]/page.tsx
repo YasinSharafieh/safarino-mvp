@@ -13,6 +13,7 @@ import {
 import { formatJalaliDate } from "@/lib/jalali";
 import WeatherGlyph from "@/components/WeatherGlyph";
 import SharedPlanActions from "@/components/SharedPlanActions";
+import SiteHeader from "@/components/SiteHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ export default async function SharedPlanPage(props: PageProps) {
   return (
     <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
         <div className="absolute inset-0 grid-lines opacity-60" />
         <div className="aurora">
           <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -77,18 +78,7 @@ export default async function SharedPlanPage(props: PageProps) {
         </div>
       </div>
 
-      <header className="mx-auto flex max-w-4xl items-center justify-between gap-4">
-        <Link href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
-            <Compass className="h-5 w-5" />
-          </span>
-          <span>
-            <b className="block text-sm font-black text-white">سفرینو</b>
-            <span className="block text-[10px] tracking-[0.3em] text-cyan-200/70">SAFARINO</span>
-          </span>
-        </Link>
-        <SharedPlanActions />
-      </header>
+      <SiteHeader minimal />
 
       <section className="mx-auto mt-6 max-w-4xl">
         <div className="glass p-5 sm:p-7">

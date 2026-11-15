@@ -29,9 +29,11 @@ import ModeChooser, { MODE_OPTIONS, type TravelMode } from "@/components/transpo
 import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
+import SiteHeader from "@/components/SiteHeader";
 
 const STORAGE_KEY = "safarino-transport-selection-v1";
 const MODE_KEY = "safarino-transport-mode-v1";
+const LINK_APPLIED_KEY = "safarino-transport-link-v1";
 
 const fa = new Intl.NumberFormat("fa-IR");
 const money = (value: number) => `${fa.format(Math.round(value))} تومان`;
@@ -122,6 +124,48 @@ function TransportPageContent() {
   const budget = travelData.budget * 1_000_000;
   const passengers = Math.max(1, travelData.travelers + travelData.children);
   const days = Math.max(1, travelData.days || 1);
+
+  /* ------------------------------------- coming from a home-page package */
+  // «پیشنهادهای ویژه» sends the traveller here with origin, destination, dates
+  // and mode already chosen. The same context every other entry path uses is
+  // filled once, so the hotel and plan steps continue with identical values.
+  useEffect(() => {
+    if (!isHydrated) return;
+    let applied = false;
+    try {
+      applied = window.sessionStorage.getItem(LINK_APPLIED_KEY) === "1";
+    } catch {
+      applied = false;
+    }
+    if (applied) return;
+    const params = new URLSearchParams(window.location.search);
+    const from = params.get("from");
+    const to = params.get("to");
+    const date = params.get("date");
+    const back = params.get("return");
+    const nights = Number(params.get("nights"));
+    const adults = Number(params.get("adults"));
+    const wantedMode = params.get("mode");
+    if (!from && !to && !date && !wantedMode) return;
+    setTravelData((current) => ({
+      ...current,
+      ...(from ? { origin: from } : {}),
+      ...(to ? { destination: to } : {}),
+      ...(date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? { departureDate: date } : {}),
+      ...(back && /^\d{4}-\d{2}-\d{2}$/.test(back) ? { returnDate: back } : {}),
+      ...(Number.isFinite(nights) && nights > 0 ? { days: nights + 1 } : {}),
+      ...(Number.isFinite(adults) && adults > 0 ? { travelers: Math.min(9, adults) } : {}),
+    }));
+    if (wantedMode === "plane" || wantedMode === "train" || wantedMode === "bus" || wantedMode === "car") {
+      setMode(wantedMode);
+    }
+    if (back) setRoundTrip(true);
+    try {
+      window.sessionStorage.setItem(LINK_APPLIED_KEY, "1");
+    } catch {
+      // A blocked storage only means the link is applied again on refresh.
+    }
+  }, [isHydrated, setTravelData]);
 
   /* ------------------------------------------------ restore the chosen mode */
   useEffect(() => {
@@ -243,7 +287,7 @@ function TransportPageContent() {
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <SnapshotKeeper />
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
             <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -251,27 +295,7 @@ function TransportPageContent() {
           </div>
         </div>
 
-        <header className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <a href="/" className="flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow">
-              <Compass className="h-5 w-5" />
-            </span>
-            <span>
-              <b className="block text-sm font-black text-white">سفرینو</b>
-              <span className="block text-[10px] tracking-[0.3em] text-cyan-200/70">SAFARINO</span>
-            </span>
-          </a>
-          <div className="flex items-center gap-2">
-            <a href="/start" className="btn-ghost !px-3 !py-2 text-[11px]">
-              <ArrowRight className="h-3.5 w-3.5" />
-              شروع
-            </a>
-            <a href="/accommodation" className="btn-ghost !px-3 !py-2 text-[11px]">
-              اقامتگاه
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        </header>
+        <SiteHeader />
 
         <TravelSteps current={2} />
 

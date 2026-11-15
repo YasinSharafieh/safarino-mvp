@@ -24,6 +24,8 @@ import {
 import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
+import RouteMap from "@/components/RouteMap";
+import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
 import { CloudSun, Droplets, Thermometer, Wind, Heart, PlusCircle, Trash2, Wand2, Ruler } from "lucide-react";
 import { drawDayMap } from "@/lib/day-map";
 import type { ItineraryDay } from "@/lib/itinerary";
@@ -38,6 +40,7 @@ import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
 import OfflineKeeper from "@/components/OfflineKeeper";
+import SiteHeader from "@/components/SiteHeader";
 import {
   buildBudgetPlan,
   readBudgetAssumptions,
@@ -64,6 +67,13 @@ type ItineraryResponse = {
 
 function fa(value: number): string {
   return new Intl.NumberFormat("fa-IR").format(value);
+}
+
+/** «2026-11-12T08:40:00» → «۰۸:۴۰» in Tehran time; anything else is a dash. */
+function startClock(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("fa-IR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tehran" }).format(date);
 }
 
 function faDigits(value: string): string {
@@ -421,19 +431,12 @@ function ItineraryContent() {
   };
 
   const currentDay: ItineraryDay | null = data?.days[activeDay] || null;
-  const dayMap = useMemo(() => {
-    if (!currentDay) return null;
-    return drawDayMap(
-      currentDay.stops.map((stop, index) => ({ latitude: stop.place.latitude, longitude: stop.place.longitude, label: `${faDigits(String(index + 1))} ${stop.place.name}` })),
-      { title: `روز ${faDigits(String(currentDay.day))}` },
-    );
-  }, [currentDay]);
 
   return (
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
             <span className="-top-24 right-[5%] h-96 w-96 animate-float bg-teal-500/25" />
@@ -441,21 +444,7 @@ function ItineraryContent() {
           </div>
         </div>
 
-        <header className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/" className="group flex items-center gap-2.5" aria-label="صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
-              <Compass className="h-5 w-5" />
-            </span>
-            <span>
-              <b className="block text-sm font-black text-white">سفرینو</b>
-              <span className="block text-[10px] tracking-[0.3em] text-cyan-200/70">SAFARINO</span>
-            </span>
-          </Link>
-          <Link href="/plan" className="btn-ghost !px-3 !py-2 text-[11px]">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            برنامهٔ هوشمند
-          </Link>
-        </header>
+        <SiteHeader />
 
         <div className="mx-auto mt-5 max-w-6xl">
           <TravelSteps current={4} />
@@ -646,6 +635,26 @@ function ItineraryContent() {
                   </span>
                 </div>
 
+                {currentDay ? (
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                    <p className="flex items-center gap-1.5 text-[11px] font-black text-white">
+                      <Clock3 className="h-3.5 w-3.5 text-cyan-300" />
+                      طرح‌وارهٔ ساعت‌به‌ساعت روز {fa(currentDay.day)}
+                    </p>
+                    <TimelineSchematic
+                      steps={[
+                        ...(currentDay.day === 1
+                          ? ([{ time: travelData.transport?.arrival ? startClock(String(travelData.transport.arrival)) : "—", title: "رسیدن به مقصد", note: travelData.transport?.arrival ? "ساعت بلیت انتخاب‌شده" : "ساعت ورود در بلیت ثبت نشده", kind: "arrive" as const }])
+                          : []),
+                        ...currentDay.stops.flatMap((stop) => {
+                          const rows: SchematicStep[] = [{ time: stop.startTime, title: stop.place.name, note: stop.place.category, kind: "visit" }];
+                          return rows;
+                        }),
+                      ]}
+                    />
+                  </div>
+                ) : null}
+
                 {editNote ? (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] p-2.5">
                     <p className="min-w-0 flex-1 text-[10px] leading-6 text-cyan-100">{editNote}</p>
@@ -770,11 +779,25 @@ function ItineraryContent() {
                           {currentDay.theme}
                         </span>
                       </div>
-                      {dayMap ? (
-                        <div className="mt-2 overflow-hidden rounded-xl border border-white/10" dangerouslySetInnerHTML={{ __html: dayMap.svg }} />
-                      ) : (
-                        <p className="mt-2 text-[10px] text-slate-500">برای این روز مختصات معتبری ثبت نشده است.</p>
-                      )}
+                      <div className="mt-2">
+                        <RouteMap
+                          title={`نقشهٔ مسیر روز ${fa(currentDay.day)}`}
+                          points={[
+                            ...(hasStayPin
+                              ? [{ id: "stay", name: String(stay?.name || "اقامتگاه"), latitude: stayLatitude, longitude: stayLongitude, order: 0, kind: "stay" as const }]
+                              : []),
+                            ...currentDay.stops.map((stop, index) => ({
+                              id: stop.place.id,
+                              name: stop.place.name,
+                              latitude: stop.place.latitude,
+                              longitude: stop.place.longitude,
+                              order: index + 1,
+                              kind: "stop" as const,
+                            })),
+                          ]}
+                          note={`خط مسیر، ترتیب بازدید از مختصات واقعی است؛ مسیریابی جاده‌ای و ترافیک زنده با دکمهٔ «مسیریابی از اقامتگاه» و دکمه‌های مسیریابی هر مکان در نشان باز می‌شود. موتور مسیرهای این برنامه: ${data.engine}.`}
+                        />
+                      </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                         <span className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1.5 text-slate-300">
                           <Car className="h-3.5 w-3.5 text-cyan-300" />
@@ -903,7 +926,7 @@ export default function ItineraryPage() {
   return (
     <Suspense
       fallback={
-        <main dir="rtl" className="grid min-h-screen place-items-center bg-[#071521] text-cyan-100">
+        <main dir="rtl" className="grid min-h-screen place-items-center bg-[#120a26] text-cyan-100">
           <span className="flex items-center gap-2 text-sm">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             در حال آماده‌سازی برنامهٔ روزبه‌روز…

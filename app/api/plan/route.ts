@@ -32,6 +32,10 @@ type TravelInput = {
   accommodation: unknown;
   preferences: string[];
   pois: PlanPoi[];
+  /** Places the traveller explicitly added on the plan page, in their own order. */
+  chosenPlaceIds: string[];
+  /** Arrival hour of the chosen ticket, so day one starts at a real time. */
+  arrivalTime: string | null;
 };
 
 function cleanText(value: unknown, fallback: string, maxLength = 300): string {
@@ -68,6 +72,10 @@ function parseInput(body: unknown): TravelInput | null {
     accommodation: input.accommodation ?? input.hotel ?? null,
     preferences: preferences.map((item) => item.slice(0, 80)),
     pois: sanitizePois(input.pois),
+    chosenPlaceIds: Array.isArray(input.chosenPlaceIds)
+      ? input.chosenPlaceIds.filter((item): item is string => typeof item === "string").slice(0, 40)
+      : [],
+    arrivalTime: /^\d{1,2}:\d{2}$/.test(String(input.arrivalTime || "")) ? String(input.arrivalTime) : null,
   };
 }
 
@@ -84,6 +92,9 @@ ${poiList || "برای این مقصد جاذبه‌ای در دسترس نیس�
 - هزینه حمل‌ونقل و اقامت ورودی را در تحلیل بودجه لحاظ کن.
 - نوع هر فعالیت فقط یکی از sightseeing، food، transport، rest یا activity باشد.
 - هر فعالیت sightseeing باید فقط از فهرست جاذبه‌های بالا انتخاب شود و کلید "poiId" آن دقیقاً همان شناسه باشد. هیچ مکان، جاذبه، موزه یا رستورانی که در این فهرست نیست از خودت نساز.
+- اگر فهرست «مکان‌های انتخابی کاربر» خالی نیست، فقط همان‌ها را در برنامه بچین و هیچ جای دیگری از این فهرست را اضافه نکن.
+- مکان‌های انتخابی کاربر (به ترتیب اهمیت): ${input.chosenPlaceIds.join("، ") || "خودت از فهرست انتخاب کن"}
+- ساعت رسیدن مسافر به مقصد: ${input.arrivalTime || "مشخص نیست"} — روز اول باید از همین ساعت یا بعد از آن شروع شود.
 - اگر شمار جاذبه‌ها کمتر از روزهای سفر است، روز را با استراحت، غذای محلی و پیاده‌روی در همان محله‌ها پر کن، نه با مکان ساختگی.
 ساختار دقیق خروجی:
 {

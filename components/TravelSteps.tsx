@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 
 const STEPS = [
-  { id: 1, number: "۱", label: "کوییز", href: "/quiz" },
+  { id: 1, number: "۱", label: "مبدأ و مقصد", href: "/start" },
   { id: 2, number: "۲", label: "حمل‌ونقل", href: "/transport" },
   { id: 3, number: "۳", label: "اقامتگاه", href: "/accommodation" },
   { id: 4, number: "۴", label: "برنامه نهایی", href: "/plan" },

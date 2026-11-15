@@ -311,3 +311,82 @@ export function budgetFromDaily(dailyToman: number | null, days: number | null, 
   // The app stores the whole-trip budget in millions of toman.
   return Math.max(3, Math.round(total / 1_000_000));
 }
+
+/* ------------------------------------------------------- free-text path */
+
+/** Words a traveller actually uses, each mapped to one of the seven tastes. */
+const MOOD_WORDS_IN_TEXT: { mood: DiscoverMood; words: string[] }[] = [
+  { mood: "تاریخی", words: ["تاریخ", "تاریخی", "قدیم", "بنای", "مسجد", "کاروانسرا", "بازار قدیم", "میراث", "معماری", "موزه"] },
+  { mood: "زیارتی", words: ["زیارت", "امام", "حرم", "مذهبی", "ارامش", "آرامش", "دعا"] },
+  { mood: "طبیعت", words: ["طبیعت", "جنگل", "آبشار", "سبز", "پیاده‌روی", "پیاده روی", "روستا", "چشمه", "گردش"] },
+  { mood: "ساحلی", words: ["دریا", "ساحل", "شنا", "جزیره", "ماهی", "قایق", "آفتاب"] },
+  { mood: "شهری", words: ["شهر", "کافه", "خرید", "پاساژ", "غذا", "شب‌گرد", "شبگرد", "رستوران", "بازار"] },
+  { mood: "کوهستانی", words: ["کوه", "سرما", "برف", "ارتفاع", "پیست", "اسکی", "ییلاق", "دماوند"] },
+  { mood: "کویری", words: ["کویر", "شب", "ستاره", "آسمان", "شن", "شتر", "خورشید", "گرم"] },
+];
+
+/** Numbers a traveller writes for «چند روز» and «چند میلیون». */
+const DIGIT_WORDS: Record<string, number> = { یک: 1, دو: 2, سه: 3, چهار: 4, پنج: 5, شش: 6, هفت: 7, هشت: 8, نه: 9, ده: 10 };
+
+function mentionedNumber(text: string, suffix: string): number | null {
+  const latin = text.replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+  const match = latin.match(new RegExp(`(\\d{1,2})\\s*${suffix}`));
+  if (match) return Number(match[1]);
+  for (const [word, value] of Object.entries(DIGIT_WORDS)) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(^|\\s)${escaped}(\\s|$)`, "u").test(text)) return value;
+  }
+  return null;
+}
+
+export type DescribeResult = { result: QuizResult; matchedWords: string[] };
+
+/**
+ * «خودم می‌نویسم» — the traveller describes the trip in their own words and the
+ * same taste engine decides which Iranian cities fit. Only words that are really
+ * in the sentence are counted, and the words that decided are shown back, so the
+ * suggestion never looks like magic and never invents a preference.
+ */
+export function describeTrip(text: string): DescribeResult | null {
+  const clean = (text || "").trim();
+  if (clean.length < 6) return null;
+  const folded = clean
+    .replace(/\u200c/g, " ")
+    .replace(/[يى]/g, "ی")
+    .replace(/ك/g, "ک")
+    .toLowerCase();
+
+  const scores = new Map<DiscoverMood, number>();
+  const matchedWords: string[] = [];
+  for (const entry of MOOD_WORDS_IN_TEXT) {
+    for (const word of entry.words) {
+      if (folded.includes(word.replace(/\u200c/g, " "))) {
+        scores.set(entry.mood, (scores.get(entry.mood) || 0) + 1);
+        if (!matchedWords.includes(word)) matchedWords.push(word);
+      }
+    }
+  }
+  if (!scores.size) return null;
+
+  const ranked = Array.from(scores.entries())
+    .map(([mood, score]) => ({ mood, score }))
+    .sort((a, b) => b.score - a.score);
+  const top = ranked.slice(0, 2).map((entry) => MOOD_WORDS[entry.mood]);
+  const headline = MOOD_WORDS[ranked[0].mood];
+  const days = mentionedNumber(folded, "روز") ?? mentionedNumber(folded, "شب") ?? null;
+  const millions = mentionedNumber(folded, "میلیون") ?? mentionedNumber(folded, "میلیونتومانی") ?? null;
+  const dailyToman = null;
+
+  return {
+    matchedWords,
+    result: {
+      moods: ranked,
+      headline,
+      summary: `از نوشته‌ات این‌ها را خواندم: ${matchedWords.slice(0, 6).join("، ")}. سلیقه‌ات بیشتر به ${top.join(" و ")} می‌خورد؛ شهرهای پیشنهادی بر همین اساس مرتب شده‌اند${
+        millions ? ` و بودجهٔ حدود ${new Intl.NumberFormat("fa-IR").format(millions)} میلیون تومان در نظر گرفته می‌شود` : ""
+      }.`,
+      dailyToman,
+      days: days && days >= 1 && days <= 10 ? days : null,
+    },
+  };
+}

@@ -45,8 +45,10 @@ import {
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
+import SiteHeader from "@/components/SiteHeader";
 import {
   budgetFromDaily,
+  describeTrip,
   drawQuestions,
   scoreAnswers,
   suggestCities,
@@ -122,11 +124,23 @@ export default function TravelQuiz() {
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
+  /** The second door: describe the trip in your own words instead of answering. */
+  const [mode, setMode] = useState<"quiz" | "text">("quiz");
+  const [description, setDescription] = useState("");
+  const [textNote, setTextNote] = useState("");
+  const [described, setDescribed] = useState<{ summary: string; words: string[]; days: number | null } | null>(null);
 
-  const showResult = ready && step >= questions.length;
+  const showResult = ready && (Boolean(described) || step >= questions.length);
   const question = questions[Math.min(step, Math.max(questions.length - 1, 0))];
   const selectedOption = question ? answers[question.key] : undefined;
-  const result = useMemo(() => scoreAnswers(questions, answers), [questions, answers]);
+  const quizResult = useMemo(() => scoreAnswers(questions, answers), [questions, answers]);
+  const result = useMemo(() => {
+    if (described) {
+      const describedResult = describeTrip(description);
+      if (describedResult) return describedResult.result;
+    }
+    return quizResult;
+  }, [described, description, quizResult]);
   const suggestions = useMemo(() => suggestCities(result, { limit: 4 }), [result]);
   const progress = showResult ? 100 : ((step + 1) / totalQuestions) * 100;
 
@@ -143,11 +157,30 @@ export default function TravelQuiz() {
   };
 
   const restart = () => {
+    setDescribed(null);
+    setDescription("");
+    setTextNote("");
     setAnswers({});
     setChosen("");
     setStep(0);
     setDirection(-1);
     setRound((value) => value + 1);
+  };
+
+  /** Reads the traveller's own words; never invents a preference that is not there. */
+  const applyDescription = () => {
+    const parsed = describeTrip(description);
+    if (!parsed) {
+      setTextNote("در نوشته‌ات نشانه‌ای از سلیقه پیدا نکردم. یک کلمه از این‌ها را اضافه کن: دریا، کوه، کویر، تاریخ، جنگل، کافه، زیارت. تعداد روز و بودجه را هم می‌توانی بنویسی (مثلاً «۴ روز، ۲۰ میلیون»).");
+      return;
+    }
+    setTextNote("");
+    setDescribed({
+      summary: parsed.result.summary,
+      words: parsed.matchedWords,
+      days: parsed.result.days,
+    });
+    setDirection(1);
   };
 
   const startTrip = (suggestion: CitySuggestion) => {
@@ -173,7 +206,7 @@ export default function TravelQuiz() {
     <MotionConfig reducedMotion="user">
       <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 sm:py-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#12364a_0%,#071521_58%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_58%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
           <div className="aurora">
             <span className="-top-20 right-0 h-80 w-80 animate-float bg-teal-500/30" />
@@ -181,21 +214,7 @@ export default function TravelQuiz() {
           </div>
         </div>
 
-        <header className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <Link href="/" className="group flex items-center gap-2.5" aria-label="بازگشت به صفحهٔ اصلی سفرینو">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-glow transition group-hover:scale-105">
-              <Compass className="h-5 w-5" strokeWidth={2.6} />
-            </span>
-            <span className="flex flex-col leading-none">
-              <b className="text-lg font-black text-white">سفرینو</b>
-              <small className="text-[10px] tracking-widest text-slate-400">SAFARINO</small>
-            </span>
-          </Link>
-          <Link href="/start" className="btn-ghost !px-3 !py-2 text-[11px]">
-            <ArrowRight className="h-3.5 w-3.5" />
-            شروع
-          </Link>
-        </header>
+        <SiteHeader />
 
         <TravelSteps current={1} />
 
@@ -212,6 +231,57 @@ export default function TravelQuiz() {
               چند سؤال کوتاه — هر بار سؤال‌های تازه — تا بر اساس سلیقه و بودجه‌ات شهر مناسب را در ایران پیدا کنیم.
             </p>
           </div>
+
+          <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
+            <button
+              type="button"
+              onClick={() => setMode("quiz")}
+              aria-pressed={mode === "quiz"}
+              className={`rounded-xl px-3 py-2.5 text-[11px] font-extrabold transition ${
+                mode === "quiz" ? "bg-cyan-400/20 text-cyan-100 shadow-glow" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              چند سؤال کوتاه
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("text")}
+              aria-pressed={mode === "text"}
+              className={`rounded-xl px-3 py-2.5 text-[11px] font-extrabold transition ${
+                mode === "text" ? "bg-teal-400/20 text-teal-100 shadow-warm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              خودم می‌نویسم
+            </button>
+          </div>
+
+          {mode === "text" && !described ? (
+            <div className="glass mb-3 p-4 sm:p-6">
+              <h2 className="text-sm font-black text-white">حال‌وهوای سفرت را بنویس</h2>
+              <p className="mt-1.5 text-[10.5px] leading-6 text-slate-400">
+                مثلاً: «دلم می‌خواهد چند روز کنار دریا باشم، صبح‌ها پیاده‌روی کنم و شب کافه برویم؛ ۴ روز و حدود ۲۰ میلیون.»
+                فقط کلمه‌هایی که واقعاً نوشته‌ای ملاک است.
+              </p>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value.slice(0, 400))}
+                rows={4}
+                aria-label="توصیف سفر با کلمات خودت"
+                placeholder="چند روز، با چند نفر، چه حالی، چه چیزی را دوست داری…"
+                className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-slate-950/60 p-3 text-[11.5px] leading-7 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/50"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[9px] text-slate-500">{new Intl.NumberFormat("fa-IR").format(description.length)} از ۴۰۰ نویسه</span>
+                <button type="button" onClick={applyDescription} className="btn-primary !px-4 !py-2.5 text-[11px]">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  پیشنهاد مقصد را ببین
+                </button>
+              </div>
+              {textNote ? (
+                <p className="mt-2 rounded-xl border border-amber-300/25 bg-amber-300/10 p-2.5 text-[10px] leading-6 text-amber-100">{textNote}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="glass overflow-hidden p-4 shadow-card sm:p-7">
             <div className="mb-5">
@@ -238,7 +308,13 @@ export default function TravelQuiz() {
             </div>
 
             <AnimatePresence mode="wait" custom={direction}>
-              {!ready || !question ? (
+              {mode === "text" && !described ? (
+                <motion.div key="text-mode" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                  <p className="text-[11px] leading-7 text-slate-400">
+                    متن بالا را بنویس و «پیشنهاد مقصد را ببین» را بزن؛ یا از دکمهٔ «چند سؤال کوتاه» استفاده کن.
+                  </p>
+                </motion.div>
+              ) : !ready || !question ? (
                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2.5">
                   <div className="mx-auto h-6 w-56 animate-pulse rounded-full bg-white/10" />
                   <div className="mx-auto h-4 w-40 animate-pulse rounded-full bg-white/5" />
@@ -344,6 +420,21 @@ export default function TravelQuiz() {
                     </span>
                     <h2 className="gradient-text mt-4 text-xl font-black sm:text-2xl">{result.headline}</h2>
                     <p className="mx-auto mt-2.5 max-w-xl text-[11px] leading-7 text-slate-300 sm:text-xs">{result.summary}</p>
+                    {described ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                        <span className="text-[9.5px] text-slate-500">از نوشتهٔ خودت:</span>
+                        {described.words.slice(0, 8).map((word) => (
+                          <span key={word} className="rounded-full border border-teal-400/30 bg-teal-400/10 px-2 py-0.5 text-[9px] font-bold text-teal-100">
+                            {word}
+                          </span>
+                        ))}
+                        {described.days ? (
+                          <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold text-cyan-100">
+                            {faNumber(described.days)} روز
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-5 space-y-2">

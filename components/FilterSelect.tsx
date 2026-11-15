@@ -70,7 +70,7 @@ export default function FilterSelect({ label, value, options, onChange, hint, cl
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 z-50 mt-2 max-h-64 overflow-auto rounded-2xl border border-cyan-400/25 bg-[#08202f] p-1.5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+          className="absolute inset-x-0 z-50 mt-2 max-h-64 overflow-auto rounded-2xl border border-cyan-400/25 bg-[#1b1036] p-1.5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
         >
           {options.map((option) => {
             const active = option.value === value;
