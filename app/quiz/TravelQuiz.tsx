@@ -132,14 +132,18 @@ export default function TravelQuiz() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [questionSource, setQuestionSource] = useState<"ai" | "local" | "">("");
   const seenPrompts = useRef<string[]>([]);
+  /** Once the traveller has tapped an answer, the set on screen must not change. */
+  const touched = useRef(false);
   const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
   const [analysing, setAnalysing] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
+    touched.current = false;
     const local = drawQuestions(Math.random, 10);
     setQuestions(local);
+    seenPrompts.current = [...seenPrompts.current, ...local.map((question) => question.prompt)].slice(-40);
     setQuestionSource("local");
     setAnswers({});
     setStep(0);
@@ -153,17 +157,15 @@ export default function TravelQuiz() {
     })
       .then((response) => response.json())
       .then((data: { success?: boolean; questions?: QuizQuestion[]; source?: "ai" | "local" }) => {
-        if (cancelled) return;
+        if (cancelled || touched.current) return;
         const fresh = Array.isArray(data.questions) ? data.questions : [];
         if (!fresh.length) return;
         setQuestions(fresh);
         setQuestionSource(data.source || "local");
+        seenPrompts.current = [...seenPrompts.current, ...fresh.map((question) => question.prompt)].slice(-40);
       })
       .catch(() => {
         // The local set is already on screen; nothing to report.
-      })
-      .finally(() => {
-        if (!cancelled) seenPrompts.current = [...seenPrompts.current, ...local.slice(0, 6).map((question) => question.prompt)].slice(-40);
       });
     return () => {
       cancelled = true;
@@ -471,7 +473,10 @@ export default function TravelQuiz() {
                           type="button"
                           role="radio"
                           aria-checked={isSelected}
-                          onClick={() => setAnswers((current) => ({ ...current, [question.key]: option.id }))}
+                          onClick={() => {
+                            touched.current = true;
+                            setAnswers((current) => ({ ...current, [question.key]: option.id }));
+                          }}
                           className={`group relative flex items-start gap-2.5 rounded-2xl border p-3.5 text-right outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/70 ${
                             isSelected
                               ? "border-cyan-300/60 bg-cyan-300/10 shadow-glow"

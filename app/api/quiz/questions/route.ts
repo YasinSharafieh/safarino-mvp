@@ -39,22 +39,28 @@ function extractJson(content: string): unknown {
 }
 
 /** Fills a short model-written set from the local bank, never repeating one. */
-function topUp(written: AiQuestion[], wanted: number): AiQuestion[] {
+function topUp(written: AiQuestion[], wanted: number, seen: string[] = []): AiQuestion[] {
   const out = written.slice(0, wanted);
   const keys = new Set(out.map((question) => question.key));
-  const prompts = new Set(out.map((question) => question.prompt));
+  const prompts = new Set([...out.map((question) => question.prompt), ...seen]);
   if (out.length >= wanted) return out;
-  for (const candidate of drawQuestions(Math.random, 20)) {
-    if (out.length >= wanted) break;
-    if (keys.has(candidate.key) || prompts.has(candidate.prompt)) continue;
-    out.push(candidate);
-    keys.add(candidate.key);
-    prompts.add(candidate.prompt);
+  // Two passes: first only questions the traveller has never seen, then (if the
+  // pool is smaller than ten) the rest, so the count is always ten.
+  for (const avoidSeen of [true, false]) {
+    for (const candidate of drawQuestions(Math.random, 24)) {
+      if (out.length >= wanted) break;
+      if (keys.has(candidate.key)) continue;
+      if (prompts.has(candidate.prompt)) continue;
+      if (avoidSeen && seen.includes(candidate.prompt)) continue;
+      out.push(candidate);
+      keys.add(candidate.key);
+      prompts.add(candidate.prompt);
+    }
   }
   return out;
 }
 
-async function askModel(model: string, prompt: string, apiKey: string) {
+async function askModel(model: string, prompt: string, apiKey: string, seen: string[] = []) {
   const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
   let actualMicros = 0;
   try {
@@ -95,7 +101,7 @@ async function askModel(model: string, prompt: string, apiKey: string) {
     // A model may write eight good questions and two broken ones. The good ones
     // are kept and the local bank tops the set up to ten — the traveller always
     // gets ten questions, and none of them is repeated.
-    const questions = topUp(written, WANTED);
+    const questions = topUp(written, WANTED, seen);
     return { questions, model, costMicros: actualMicros, written: written.length };
   } finally {
     await settleAiBudget(reservation, actualMicros);
@@ -123,7 +129,7 @@ export async function POST(request: NextRequest) {
   const token = typeof body.token === "string" ? body.token.slice(0, 40) : String(Date.now());
 
   const fallback = (): { questions: AiQuestion[]; source: "local" } => ({
-    questions: drawQuestions(Math.random, WANTED),
+    questions: topUp([], WANTED, seen),
     source: "local",
   });
 
@@ -137,7 +143,7 @@ export async function POST(request: NextRequest) {
 
   for (const model of models) {
     try {
-      const result = await askModel(model, prompt, apiKey);
+      const result = await askModel(model, prompt, apiKey, seen);
       return NextResponse.json({
         success: true,
         questions: result.questions,
