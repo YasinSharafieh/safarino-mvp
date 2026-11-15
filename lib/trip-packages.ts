@@ -207,8 +207,15 @@ async function buildPackage(
       );
       return result?.payload?.offers?.length ? result : null;
     };
-    const [transportFirst, stayResult] = await Promise.all([
-      tryMode(entry.mode),
+    /**
+     * Every mode that could realistically serve this route is searched at the
+     * same time, and the cheapest real ticket wins — a train that does not run
+     * that day must never make the traveller pay for a bus when a plane was
+     * cheaper. The card always names the mode it actually found.
+     */
+    const modes: TransportMode[] = entry.mode === "bus" ? ["bus", "train", "plane"] : [entry.mode, "bus", "train"];
+    const [transportAnswers, stayResult] = await Promise.all([
+      Promise.all(modes.map((mode) => tryMode(mode))),
       withDeadline(
         searchMultiProviderAccommodation({
           kind: entry.kind,
@@ -223,13 +230,13 @@ async function buildPackage(
       ),
     ]);
 
-    let transport = transportFirst;
-    if (!transport) {
-      for (const fallback of (["train", "bus", "plane"] as TransportMode[]).filter((mode) => mode !== entry.mode)) {
-        transport = await tryMode(fallback);
-        if (transport) break;
-      }
-    }
+    const answered = transportAnswers.filter(
+      (item): item is NonNullable<typeof item> => Boolean(item?.payload?.offers?.length),
+    );
+    // The cheapest outbound fare across the modes that really answered.
+    const cheapestFare = (item: (typeof answered)[number]) => cheapest(item!.payload.offers)?.priceToman ?? Number.POSITIVE_INFINITY;
+    answered.sort((a, b) => cheapestFare(a) - cheapestFare(b));
+    const transport = answered[0] ?? null;
     const payload: TransportSearchPayload | null = transport?.payload ?? null;
     const outbound = payload ? cheapest(payload.offers) : null;
     const inbound = payload ? cheapest(payload.returningOffers) : null;
