@@ -409,7 +409,7 @@ export async function loadTripPackages(options: {
    * empty shelf, so the last good packages are served (clearly marked) instead.
    */
   let fellBack = false;
-  if (options.force && packages.length < 2) {
+  if (options.force && packages.length < Math.min(limit, 3)) {
     const salvaged = await Promise.all(
       destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length], false), 52_000)),
     );
