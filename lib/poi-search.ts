@@ -1,4 +1,4 @@
-import { IRANIAN_CITIES } from "./iran-cities";
+import { IRANIAN_CITIES, cityPoint } from "./iran-cities";
 import { getProviderCache, setProviderCache } from "./provider-cache";
 import { categoryLabel, type Poi, type PoiSearchResult } from "./poi-types";
 
@@ -53,8 +53,11 @@ export function cityCoordinate(city: string): Coordinate | null {
   const target = normalizeTerm(city);
   const match = IRANIAN_CITIES.find((item) => normalizeTerm(item.name) === target)
     ?? IRANIAN_CITIES.find((item) => normalizeTerm(item.name).includes(target) || target.includes(normalizeTerm(item.name)));
-  if (!match || typeof match.latitude !== "number" || typeof match.longitude !== "number") return null;
-  return { latitude: match.latitude, longitude: match.longitude };
+  if (match && typeof match.latitude === "number" && typeof match.longitude === "number" && match.latitude !== 0) {
+    return { latitude: match.latitude, longitude: match.longitude };
+  }
+  // Provider rows sometimes carry no coordinates; the shared table fills the gap.
+  return cityPoint(city);
 }
 
 /** Resolves a city that is not in the local directory through the Persian Wikipedia article. */

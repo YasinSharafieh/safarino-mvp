@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
@@ -15,6 +15,7 @@ import {
   Home,
   Landmark,
   MapPin,
+  LoaderCircle,
   RotateCcw,
   Sparkles,
   Sun,
@@ -54,7 +55,10 @@ import {
   suggestCities,
   type CitySuggestion,
   type QuizAnswers,
+  type QuizQuestion,
 } from "@/lib/start-flow";
+import { findCity } from "@/lib/discover";
+import type { AiAnalysis } from "@/lib/quiz-ai";
 
 /** Every option in the pool gets its own picture-free glyph. */
 const ICONS: Record<string, LucideIcon> = {
@@ -118,9 +122,58 @@ export default function TravelQuiz() {
   // contain one particular random set, so nothing is drawn until hydration.
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
-  const questions = useMemo(() => (ready ? drawQuestions(Math.random, 4) : []), [round, ready]);
-  const totalQuestions = questions.length || 4;
+  /**
+   * Ten questions, written for this attempt.
+   *
+   * The model writes a fresh set each time; the local bank is the fallback, so
+   * the traveller always gets ten questions even when the model is unavailable.
+   * Prompts already seen are sent along so the next set is not the same one.
+   */
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [questionSource, setQuestionSource] = useState<"ai" | "local" | "">("");
+  const seenPrompts = useRef<string[]>([]);
+  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    const local = drawQuestions(Math.random, 10);
+    setQuestions(local);
+    setQuestionSource("local");
+    setAnswers({});
+    setStep(0);
+    setShowResult(false);
+    const people = Math.max(1, (travelData.travelers || 2) + (travelData.children || 0));
+    fetch("/api/quiz/questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ origin: travelData.origin || "", travellers: people, seen: seenPrompts.current, token: `${Date.now()}-${round}` }),
+    })
+      .then((response) => response.json())
+      .then((data: { success?: boolean; questions?: QuizQuestion[]; source?: "ai" | "local" }) => {
+        if (cancelled) return;
+        const fresh = Array.isArray(data.questions) ? data.questions : [];
+        if (!fresh.length) return;
+        setQuestions(fresh);
+        setQuestionSource(data.source || "local");
+      })
+      .catch(() => {
+        // The local set is already on screen; nothing to report.
+      })
+      .finally(() => {
+        if (!cancelled) seenPrompts.current = [...seenPrompts.current, ...local.slice(0, 6).map((question) => question.prompt)].slice(-40);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, round]);
+
+  const totalQuestions = questions.length || 10;
   const [step, setStep] = useState(0);
+  const [showResult, setShowResult] = useState(false);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
@@ -130,7 +183,7 @@ export default function TravelQuiz() {
   const [textNote, setTextNote] = useState("");
   const [described, setDescribed] = useState<{ summary: string; words: string[]; days: number | null } | null>(null);
 
-  const showResult = ready && (Boolean(described) || step >= questions.length);
+  const resultVisible = ready && (Boolean(described) || showResult);
   const question = questions[Math.min(step, Math.max(questions.length - 1, 0))];
   const selectedOption = question ? answers[question.key] : undefined;
   const quizResult = useMemo(() => scoreAnswers(questions, answers), [questions, answers]);
@@ -141,16 +194,42 @@ export default function TravelQuiz() {
     }
     return quizResult;
   }, [described, description, quizResult]);
-  const suggestions = useMemo(() => suggestCities(result, { limit: 4 }), [result]);
-  const progress = showResult ? 100 : ((step + 1) / totalQuestions) * 100;
+  const peopleCount = Math.max(1, (travelData.travelers || 2) + (travelData.children || 0));
+  const suggestions: CitySuggestion[] = useMemo(() => {
+    if (analysis?.cities?.length) {
+      return analysis.cities.slice(0, 4).map((city) => {
+        const profile = findCity(city.name);
+        return {
+          name: city.name,
+          province: profile?.province || "",
+          tagline: profile?.tagline || "",
+          days: analysis.days || profile?.suggestedDays || 3,
+          bestSeason: profile?.bestSeason || "",
+          reason: city.reason || profile?.tagline || "",
+          score: 0,
+          estimatedToman: city.estimatedToman,
+          overBudget: Boolean(travelData.budget && city.estimatedToman && city.estimatedToman > travelData.budget * 1_000_000),
+        };
+      });
+    }
+    return suggestCities(result, { limit: 4, budgetMillions: travelData.budget || null, travellers: peopleCount });
+  }, [analysis, peopleCount, result, travelData.budget]);
+  const progress = resultVisible ? 100 : ((step + 1) / totalQuestions) * 100;
 
   const goNext = () => {
-    if (!selectedOption || showResult) return;
+    if (!selectedOption || resultVisible) return;
     setDirection(1);
-    setStep(Math.min(step + 1, questions.length));
+    if (step >= questions.length - 1) setShowResult(true);
+    else setStep(step + 1);
   };
 
   const goBack = () => {
+    if (resultVisible) {
+      setDirection(-1);
+      setShowResult(false);
+      setStep(Math.max(questions.length - 1, 0));
+      return;
+    }
     if (step === 0) return;
     setDirection(-1);
     setStep(Math.max(step - 1, 0));
@@ -163,6 +242,8 @@ export default function TravelQuiz() {
     setAnswers({});
     setChosen("");
     setStep(0);
+    setShowResult(false);
+    setAnalysis(null);
     setDirection(-1);
     setRound((value) => value + 1);
   };
@@ -182,6 +263,45 @@ export default function TravelQuiz() {
     });
     setDirection(1);
   };
+
+  /** Reads the answers: the model first, the local engine as the floor. */
+  const runAnalysis = useCallback(() => {
+    setAnalysing(true);
+    const payload = {
+      origin: travelData.origin || "",
+      travellers: peopleCount,
+      days: result.days,
+      budgetMillions: travelData.budget || null,
+      freeText: described ? description : "",
+      questions: questions.map((question) => ({
+        key: question.key,
+        prompt: question.prompt,
+        options: question.options.map((option) => option.id),
+      })),
+      answers,
+    };
+    fetch("/api/quiz/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify(payload),
+    })
+      .then((response) => response.json())
+      .then((data: { success?: boolean; analysis?: AiAnalysis }) => {
+        if (data.analysis?.cities?.length) setAnalysis(data.analysis);
+      })
+      .catch(() => {
+        // The local result is already on screen.
+      })
+      .finally(() => setAnalysing(false));
+  }, [answers, description, described, peopleCount, questions, result.days, travelData.budget, travelData.origin]);
+
+  useEffect(() => {
+    if (!resultVisible) return;
+    runAnalysis();
+    // Once per result screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultVisible]);
 
   const startTrip = (suggestion: CitySuggestion) => {
     const days = Math.max(1, suggestion.days || 3);
@@ -228,8 +348,11 @@ export default function TravelQuiz() {
               سفر بعدی‌ات <span className="gradient-text">چه حالی</span> دارد؟
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-[11.5px] leading-7 text-slate-400 sm:text-sm">
-              چند سؤال کوتاه — هر بار سؤال‌های تازه — تا بر اساس سلیقه و بودجه‌ات شهر مناسب را در ایران پیدا کنیم.
+              ده سؤال کوتاه — هر بار سؤال‌های تازه — تا بر اساس سلیقه و بودجه‌ات شهر مناسب را در ایران پیدا کنیم.
             </p>
+            {questionSource === "ai" ? (
+              <p className="mt-2 text-[9.5px] text-emerald-300/80">سؤال‌های این دور مخصوص همین سفر نوشته شدند؛ دور بعدی سؤال‌های دیگری دارد.</p>
+            ) : null}
           </div>
 
           <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
@@ -287,7 +410,7 @@ export default function TravelQuiz() {
             <div className="mb-5">
               <div className="mb-2.5 flex items-center justify-between gap-3 text-[10.5px] text-slate-400">
                 <span aria-live="polite">
-                  {showResult ? "نتیجه آماده است" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
+                  {resultVisible ? "نتیجه آماده است" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
                 </span>
                 <b className="text-cyan-300">{faNumber(Math.round(progress))}٪</b>
               </div>
@@ -324,7 +447,7 @@ export default function TravelQuiz() {
                     ))}
                   </div>
                 </motion.div>
-              ) : !showResult ? (
+              ) : !resultVisible ? (
                 <motion.div
                   key={question.key}
                   custom={direction}
@@ -418,8 +541,14 @@ export default function TravelQuiz() {
                       <Sparkles className="h-3.5 w-3.5" />
                       سلیقهٔ سفرت مشخص شد
                     </span>
-                    <h2 className="gradient-text mt-4 text-xl font-black sm:text-2xl">{result.headline}</h2>
-                    <p className="mx-auto mt-2.5 max-w-xl text-[11px] leading-7 text-slate-300 sm:text-xs">{result.summary}</p>
+                    <h2 className="gradient-text mt-4 text-xl font-black sm:text-2xl">{analysis?.headline || result.headline}</h2>
+                    <p className="mx-auto mt-2.5 max-w-xl text-[11px] leading-7 text-slate-300 sm:text-xs">{analysis?.summary || result.summary}</p>
+                    {analysing ? (
+                      <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[9.5px] text-cyan-100">
+                        <LoaderCircle className="h-3 w-3 animate-spin" />
+                        پاسخ‌ها خوانده می‌شود؛ داشتیم شهرها را با بودجه‌ات می‌سنجیدیم…
+                      </p>
+                    ) : null}
                     {described ? (
                       <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                         <span className="text-[9.5px] text-slate-500">از نوشتهٔ خودت:</span>
@@ -473,6 +602,17 @@ export default function TravelQuiz() {
                                 </span>
                               </span>
                               <span className="mt-1 block text-[10px] leading-5 text-slate-400">{suggestion.reason}</span>
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {index === 0 ? (
+                                  <span className="rounded-full border border-emerald-400/35 bg-emerald-400/15 px-2 py-0.5 text-[8.5px] font-black text-emerald-200">پیشنهاد من</span>
+                                ) : null}
+                                {suggestion.estimatedToman ? (
+                                  <span className={`text-[9px] ${suggestion.overBudget ? "text-amber-300" : "text-slate-500"}`}>
+                                    حدود {faNumber(Math.round(suggestion.estimatedToman / 1_000_000))} میلیون تومان برای {faNumber(suggestion.days)} روز
+                                    {suggestion.overBudget ? " · کمی بیشتر از بودجه‌ات" : ""}
+                                  </span>
+                                ) : null}
+                              </span>
                             </span>
                             <span
                               className={`mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
@@ -526,7 +666,7 @@ export default function TravelQuiz() {
           </div>
 
           <p className="mt-4 text-center text-[10px] leading-6 text-slate-600">
-            پاسخ‌ها فقط روی همین دستگاه می‌مانند و به هیچ سروری فرستاده نمی‌شوند.
+            پاسخ‌ها فقط برای ساختن همین پیشنهاد پردازش می‌شوند و ذخیره نمی‌شوند؛ هیچ نام یا اطلاعات شخصی پرسیده نمی‌شود.
           </p>
         </section>
       </main>

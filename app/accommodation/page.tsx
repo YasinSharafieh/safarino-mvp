@@ -82,6 +82,8 @@ function savedStatus(value: Record<string, unknown> | null): Choice | null {
 
 import SnapshotKeeper from "@/components/SnapshotKeeper";
 import SiteHeader from "@/components/SiteHeader";
+import NextStepBar from "@/components/NextStepBar";
+import { bestStay, estimateBudget } from "@/lib/budget-fit";
 
 export default function AccommodationPage() {
   const { travelData, setTravelData, isHydrated } = useTravel();
@@ -130,6 +132,18 @@ export default function AccommodationPage() {
   const nights = checkIn && checkOut && checkOut > checkIn
     ? Math.round((Date.parse(`${checkOut}T00:00:00Z`) - Date.parse(`${checkIn}T00:00:00Z`)) / 86_400_000)
     : 0;
+  // What is really left for the room once food and everyday costs are set
+  // aside — the same arithmetic the plan page uses, so the numbers agree.
+  const stayBudget = useMemo(
+    () =>
+      estimateBudget({
+        totalBudget,
+        travellers: Math.max(1, travelData.travelers + travelData.children + travelData.infants),
+        days: Math.max(1, nights),
+        tickets: transportCost,
+      }),
+    [nights, totalBudget, transportCost, travelData.children, travelData.infants, travelData.travelers],
+  );
 
   useEffect(() => {
     if (!isHydrated || initialized.current) return;
@@ -365,6 +379,13 @@ export default function AccommodationPage() {
       : (b.offers[0].rating || 0) - (a.offers[0].rating || 0) || b.offers[0].reviewCount - a.offers[0].reviewCount);
   }, [amenity, beforeAccommodation, budgetOnly, groups, kind, maxTotalPrice, minRating, minStars, nameQuery, sort, stayType]);
 
+  const recommendation = useMemo(() => {
+    const offers = filteredGroups.flatMap((group) =>
+      group.offers.map((offer) => ({ id: offer.id, price: offer.priceTotalToman, rating: offer.rating || null })),
+    );
+    return bestStay(offers, { remaining: Math.max(0, stayBudget.remaining) });
+  }, [filteredGroups, stayBudget.remaining]);
+
   function resetFilters() {
     setNameQuery("");
     setMaxTotalPrice(50_000_000);
@@ -378,7 +399,7 @@ export default function AccommodationPage() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 pb-32 pt-6 sm:px-6 lg:px-8">
       <SnapshotKeeper />
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
@@ -555,10 +576,18 @@ export default function AccommodationPage() {
                     )}
                     </div>
 
+                    {!loading && recommendation.option && filteredGroups.length ? (
+                      <div className={`mb-5 rounded-2xl border p-4 ${recommendation.fits ? "border-emerald-400/25 bg-emerald-400/[0.06]" : "border-turquoise-400/30 bg-turquoise-400/[0.06]"}`}>
+                        <p className="flex items-center gap-2 text-xs font-black text-white"><Sparkles className="h-4 w-4 text-emerald-300" />بهترین انتخاب برای تو</p>
+                        <p className="mt-2 text-[11px] leading-6 text-slate-300">
+                          {recommendation.reason} بعد از حمل‌ونقل، حدود {formatToman(Math.max(0, stayBudget.remaining))} از بودجه برای اقامت مانده است؛ غذا و خرج روزانه از این عدد جدا حساب شده.
+                        </p>
+                      </div>
+                    ) : null}
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <AnimatePresence mode="popLayout">{filteredGroups.map((group, index) => (
-                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
+                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
                         ))}</AnimatePresence>
                       </motion.div>
                     ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}
@@ -567,6 +596,30 @@ export default function AccommodationPage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          <NextStepBar
+            summary={
+              choice === "reserved"
+                ? "اقامت از قبل رزرو شده · هزینهٔ اقامت صفر"
+                : choice === "skipped"
+                  ? "سفر بدون اقامتگاه · هزینهٔ اقامت صفر"
+                  : selected
+                    ? `${String(selected.name)} · ${formatToman(accommodationCost)} برای ${formatNumber(nights)} شب`
+                    : "هنوز اقامتگاهی انتخاب نشده"
+            }
+            hint={
+              choice === "reserved" || choice === "skipped"
+                ? "با این انتخاب، برنامه و بودجهٔ نهایی ساخته می‌شود."
+                : selected
+                  ? `بعد از اقامت، حدود ${formatToman(Math.max(0, totalBudget - totalSpent - stayBudget.food - stayBudget.activities - stayBudget.localTransport))} برای غذا و خرج روزانه می‌ماند.`
+                  : "یک اقامتگاه انتخاب کن، یا «از قبل رزرو کردم» / «بدون اقامتگاه» را بزن."
+            }
+            ready={choice !== "search" || Boolean(selected)}
+            blockedNote="برای ادامه، یکی از اقامتگاه‌ها را انتخاب کن."
+            href="/plan"
+            ctaLabel="ادامه به برنامهٔ سفر"
+            secondary={{ label: "بدون اقامتگاه ادامه بده", onClick: () => chooseStatus("skipped") }}
+          />
 
           <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="glass relative mt-10 overflow-hidden p-6 text-center sm:p-9">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(6,182,212,0.18),transparent_60%)]" />

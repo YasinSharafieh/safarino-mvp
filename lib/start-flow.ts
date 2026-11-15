@@ -13,6 +13,7 @@
 
 import { IRANIAN_CITIES, type IranianCity } from "./iran-cities";
 import { DISCOVER_CITIES, type DiscoverMood } from "./discover";
+import { estimatedTripCost, profileFor } from "./city-profiles";
 
 /** Cities a traveller can start from or travel to: Iran only, unique by name. */
 export function iranianTravelCities(): IranianCity[] {
@@ -20,7 +21,9 @@ export function iranianTravelCities(): IranianCity[] {
   const result: IranianCity[] = [];
   for (const city of IRANIAN_CITIES) {
     const name = (city.name || "").trim();
-    if (!name || seen.has(name)) continue;
+    // A city the ticket sellers do not list can still be searched and
+    // recommended, but it must never reach the ticket form.
+    if (!name || city.searchOnly || seen.has(name)) continue;
     seen.add(name);
     result.push(city);
   }
@@ -59,13 +62,28 @@ export function orderedTravelCities(): IranianCity[] {
 
 const TRAVEL_CITY_NAMES = new Set(iranianTravelCities().map((city) => city.name));
 
+/**
+ * Any real Iranian city Safarino knows — including the ones without online
+ * tickets, which can still be recommended, searched and planned.
+ */
+/** «خرم‌آباد» and «خرم آباد» are the same city. */
+const loose = (value: string) => value.replace(/\u200c/g, " ").replace(/\s+/g, " ").trim();
+
+export function isKnownIranianCity(name: string | null | undefined): boolean {
+  if (typeof name !== "string") return false;
+  const wanted = loose(name);
+  if (!wanted) return false;
+  return IRANIAN_CITIES.some((city) => loose(city.name) === wanted);
+}
+
 export function isIranianTravelCity(name: unknown): name is string {
   return typeof name === "string" && TRAVEL_CITY_NAMES.has(name.trim());
 }
 
 /* ------------------------------------------------------------------ quiz */
 
-export type QuizKey = "pace" | "party" | "mood" | "budget" | "season" | "interest" | "comfort" | "crowd";
+/** Questions may also arrive from the model, so the key is any short slug. */
+export type QuizKey = string;
 
 export type QuizOption = {
   id: string;
@@ -94,6 +112,7 @@ export type QuizQuestion = {
  * person twice) do not see the same quiz.
  */
 export const QUESTION_POOL: QuizQuestion[] = [
+  // ------------------------------------------------------------- pace
   {
     key: "pace",
     prompt: "صبح سفرت بیشتر شبیه کدام است؟",
@@ -106,6 +125,18 @@ export const QUESTION_POOL: QuizQuestion[] = [
     ],
   },
   {
+    key: "pace2",
+    prompt: "یک روز سفر را چطور پر می‌کنی؟",
+    aside: "بین سه جاذبه یا یک جاذبه و یک کافه، کدام؟",
+    options: [
+      { id: "packed", label: "سه‌چهار جا در یک روز؛ خستگی هم باشد", weights: { شهری: 2, تاریخی: 1 }, hint: "پرتر" },
+      { id: "balanced", label: "دو جا با وقت کافی و یک ناهار خوب", weights: { تاریخی: 1, شهری: 1, طبیعت: 1 }, hint: "متعادل" },
+      { id: "one", label: "یک جا، ولی کامل و بی‌عجله", weights: { تاریخی: 1, طبیعت: 1 }, hint: "عمیق" },
+      { id: "rest", label: "شاید حتی از اقامتگاه بیرون نیایم", weights: { ساحلی: 2, کوهستانی: 1 }, hint: "استراحت" },
+    ],
+  },
+  // ------------------------------------------------------------- party
+  {
     key: "party",
     prompt: "با چه کسی سفر می‌کنی؟",
     aside: "این جواب روی نوع اقامتگاه هم اثر می‌گذارد.",
@@ -116,6 +147,18 @@ export const QUESTION_POOL: QuizQuestion[] = [
       { id: "friends", label: "با دوستان", weights: { طبیعت: 1, کویری: 1 }, hint: "گروهی" },
     ],
   },
+  {
+    key: "party2",
+    prompt: "اگر همسفرت وسط راه نظرش عوض شود چه می‌کنی؟",
+    aside: "این نشان می‌دهد چقدر برنامه باید انعطاف داشته باشد.",
+    options: [
+      { id: "flex", label: "مسیر را عوض می‌کنیم، ماجراست", weights: { طبیعت: 2, کویری: 1 }, hint: "انعطاف" },
+      { id: "negotiate", label: "با هم تصمیم می‌گیریم", weights: { شهری: 1, تاریخی: 1 }, hint: "مشورتی" },
+      { id: "stick", label: "به برنامهٔ اول می‌چسبیم", weights: { تاریخی: 2 }, hint: "منظم" },
+      { id: "solo", label: "من معمولاً تنها سفر می‌کنم", weights: { شهری: 1, کویری: 1 }, hint: "تنها" },
+    ],
+  },
+  // ------------------------------------------------------------- mood
   {
     key: "mood",
     prompt: "کدام تصویر بیشتر شبیه تعطیلات توست؟",
@@ -128,16 +171,40 @@ export const QUESTION_POOL: QuizQuestion[] = [
     ],
   },
   {
-    key: "budget",
-    prompt: "برای هر نفر در روز چقدر راحت‌تری خرج کنی؟",
-    aside: "فقط یک شروع است؛ بعداً دقیق حساب می‌کنیم.",
+    key: "mood2",
+    prompt: "کدام صدا را در سفر بیشتر دوست داری؟",
+    aside: "به اولین حسی که می‌آید اعتماد کن.",
     options: [
-      { id: "low", label: "تا ۸۰۰ هزار تومان", weights: { تاریخی: 1, کویری: 1 }, dailyToman: 800_000 },
-      { id: "mid", label: "حدود ۱٫۵ میلیون تومان", weights: { شهری: 1 }, dailyToman: 1_500_000 },
-      { id: "high", label: "حدود ۳ میلیون تومان", weights: { ساحلی: 1 }, dailyToman: 3_000_000 },
-      { id: "vip", label: "مهم نیست، راحتی مهم‌تر است", weights: { ساحلی: 1, شهری: 1 }, dailyToman: 5_000_000 },
+      { id: "azan", label: "صدای اذان و بازار حرم", weights: { زیارتی: 2 }, hint: "زیارتی" },
+      { id: "mountain", label: "باد لای سنگ‌های بلند", weights: { کوهستانی: 2 }, hint: "کوه" },
+      { id: "city", label: "همهمهٔ خیابان و کافه", weights: { شهری: 2 }, hint: "شهر" },
+      { id: "silence", label: "هیچ صدایی، فقط سکوت", weights: { کویری: 2, طبیعت: 1 }, hint: "خلوت" },
     ],
   },
+  // ------------------------------------------------------------- budget
+  {
+    key: "budget",
+    prompt: "برای کل سفر چقدر بودجه گذاشته‌ای؟",
+    aside: "این عدد بعداً در همهٔ پیشنهادها و انتخاب بلیت و اقامتگاه اثر می‌گذارد.",
+    options: [
+      { id: "low", label: "تا ۱۰ میلیون تومان", weights: { تاریخی: 1, کویری: 1 }, dailyToman: 700_000, hint: "اقتصادی" },
+      { id: "mid", label: "حدود ۲۰ میلیون تومان", weights: { شهری: 1, تاریخی: 1 }, dailyToman: 1_400_000, hint: "متوسط" },
+      { id: "high", label: "حدود ۴۰ میلیون تومان", weights: { ساحلی: 1, شهری: 1 }, dailyToman: 2_600_000, hint: "راحت" },
+      { id: "vip", label: "بیشتر از ۶۰ میلیون، دنبال بهترین‌ها هستم", weights: { ساحلی: 1, شهری: 1 }, dailyToman: 4_500_000, hint: "بی‌دغدغه" },
+    ],
+  },
+  {
+    key: "budget2",
+    prompt: "پولت را بیشتر کجای سفر خرج می‌کنی؟",
+    aside: "این کمک می‌کند بدانیم چه چیزی را برایت کم کنیم.",
+    options: [
+      { id: "stay", label: "اقامتگاه خوب و راحت", weights: { شهری: 1, ساحلی: 1 }, dailyToman: 2_000_000, hint: "اقامت" },
+      { id: "food", label: "غذا و رستوران‌های محلی", weights: { شهری: 2 }, dailyToman: 1_500_000, hint: "غذا" },
+      { id: "tickets", label: "بازدیدها و تجربه‌ها", weights: { تاریخی: 1, طبیعت: 1 }, dailyToman: 1_300_000, hint: "تجربه" },
+      { id: "travel", label: "رسیدن راحت‌تر، حتی گران‌تر", weights: { شهری: 1 }, dailyToman: 1_600_000, hint: "مسیر" },
+    ],
+  },
+  // ------------------------------------------------------------- season / climate
   {
     key: "season",
     prompt: "چه هوایی را بیشتر دوست داری؟",
@@ -150,6 +217,18 @@ export const QUESTION_POOL: QuizQuestion[] = [
     ],
   },
   {
+    key: "climate2",
+    prompt: "در سفر گرمای ۴۰ درجه را چطور تحمل می‌کنی؟",
+    aside: "بعضی شهرهای جنوب و کویر همین هوا را دارند.",
+    options: [
+      { id: "fine", label: "مشکلی نیست، عاشق گرما هستم", weights: { کویری: 2, ساحلی: 1 }, hint: "گرم" },
+      { id: "shade", label: "با آب و سایه کنار می‌آیم", weights: { ساحلی: 1, تاریخی: 1 }, hint: "متوسط" },
+      { id: "avoid", label: "ترجیح می‌دهم خنک باشد", weights: { کوهستانی: 2 }, hint: "خنک" },
+      { id: "cold", label: "سرما را بیشتر از گرما دوست دارم", weights: { کوهستانی: 2, تاریخی: 1 }, hint: "سرد" },
+    ],
+  },
+  // ------------------------------------------------------------- interest
+  {
     key: "interest",
     prompt: "اگر یک ساعت وقت اضافه داشتی، چه می‌کردی؟",
     aside: "این بار دربارهٔ سفر جواب بده، نه خانه.",
@@ -160,6 +239,41 @@ export const QUESTION_POOL: QuizQuestion[] = [
       { id: "food", label: "یک رستوران محلی و غذای خاص", weights: { شهری: 1, تاریخی: 1 }, hint: "غذا" },
     ],
   },
+  {
+    key: "interest2",
+    prompt: "در سفر بیشتر عکس می‌گیری یا بیشتر می‌فهمی؟",
+    aside: "هیچ‌کدام بهتر نیست؛ فقط جور دیگری است.",
+    options: [
+      { id: "photo", label: "عکس و معماری برایم مهم است", weights: { تاریخی: 2 }, hint: "عکاسی" },
+      { id: "learn", label: "تاریخ و داستان هر مکان را می‌خوانم", weights: { تاریخی: 1, زیارتی: 1 }, hint: "دانش" },
+      { id: "people", label: "آدم‌ها و زندگی روزمره", weights: { شهری: 2 }, hint: "مردم" },
+      { id: "nature", label: "طبیعت و چشم‌انداز", weights: { طبیعت: 2, کوهستانی: 1 }, hint: "طبیعت" },
+    ],
+  },
+  // ------------------------------------------------------------- transport
+  {
+    key: "transport",
+    prompt: "دوست داری سفرت را چطور شروع کنی؟",
+    aside: "قیمت واقعی هر کدام را در مرحلهٔ بلیت می‌بینی.",
+    options: [
+      { id: "plane", label: "با هواپیما، سریع و کوتاه", weights: { شهری: 1 }, hint: "هواپیما" },
+      { id: "train", label: "با قطار، راحت و آرام", weights: { تاریخی: 1, طبیعت: 1 }, hint: "قطار" },
+      { id: "bus", label: "با اتوبوس، ارزان", weights: { کویری: 1, شهری: 1 }, hint: "اتوبوس" },
+      { id: "car", label: "با ماشین خودم، هرجا خواستم می‌ایستم", weights: { طبیعت: 1, کوهستانی: 1 }, hint: "جاده" },
+    ],
+  },
+  {
+    key: "transport2",
+    prompt: "طول مسیر برایت چقدر مهم است؟",
+    aside: "مثلاً ۱۲ ساعت قطار در برابر ۲ ساعت پرواز.",
+    options: [
+      { id: "short", label: "کوتاه‌ترین راه، حتی گران‌تر", weights: { شهری: 2 }, hint: "سریع" },
+      { id: "cheap", label: "ارزان‌ترین راه، حتی طولانی‌تر", weights: { کویری: 1, تاریخی: 1 }, hint: "ارزان" },
+      { id: "scenic", label: "راهِ زیبا مهم است، نه فقط رسیدن", weights: { طبیعت: 2, کوهستانی: 1 }, hint: "منظره" },
+      { id: "night", label: "شب حرکت کنم و صبح برسم", weights: { شهری: 1 }, hint: "شبانه" },
+    ],
+  },
+  // ------------------------------------------------------------- comfort
   {
     key: "comfort",
     prompt: "اقامتگاهت چه شکلی باشد؟",
@@ -172,6 +286,18 @@ export const QUESTION_POOL: QuizQuestion[] = [
     ],
   },
   {
+    key: "comfort2",
+    prompt: "صبحانهٔ سفر برایت چیست؟",
+    aside: "بستگی دارد شهر چه چیزی دارد.",
+    options: [
+      { id: "hotel", label: "صبحانهٔ بوفهٔ هتل", weights: { شهری: 1, زیارتی: 1 }, hint: "هتل" },
+      { id: "local", label: "نان محلی و شیرینی همان شهر", weights: { تاریخی: 1, شهری: 1 }, hint: "محلی" },
+      { id: "cafe", label: "کافه و قهوه", weights: { شهری: 2 }, hint: "کافه" },
+      { id: "none", label: "صبحانه نمی‌خورم", weights: { کویری: 1, طبیعت: 1 }, hint: "بی‌خیال" },
+    ],
+  },
+  // ------------------------------------------------------------- crowd
+  {
     key: "crowd",
     prompt: "شلوغی را چطور تحمل می‌کنی؟",
     aside: "بعضی شهرها همیشه شلوغ‌ند، بعضی هیچ‌وقت.",
@@ -180,6 +306,63 @@ export const QUESTION_POOL: QuizQuestion[] = [
       { id: "ok", label: "تا حدی، اگر جاذبه‌اش ارزشش را داشته باشد", weights: { تاریخی: 1, زیارتی: 1 }, hint: "متوسط" },
       { id: "quiet", label: "آرامش برایم مهم‌تر است", weights: { کویری: 1, طبیعت: 1 }, hint: "آرام" },
       { id: "escape", label: "شلوغی را دوست ندارم؛ جای خالی می‌خواهم", weights: { کویری: 2 }, hint: "خلوت" },
+    ],
+  },
+  {
+    key: "crowd2",
+    prompt: "در سفر با صف طولانی موزه چه می‌کنی؟",
+    aside: "این نشان می‌دهد چقدر شلوغی را می‌پذیری.",
+    options: [
+      { id: "wait", label: "می‌ایستم، ارزشش را دارد", weights: { تاریخی: 2 }, hint: "صبور" },
+      { id: "early", label: "صبح زود می‌روم که خلوت باشد", weights: { تاریخی: 1, شهری: 1 }, hint: "زود" },
+      { id: "skip", label: "بی‌خیالش می‌شوم و جای دیگری می‌روم", weights: { طبیعت: 1, ساحلی: 1 }, hint: "جایگزین" },
+      { id: "other", label: "کلاً جای خلوت‌تر را انتخاب می‌کنم", weights: { کویری: 2 }, hint: "خلوت" },
+    ],
+  },
+  // ------------------------------------------------------------- food & local life
+  {
+    key: "food",
+    prompt: "غذای سفر برایت چه نقشی دارد؟",
+    aside: "غذا در بعضی شهرها بهترین بخش سفر است.",
+    options: [
+      { id: "main", label: "اصلاً سفر یعنی غذا", weights: { شهری: 2, ساحلی: 1 }, hint: "غذاشناس" },
+      { id: "normal", label: "مهم است ولی عجله‌ای ندارم", weights: { شهری: 1 }, hint: "معمولی" },
+      { id: "simple", label: "ساده می‌خورم تا پول و وقت بماند", weights: { تاریخی: 1, کویری: 1 }, hint: "ساده" },
+      { id: "veg", label: "غذای گیاهی و سالم را ترجیح می‌دهم", weights: { طبیعت: 1, شهری: 1 }, hint: "سبک" },
+    ],
+  },
+  {
+    key: "food2",
+    prompt: "خاطره‌انگیزترین چیز سفرهای قبلی‌ات چه بود؟",
+    aside: "به چیز خوبی که یادت مانده فکر کن.",
+    options: [
+      { id: "monument", label: "یک بنای عظیم و قدیمی", weights: { تاریخی: 2 }, hint: "بنا" },
+      { id: "beach", label: "یک غروب کنار آب", weights: { ساحلی: 2 }, hint: "غروب" },
+      { id: "street", label: "یک شب پیاده‌روی در شهر", weights: { شهری: 2 }, hint: "شهر" },
+      { id: "pilgrim", label: "یک زیارت یا جمع مذهبی", weights: { زیارتی: 2 }, hint: "زیارت" },
+    ],
+  },
+  // ------------------------------------------------------------- what to avoid
+  {
+    key: "avoid",
+    prompt: "چه چیزی در سفر بیشتر از همه کلافه‌ات می‌کند؟",
+    aside: "همین نشان می‌دهد از کجا دورت کنیم.",
+    options: [
+      { id: "heat", label: "گرمای شدید", weights: { کوهستانی: 2, طبیعت: 1 }, hint: "دور از گرما" },
+      { id: "cold", label: "سرمای شدید", weights: { ساحلی: 2, کویری: 1 }, hint: "دور از سرما" },
+      { id: "crowd", label: "شلوغی و صف", weights: { کویری: 1, طبیعت: 2 }, hint: "دور از شلوغی" },
+      { id: "road", label: "مسیر طولانی و خسته‌کننده", weights: { شهری: 2 }, hint: "نزدیک" },
+    ],
+  },
+  {
+    key: "avoid2",
+    prompt: "کدام گزینه را حاضر نیستی در سفر تحمل کنی؟",
+    aside: "صادقانه بگو؛ بعداً برایت راحت‌تر است.",
+    options: [
+      { id: "dirty", label: "اقامتگاه آلوده", weights: { شهری: 1, ساحلی: 1 }, hint: "تمیزی" },
+      { id: "noise", label: "سروصدای شبانه", weights: { کویری: 1, طبیعت: 2 }, hint: "سکوت" },
+      { id: "nothing", label: "هیچ‌چیز، همه‌چیز را می‌پذیرم", weights: { شهری: 1, طبیعت: 1 }, hint: "سازگار" },
+      { id: "walk", label: "پیاده‌روی زیاد", weights: { شهری: 1, ساحلی: 1 }, hint: "بدون راه‌پیمایی" },
     ],
   },
 ];
@@ -255,6 +438,10 @@ export function scoreAnswers(questions: QuizQuestion[], answers: QuizAnswers): Q
 
 export type CitySuggestion = {
   name: string;
+  /** Rough cost of the whole trip for the suggested days, in toman. */
+  estimatedToman?: number;
+  /** true when that estimate is above what the traveller said they can spend. */
+  overBudget?: boolean;
   province: string;
   tagline: string;
   days: number;
@@ -269,7 +456,10 @@ export type CitySuggestion = {
  * coordinates and real attractions) can be suggested, so a suggestion always
  * leads to a plan that can actually be built.
  */
-export function suggestCities(result: QuizResult, options: { limit?: number; exclude?: string[] } = {}): CitySuggestion[] {
+export function suggestCities(
+  result: QuizResult,
+  options: { limit?: number; exclude?: string[]; budgetMillions?: number | null; travellers?: number } = {},
+): CitySuggestion[] {
   const exclude = new Set(options.exclude || []);
   const topMoods = result.moods.slice(0, 3);
   const scored = DISCOVER_CITIES.filter((city) => !exclude.has(city.name)).map((city) => {
@@ -300,8 +490,23 @@ export function suggestCities(result: QuizResult, options: { limit?: number; exc
         bestSeason: city.bestSeason,
         reason,
         score,
+        ...estimateFor(city.name, result.days && result.days > 0 ? city.suggestedDays : city.suggestedDays, options.travellers || 1, options.budgetMillions ?? null),
       };
     });
+}
+
+/** A rough trip cost, so a suggestion never ignores the money available. */
+function estimateFor(
+  city: string,
+  days: number,
+  travellers: number,
+  budgetMillions: number | null,
+): { estimatedToman?: number; overBudget?: boolean } {
+  const profile = profileFor(city);
+  if (!profile) return {};
+  const estimatedToman = estimatedTripCost(profile, Math.max(2, days), Math.max(1, travellers));
+  const budget = budgetMillions && budgetMillions > 0 ? budgetMillions * 1_000_000 : null;
+  return { estimatedToman, ...(budget ? { overBudget: estimatedToman > budget } : {}) };
 }
 
 /** The budget the traveller hinted at, as a whole-trip figure in millions. */

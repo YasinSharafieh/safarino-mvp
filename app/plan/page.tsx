@@ -30,6 +30,7 @@ import {
   Sparkles,
   Utensils,
   WalletCards,
+  Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
@@ -44,6 +45,7 @@ import { FAVORITES_EVENT, favoriteIds } from "@/lib/favorites";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import type { PlaceCardData } from "@/components/PlaceCard";
 import SiteHeader from "@/components/SiteHeader";
+import NextStepBar from "@/components/NextStepBar";
 import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
 import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
 
@@ -274,10 +276,13 @@ function slotDays(input: {
 }
 
 export default function PlanPage() {
-  const { travelData, isHydrated } = useTravel();
+  const { travelData, setTravelData, isHydrated } = useTravel();
   const [origin, setOrigin] = useState("تهران");
   const [destination, setDestination] = useState("مشهد");
   const [budget, setBudget] = useState(15_000_000);
+  // The budget is agreed early (origin/destination or the quiz), so here it is
+  // shown locked — changing it is a deliberate act, not an accident.
+  const [budgetEditing, setBudgetEditing] = useState(false);
   const [dayCount, setDayCount] = useState(3);
   const [preferences, setPreferences] = useState("فرهنگ و تاریخ، غذای محلی، سفر اقتصادی");
   const [plan, setPlan] = useState<TravelPlan>(() => createLocalPlan("مشهد", 15_000_000, 3, 0, 0));
@@ -651,7 +656,7 @@ export default function PlanPage() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 print:bg-white print:p-0 print:text-black sm:px-6 lg:px-8">
+      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 pb-32 pt-6 print:bg-white print:p-0 print:text-black sm:px-6 lg:px-8">
         <style>{`@page { size: A4; margin: 14mm 12mm; }
 @media print {
   body { background: white !important; color: black !important; }
@@ -672,6 +677,13 @@ export default function PlanPage() {
         <SiteHeader />
 
         <TravelSteps current={4} />
+
+        <NextStepBar
+          summary={`${origin} → ${destination} · ${formatNumber(dayCount)} روز · برنامهٔ ${formatNumber(plan.days.length)} روزه`}
+          hint="برنامهٔ روزبه‌روز، هوای همان روزها، فاصله‌ها، چک‌لیست و نسخهٔ PDF در مرحلهٔ بعد است."
+          href="/itinerary"
+          ctaLabel="ادامه به برنامهٔ روزبه‌روز"
+        />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <section className="text-center print:text-right">
@@ -697,7 +709,22 @@ export default function PlanPage() {
           <section className="glass mt-8 grid gap-3 p-4 print:hidden sm:grid-cols-2 lg:grid-cols-5">
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مبدأ</span><input value={origin} onChange={(event) => setOrigin(event.target.value)} className="field !py-2.5" /></label>
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مقصد</span><input value={destination} onChange={(event) => setDestination(event.target.value)} className="field !py-2.5" /></label>
-            <label><span className="mb-1.5 block text-[10px] text-slate-500">بودجه به تومان</span><input type="number" min="1000000" step="500000" value={budget} onChange={(event) => setBudget(Number(event.target.value))} className="field !py-2.5" /></label>
+            <div>
+              <span className="mb-1.5 block text-[10px] text-slate-500">بودجهٔ کل سفر</span>
+              {budgetEditing ? (
+                <span className="flex items-center gap-1.5">
+                  <input type="number" min="1000000" step="500000" value={budget} onChange={(event) => setBudget(Number(event.target.value))} className="field !py-2.5" aria-label="بودجهٔ کل سفر به تومان" />
+                  <button type="button" onClick={() => { setBudgetEditing(false); setTravelData((current) => ({ ...current, budget: Math.max(1, Math.round(budget / 1_000_000)) })); }} className="shrink-0 rounded-xl bg-cyan-300 px-3 py-2.5 text-[10px] font-black text-slate-950">ثبت</button>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] px-3 py-2.5">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                  <b className="flex-1 text-[11px] font-black text-white">{formatToman(budget)}</b>
+                  <button type="button" onClick={() => setBudgetEditing(true)} className="shrink-0 text-[10px] font-extrabold text-cyan-200 underline decoration-cyan-400/40 underline-offset-4">تغییر</button>
+                </span>
+              )}
+              <span className="mt-1 block text-[9px] leading-4 text-slate-500">همان بودجه‌ای که اول سفر گفتی؛ همهٔ پیشنهادها با همین عدد سنجیده شده‌اند.</span>
+            </div>
             <label><span className="mb-1.5 block text-[10px] text-slate-500">تعداد روز</span><select value={dayCount} onChange={(event) => setDayCount(Number(event.target.value))} className="field cursor-pointer !py-2.5">{[1, 2, 3, 4, 5, 6, 7].map((day) => <option key={day} value={day}>{formatNumber(day)} روز</option>)}</select></label>
             <label className="sm:col-span-2 lg:col-span-1"><span className="mb-1.5 block text-[10px] text-slate-500">سلیقه سفر</span><input value={preferences} onChange={(event) => setPreferences(event.target.value)} className="field !py-2.5" /></label>
           </section>

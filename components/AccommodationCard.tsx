@@ -22,6 +22,8 @@ export default function AccommodationCard({
   onSelect,
   onClear,
   detailQuery = "",
+  recommendedId,
+  recommendReason,
 }: {
   group: AccommodationGroup;
   index: number;
@@ -30,6 +32,9 @@ export default function AccommodationCard({
   onSelect: (offer: AccommodationOffer) => void;
   onClear: () => void;
   detailQuery?: string;
+  /** The offer Safarino suggests for this traveller's budget. */
+  recommendedId?: string;
+  recommendReason?: string;
 }) {
   const [activeId, setActiveId] = useState(group.offers[0].id);
   useEffect(() => {
@@ -38,6 +43,7 @@ export default function AccommodationCard({
   }, [group, selectedId]);
   const offer = group.offers.find((item) => item.id === activeId) || group.offers[0];
   const isSelected = selectedId === offer.id;
+  const isRecommended = Boolean(recommendedId) && group.offers.some((item) => item.id === recommendedId);
 
   return (
     <motion.article layout initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.35, delay: Math.min(index, 8) * 0.04 }} className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"}`}>
@@ -47,7 +53,12 @@ export default function AccommodationCard({
         <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-night-950/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">{offer.kind === "stay" ? categorizeStay(offer.typeLabel, offer.name).label || offer.typeLabel : offer.typeLabel}</span>
         {offer.rating ? <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-night-950/70 px-2.5 py-1 text-[11px] font-black text-cyan-300 backdrop-blur-md"><Star className="h-3.5 w-3.5 fill-cyan-300" />{compactFormatter.format(offer.rating)}</span> : null}
         <div className="absolute bottom-3 right-3 left-3">
-          <ProviderBadge provider={offer.provider} inverse className="mb-2" />
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <ProviderBadge provider={offer.provider} inverse />
+            {isRecommended ? (
+              <span className="rounded-full border border-emerald-300/40 bg-emerald-400/20 px-2.5 py-1 text-[9.5px] font-black text-emerald-100 backdrop-blur-md">بهترین انتخاب برای تو</span>
+            ) : null}
+          </div>
           <h3 className="text-base font-black leading-7 text-white">{offer.name}</h3>
           <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-300"><MapPin className="h-3 w-3 shrink-0" />{offer.location}</p>
         </div>

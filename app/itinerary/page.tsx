@@ -22,6 +22,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
+import NextStepBar from "@/components/NextStepBar";
 import { useTravel } from "../context/TravelContext";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import RouteMap from "@/components/RouteMap";
@@ -434,7 +435,7 @@ function ItineraryContent() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 pb-32 pt-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
           <div className="absolute inset-0 grid-lines opacity-60" />
@@ -448,6 +449,13 @@ function ItineraryContent() {
 
         <div className="mx-auto mt-5 max-w-6xl">
           <TravelSteps current={4} />
+
+          <NextStepBar
+            summary="برنامهٔ روزبه‌روز این سفر آماده است"
+            hint="همین برنامه را می‌توانی چاپ کنی یا به‌عنوان PDF ذخیره کنی؛ همهٔ انتخاب‌ها داخلش هست."
+            href="/itinerary/print"
+            ctaLabel="نسخهٔ PDF سفر"
+          />
         </div>
 
         <section className="mx-auto mt-6 max-w-6xl">

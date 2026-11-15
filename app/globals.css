@@ -146,6 +146,19 @@ body {
     color: #ffffff;
   }
 
+  /* Every dropdown on the site, whatever class it carries: the list itself is
+     painted by us, because a native dark list often renders pale-on-pale. */
+  select {
+    color-scheme: dark;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #1b1036;
+    color: #efe7ff;
+    font-weight: 600;
+  }
+
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-slate-300;
   }
@@ -285,8 +298,14 @@ body {
 }
 
 [data-theme="light"] select.field option,
-[data-theme="light"] select.field-sm option {
+[data-theme="light"] select.field-sm option,
+[data-theme="light"] select option {
   background-color: #ffffff;
+  color: var(--ink);
+}
+
+[data-theme="light"] select {
+  color-scheme: light;
   color: var(--ink);
 }
 

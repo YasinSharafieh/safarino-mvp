@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import ProviderLogo from "@/components/ProviderLogo";
 import { useTravel } from "@/app/context/TravelContext";
+import { bestForBudget, estimateBudget } from "@/lib/budget-fit";
 import { resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
 import { formatJalaliDate, formatProviderDateTime } from "@/lib/jalali";
 
@@ -300,6 +301,27 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
     return sorted;
   }, [legOffers, maxPrice, needle, sort]);
 
+  // The money side of the list: what is left for tickets once the rest of the
+  // trip has a realistic share.
+  const ticketBudget = useMemo(() => {
+    const days = Math.max(1, Math.round(travelData.days || 1));
+    const travellers = Math.max(1, travelData.travelers + travelData.children + travelData.infants);
+    const stay = Number(travelData.accommodation?.cost) || 0;
+    return estimateBudget({
+      totalBudget: Math.max(0, travelData.budget * 1_000_000),
+      travellers,
+      days,
+      stay,
+    });
+  }, [travelData.accommodation, travelData.budget, travelData.children, travelData.days, travelData.infants, travelData.travelers]);
+
+  const recommendation = useMemo(() => {
+    const priced = visible
+      .map((offer) => ({ id: offer.id, price: totalFor(offer) ?? offer.priceToman, mode }))
+      .filter((offer) => Number.isFinite(offer.price));
+    return bestForBudget(priced, { remaining: Math.max(0, ticketBudget.remaining) });
+  }, [mode, ticketBudget.remaining, visible]);
+
   const priceCeiling = useMemo(
     () => legOffers.reduce((max, offer) => Math.max(max, offer.priceToman), 0),
     [legOffers],
@@ -526,6 +548,14 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       ) : null}
 
       <div className="divide-y divide-white/5">
+        {recommendation.option ? (
+          <div className={`border-b p-3.5 ${recommendation.fits ? "border-emerald-400/20 bg-emerald-400/[0.05]" : "border-turquoise-400/25 bg-turquoise-400/[0.05]"}`}>
+            <p className="text-[10.5px] leading-6 text-slate-300">
+              <b className="text-emerald-200">پیشنهاد من: </b>
+              {recommendation.reason} برای بلیت‌ها حدود {money(Math.max(0, ticketBudget.remaining))} از بودجهٔ {money(ticketBudget.totalBudget)} در نظر گرفته شده؛ بقیهٔ بودجه صرف اقامت، غذا و بازدید می‌شود.
+            </p>
+          </div>
+        ) : null}
         {visible.map((offer, index) => {
           const isSelected = selectedId === offer.id;
           const total = totalFor(offer);
@@ -537,6 +567,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                   <div className="flex flex-wrap items-center gap-1.5">
                     <b className="text-[12.5px] text-white">{offer.title}</b>
                     {sort === "cheapest" && index === 0 ? <span className="badge-turquoise !py-0.5 !text-[8.5px]">ارزان‌ترین</span> : null}
+                    {recommendation.option?.id === offer.id ? <span className="rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 py-0.5 text-[8.5px] font-black text-emerald-200">بهترین انتخاب برای تو</span> : null}
                     {offer.provider ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[8.5px] font-bold text-slate-300">
                         <span className="grid h-3 w-3 place-items-center rounded-full bg-cyan-400/20 text-[6.5px] text-cyan-200">{PROVIDER_MARKS[offer.provider]}</span>

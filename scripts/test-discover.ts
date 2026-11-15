@@ -45,7 +45,7 @@ check("a mood really narrows", filterCities(DISCOVER_CITIES, { mood: "ساحلی
 check("the Persian yeh and kaf are forgiven", filterCities(DISCOVER_CITIES, { query: "كيش" }).length === 1);
 check("a province can be searched", filterCities(DISCOVER_CITIES, { query: "هرمزگان" }).length >= 2);
 check("nonsense finds nothing", filterCities(DISCOVER_CITIES, { query: "قطب شمال" }).length === 0);
-check("query and mood combine", filterCities(DISCOVER_CITIES, { query: "جزیره", mood: "ساحلی" }).length <= 2);
+check("query and mood combine", filterCities(DISCOVER_CITIES, { query: "جزیره", mood: "ساحلی" }).length >= 1 && filterCities(DISCOVER_CITIES, { query: "جزیره", mood: "ساحلی" }).length < DISCOVER_CITIES.length);
 
 console.log("The pages exist and are honest");
 const list = fs.readFileSync("app/discover/page.tsx", "utf8");

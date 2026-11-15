@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -18,6 +18,8 @@ import {
   Users,
 } from "lucide-react";
 import type { TripPackage, TripPackagesResult } from "@/lib/trip-packages";
+import { estimateBudget } from "@/lib/budget-fit";
+import { useTravel } from "@/app/context/TravelContext";
 import { detectBrowserCity, readSavedOrigin, saveOrigin } from "@/lib/visitor-city";
 
 const money = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
@@ -76,6 +78,8 @@ export default function HomeDeals() {
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [originHint, setOriginHint] = useState<string | null>(null);
+  const { travelData } = useTravel();
+  const [budgetMillions, setBudgetMillions] = useState<number>(() => Math.max(3, Math.round(Number(travelData.budget) || 15)));
   const [originSource, setOriginSource] = useState<"request" | "geo" | "default" | null>(null);
 
   // A returning visitor's city is remembered; a first visitor is located once.
@@ -138,6 +142,32 @@ export default function HomeDeals() {
   const packages: TripPackage[] = data?.packages || [];
   const origin = data?.origin || originHint || "تهران";
 
+  /**
+   * The budget the visitor already set (or a sensible default), read against
+   * every package: ticket + room + an allowance for food and everyday spending.
+   * The one that fits best is marked «پیشنهاد من» — with the reason spelled out.
+   */
+  const budgetPlans = useMemo(() => {
+    const totalBudget = Math.max(0, budgetMillions * 1_000_000);
+    return packages.map((pkg) => ({
+      pkg,
+      plan: estimateBudget({
+        totalBudget,
+        travellers: Math.max(1, pkg.travellers),
+        days: Math.max(1, pkg.days),
+        tickets: pkg.ticketTotalToman,
+        stay: pkg.stayTotalToman,
+      }),
+    }));
+  }, [budgetMillions, packages]);
+
+  const pick = useMemo(() => {
+    const fitting = budgetPlans.filter((entry) => entry.plan.verdict !== "over");
+    if (!fitting.length) return null;
+    // The longest trip that still leaves money for food and the rest.
+    return [...fitting].sort((a, b) => b.pkg.days - a.pkg.days || b.plan.remaining - a.plan.remaining)[0];
+  }, [budgetPlans]);
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -150,15 +180,32 @@ export default function HomeDeals() {
             بلیت رفت‌وبرگشت واقعی و اقامت واقعی همان تاریخ‌ها، از ارزان به گران.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setReloadKey((value) => value + 1)}
-          disabled={loading}
-          className="btn-ghost !px-3.5 !py-2 text-[11px] disabled:opacity-50"
-        >
-          {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          به‌روزرسانی
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="glass-soft flex items-center gap-2 px-3 py-2">
+            <span className="text-[10px] text-slate-400">بودجهٔ سفرت</span>
+            <input
+              dir="ltr"
+              type="range"
+              min="5"
+              max="80"
+              step="1"
+              value={budgetMillions}
+              onChange={(event) => setBudgetMillions(Number(event.target.value))}
+              className="w-24 cursor-pointer accent-cyan-400"
+              aria-label="بودجهٔ کل سفر به میلیون تومان"
+            />
+            <b className="whitespace-nowrap text-[10.5px] text-cyan-200">{money(budgetMillions)} میلیون</b>
+          </label>
+          <button
+            type="button"
+            onClick={() => setReloadKey((value) => value + 1)}
+            disabled={loading}
+            className="btn-ghost !px-3.5 !py-2 text-[11px] disabled:opacity-50"
+          >
+            {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            به‌روزرسانی
+          </button>
+        </div>
       </div>
 
       {loading && !packages.length ? (
@@ -188,8 +235,9 @@ export default function HomeDeals() {
       {packages.length ? (
         <>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {packages.map((pkg, index) => {
+            {budgetPlans.map(({ pkg, plan }, index) => {
               const ModeIcon = MODE_ICON[pkg.ticket.mode] ?? TrainFront;
+              const isPick = pick?.pkg.id === pkg.id;
               return (
                 <motion.a
                   key={pkg.id}
@@ -202,6 +250,9 @@ export default function HomeDeals() {
                 >
                   <div className="relative h-32 overflow-hidden bg-gradient-to-br from-cyan-500/20 to-teal-700/20">
                     <StayPhoto src={photoSrc(pkg.stay.photo)} alt={pkg.stay.name} />
+                    {isPick ? (
+                      <span className="absolute inset-x-2.5 bottom-2.5 rounded-full bg-emerald-400/90 px-2 py-1 text-center text-[9px] font-black text-slate-950">پیشنهاد من برای بودجهٔ تو</span>
+                    ) : null}
                     <span className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-slate-950/75 px-2 py-0.5 text-[9px] font-bold text-cyan-200 backdrop-blur">
                       <ModeIcon className="h-3 w-3" />
                       {pkg.ticket.modeLabel}
@@ -240,6 +291,12 @@ export default function HomeDeals() {
                         </span>
                       </p>
                     </div>
+
+                    <p className={`mt-3 rounded-xl border p-2 text-[9px] leading-5 ${plan.verdict === "over" ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : plan.verdict === "tight" ? "border-turquoise-400/25 bg-turquoise-400/10 text-turquoise-200" : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"}`}>
+                      {plan.verdict === "over"
+                        ? `${compact(Math.abs(plan.remaining) * 10)} میلیون بیشتر از بودجه‌ات؛ با غذا و خرج روزانه حساب شده.`
+                        : `با غذا و خرج روزانه، ${money(Math.max(0, plan.remaining))} تومان از بودجه‌ات می‌ماند.`}
+                    </p>
 
                     <div className="mt-auto flex items-end justify-between gap-2 border-t border-white/5 pt-3">
                       <div>

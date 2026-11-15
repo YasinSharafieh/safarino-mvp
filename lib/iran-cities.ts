@@ -8,6 +8,12 @@ export type IranianCity = {
   groundCode?: string;
   supportsFlight: boolean;
   supportsGround: boolean;
+  /**
+   * A real city Safarino knows about (for search, discovery and the quiz) that
+   * the online ticket sellers do not list. It appears wherever a *place* is
+   * needed, but never in the ticket form — there is nothing to sell there.
+   */
+  searchOnly?: boolean;
 };
 
 // Provider city directories: 53 flight cities and 127 train/bus cities.
@@ -150,7 +156,6 @@ export const IRANIAN_CITIES: IranianCity[] = [
   { code: "GARMSAR", name: "گرمسار", englishName: "GARMSAR", groundCode: "GARMSAR", supportsFlight: false, supportsGround: true },
   { code: "MOBARAKEBAFGH", name: "مبارکه بافق", englishName: "MOBARAKEBAFGH", groundCode: "MOBARAKEBAFGH", supportsFlight: false, supportsGround: true },
   { code: "MHMADIE", name: "محمدیه", englishName: "MHMADIE", groundCode: "MHMADIE", supportsFlight: false, supportsGround: true },
-  { code: "MARAGEH", name: "مراغه", englishName: "MARAGEH", groundCode: "MARAGEH", supportsFlight: false, supportsGround: true },
   { code: "MARVDASHT", name: "مرودشت", englishName: "MARVDASHT", groundCode: "MARVDASHT", supportsFlight: false, supportsGround: true },
   { code: "MALAYER", name: "ملایر", englishName: "MALAYER", groundCode: "MALAYER", supportsFlight: false, supportsGround: true },
   { code: "MAHABAD", name: "مهاباد", englishName: "MAHABAD", groundCode: "MAHABAD", supportsFlight: false, supportsGround: true },
@@ -169,6 +174,62 @@ export const IRANIAN_CITIES: IranianCity[] = [
   { code: "VAN", name: "وان", englishName: "VAN", groundCode: "VAN", supportsFlight: false, supportsGround: true },
   { code: "NAEEN", name: "نائین", englishName: "NAEEN", groundCode: "NAEEN", supportsFlight: false, supportsGround: true },
   { code: "MEHRIZ", name: "مهریز", englishName: "MEHRIZ", groundCode: "MEHRIZ", supportsFlight: false, supportsGround: true },
+  // ---------------------------------------------- real cities without online tickets
+  { code: "ALM", name: "الموت", englishName: "Alamut", latitude: 36.4447, longitude: 50.5864, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "ANZ", name: "انزلی", englishName: "Anzali", latitude: 37.4725, longitude: 49.4622, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MSL", name: "ماسوله", englishName: "Masuleh", latitude: 37.1553, longitude: 48.9875, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "LAJ", name: "لاهیجان", englishName: "Lahijan", latitude: 37.2072, longitude: 50.0049, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "ASTN", name: "آستانه اشرفیه", englishName: "Astaneh Ashrafiyeh", latitude: 37.263, longitude: 49.944, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "FUM", name: "فومن", englishName: "Fouman", latitude: 37.223, longitude: 49.313, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "RDS", name: "رودسر", englishName: "Rudsar", latitude: 37.137, longitude: 50.288, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "LNG", name: "لنگرود", englishName: "Langarud", latitude: 37.195, longitude: 50.15, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "AML", name: "آمل", englishName: "Amol", latitude: 36.4696, longitude: 52.3507, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BAB", name: "بابل", englishName: "Babol", latitude: 36.5513, longitude: 52.6789, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BEHS", name: "بهشهر", englishName: "Behshahr", latitude: 36.692, longitude: 53.552, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "NUR", name: "نور", englishName: "Nur", latitude: 36.573, longitude: 52.015, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "CHL", name: "چالوس", englishName: "Chalus", latitude: 36.655, longitude: 51.42, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "TNB", name: "تنکابن", englishName: "Tonekabon", latitude: 36.816, longitude: 50.874, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BBLS", name: "بابلسر", englishName: "Babolsar", latitude: 36.703, longitude: 52.65, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "ASTR", name: "آستارا", englishName: "Astara", latitude: 38.43, longitude: 48.87, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHLK", name: "خلخال", englishName: "Khalkhal", latitude: 37.618, longitude: 48.525, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "PRSA", name: "پارس آباد", englishName: "Parsabad", latitude: 39.648, longitude: 47.917, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "SRE", name: "سرعین", englishName: "Sarein", latitude: 38.15, longitude: 48.07, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MSGS", name: "مشگین شهر", englishName: "Meshgin Shahr", latitude: 38.398, longitude: 47.68, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "AHR", name: "اهر", englishName: "Ahar", latitude: 38.476, longitude: 47.07, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MRV", name: "مریوان", englishName: "Marivan", latitude: 35.526, longitude: 46.176, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BKN", name: "بوکان", englishName: "Bukan", latitude: 36.52, longitude: 46.21, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "PRN", name: "پیرانشهر", englishName: "Piranshahr", latitude: 36.7, longitude: 45.14, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "SRDS", name: "سردشت", englishName: "Sardasht", latitude: 36.155, longitude: 45.48, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "TVS", name: "تویسرکان", englishName: "Tuyserkan", latitude: 34.55, longitude: 48.45, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "NHD", name: "نهاوند", englishName: "Nahavand", latitude: 34.188, longitude: 48.375, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHD", name: "خرم آباد", englishName: "Khorramabad", latitude: 33.487, longitude: 48.355, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BRJ", name: "بروجرد", englishName: "Borujerd", latitude: 33.897, longitude: 48.751, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHDT", name: "کوهدشت", englishName: "Kuhdasht", latitude: 33.53, longitude: 47.6, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "PLD", name: "پلدختر", englishName: "Pol Dokhtar", latitude: 33.15, longitude: 47.71, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "SSG", name: "سوسنگرد", englishName: "Susangerd", latitude: 31.558, longitude: 48.18, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BHB", name: "بهبهان", englishName: "Behbahan", latitude: 30.596, longitude: 50.241, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "SHBK", name: "شهربابک", englishName: "Shahr-e Babak", latitude: 30.113, longitude: 55.121, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BFT", name: "بافت", englishName: "Baft", latitude: 29.233, longitude: 56.6, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "NIN", name: "نایین", englishName: "Nain", latitude: 32.86, longitude: 53.087, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "NTN", name: "نطنز", englishName: "Natanz", latitude: 33.51, longitude: 51.916, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "GLP", name: "گلپایگان", englishName: "Golpayegan", latitude: 33.453, longitude: 50.288, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MBRK", name: "مبارکه", englishName: "Mobarakeh", latitude: 32.347, longitude: 51.508, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHSR", name: "خوانسار", englishName: "Khansar", latitude: 33.22, longitude: 50.315, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHM", name: "خمین", englishName: "Khomeyn", latitude: 33.64, longitude: 50.08, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MHL", name: "محلات", englishName: "Mahallat", latitude: 33.91, longitude: 50.455, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "TFR", name: "تفرش", englishName: "Tafresh", latitude: 34.69, longitude: 50.01, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "ABH", name: "ابهر", englishName: "Abhar", latitude: 36.146, longitude: 49.218, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KHDB", name: "خدابنده", englishName: "Khodabandeh", latitude: 36.15, longitude: 48.7, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "QAE", name: "قائن", englishName: "Qaen", latitude: 33.726, longitude: 59.184, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "GNBD", name: "گنبد کاووس", englishName: "Gonbad-e Kavus", latitude: 37.25, longitude: 55.167, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "TLQ", name: "طالقان", englishName: "Taleqan", latitude: 36.17, longitude: 50.76, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "ABRK", name: "ابرکوه", englishName: "Abarkuh", latitude: 31.128, longitude: 53.279, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "HRMZ", name: "هرمز", englishName: "Hormuz", latitude: 27.065, longitude: 56.46, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "KRMJ", name: "خورموج", englishName: "Khormouj", latitude: 28.65, longitude: 51.38, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "FRZ", name: "فیروزآباد", englishName: "Firuzabad", latitude: 28.843, longitude: 52.57, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "BSTK", name: "بستک", englishName: "Bastak", latitude: 27.198, longitude: 54.366, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "MNB", name: "میناب", englishName: "Minab", latitude: 27.147, longitude: 57.077, supportsFlight: false, supportsGround: false, searchOnly: true },
+  { code: "NKS", name: "نیک شهر", englishName: "Nikshahr", latitude: 26.226, longitude: 60.214, supportsFlight: false, supportsGround: false, searchOnly: true },
 ];
 
 function normalize(value: string): string {
@@ -194,4 +255,87 @@ export function citiesForTransport(mode: "plane" | "train" | "bus"): IranianCity
 
 export function transportCityCode(city: IranianCity, mode: "plane" | "train" | "bus"): string {
   return mode === "plane" ? city.flightCode || city.code : city.groundCode || city.code;
+}
+
+/**
+ * Coordinates for cities that the provider directories list without a location.
+ *
+ * Weather, the map and «چقدر از اقامتگاه دور است» all need a real point, so the
+ * gaps in the provider list are filled from the public city coordinates — the
+ * same ones OpenStreetMap and Wikidata carry — and never guessed per request.
+ */
+export const CITY_COORDINATES: Record<string, [number, number]> = {
+  "انزلی": [37.4725, 49.4622],
+  "ماسوله": [37.1553, 48.9875],
+  "رامسر": [36.9208, 50.6583],
+  "نوشهر": [36.648, 51.496],
+  "بندرترکمن": [36.9017, 54.0717],
+  "اردبیل": [38.2498, 48.2933],
+  "سنندج": [35.3113, 46.996],
+  "سقز": [36.2464, 46.2736],
+  "مهاباد": [36.7631, 45.7222],
+  "خوی": [38.5503, 44.9521],
+  "ماکو": [39.29, 44.51],
+  "میاندوآب": [36.9694, 46.1028],
+  "زنجان": [36.6769, 48.4963],
+  "قزوین": [36.2797, 50.0049],
+  "الموت": [36.4447, 50.5864],
+  "ساوه": [35.0213, 50.3567],
+  "دورود": [33.49, 49.07],
+  "ایلام": [33.6374, 46.4227],
+  "شوشتر": [32.045, 48.848],
+  "شوش": [32.194, 48.243],
+  "دزفول": [32.38, 48.405],
+  "خرمشهر": [30.4404, 48.1765],
+  "آبادان": [30.3392, 48.3043],
+  "اندیمشک": [32.47, 48.35],
+  "بندر لنگه": [26.558, 54.8806],
+  "بم": [29.1061, 58.357],
+  "رفسنجان": [30.4067, 55.9939],
+  "سیرجان": [29.451, 55.671],
+  "جیرفت": [28.678, 57.74],
+  "طبس": [33.595, 56.924],
+  "زابل": [31.0286, 61.4949],
+  "خاش": [28.221, 61.2155],
+  "ایرانشهر": [27.2025, 60.6848],
+  "اردکان": [32.31, 54.017],
+  "میبد": [32.25, 54.0167],
+  "مهریز": [31.594, 54.443],
+  "بافق": [31.605, 55.41],
+  "کاشان": [33.9831, 51.4364],
+  "شهرضا": [32.008, 51.866],
+  "یاسوج": [30.6682, 51.588],
+  "گچساران": [30.347, 50.798],
+  "شهرکرد": [32.3256, 50.8644],
+  "نیشابور": [36.2133, 58.7958],
+  "سبزوار": [36.2126, 57.6819],
+  "تربت حیدریه": [35.274, 59.2196],
+  "گناباد": [34.3529, 58.6836],
+  "خواف": [34.576, 60.14],
+  "کرج": [35.84, 50.9391],
+  "فیروزکوه": [35.756, 52.77],
+  "لار": [27.68, 54.34],
+  "لامرد": [27.334, 53.18],
+  "مرودشت": [29.879, 52.802],
+  "آباده": [31.161, 52.65],
+  "اقلید": [30.896, 52.69],
+  "بجنورد": [37.4747, 57.329],
+  "اسفراین": [37.0764, 57.51],
+  "سمنان": [35.5729, 53.3971],
+  "شاهرود": [36.418, 54.9763],
+  "دامغان": [36.168, 54.348],
+  "میانه": [37.421, 47.715],
+  "ملایر": [34.296, 48.823],
+};
+
+/** The point of a city, from the provider row or the coordinate table. */
+export function cityPoint(name: string): { latitude: number; longitude: number } | null {
+  const target = (name || "").trim();
+  if (!target) return null;
+  const row = IRANIAN_CITIES.find((city) => city.name === target);
+  if (row && typeof row.latitude === "number" && typeof row.longitude === "number" && row.latitude !== 0) {
+    return { latitude: row.latitude, longitude: row.longitude };
+  }
+  const point = CITY_COORDINATES[target];
+  return point && point[0] !== 0 ? { latitude: point[0], longitude: point[1] } : null;
 }

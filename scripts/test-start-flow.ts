@@ -21,6 +21,7 @@ import {
   drawQuestions,
   iranianTravelCities,
   isIranianTravelCity,
+  isKnownIranianCity,
   scoreAnswers,
   suggestCities,
 } from "../lib/start-flow";
@@ -101,7 +102,7 @@ for (let run = 0; run < 25; run += 1) {
   assert(suggestions.length <= 4, "no more than four suggestions");
   for (const suggestion of suggestions) {
     assert(discoverNames.has(suggestion.name), `${suggestion.name} is a city Safarino can plan`);
-    assert(isIranianTravelCity(suggestion.name), `${suggestion.name} is an Iranian travel city`);
+    assert(isKnownIranianCity(suggestion.name), `${suggestion.name} is a real Iranian city`);
     assert(suggestion.reason.length > 5, "every suggestion says why");
     assert(suggestion.days >= 1 && suggestion.days <= 14, "a suggestion has a sane number of days");
   }
@@ -183,7 +184,7 @@ const historyTrip = describeTrip("تاریخ و معماری قدیم برایم
 assert(historyTrip?.result.moods[0].mood === "تاریخی", "history words win when that is what was written");
 const freeTextCities = suggestCities(seaTrip!.result, { limit: 4 });
 assert(freeTextCities.length >= 1, "the free-text path reaches real city suggestions");
-assert(freeTextCities.every((city) => isIranianTravelCity(city.name)), "free-text suggestions are Iranian cities");
+assert(freeTextCities.every((city) => isKnownIranianCity(city.name)), "free-text suggestions are Iranian cities");
 
 /* ------------------------------------------- the link a package produces */
 

@@ -31,6 +31,7 @@ import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
 import { parseTripLink } from "@/lib/link-prefill";
 import SiteHeader from "@/components/SiteHeader";
+import NextStepBar from "@/components/NextStepBar";
 
 const STORAGE_KEY = "safarino-transport-selection-v1";
 const MODE_KEY = "safarino-transport-mode-v1";
@@ -276,7 +277,7 @@ function TransportPageContent() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 pb-32 pt-6 sm:px-6 lg:px-8">
         <SnapshotKeeper />
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
@@ -290,6 +291,23 @@ function TransportPageContent() {
         <SiteHeader />
 
         <TravelSteps current={2} />
+
+        <NextStepBar
+          summary={
+            selection.cost > 0
+              ? `${selectedName} · ${money(selection.cost)}${selection.offerTitle ? ` · ${selection.offerTitle}` : ""}`
+              : "هنوز وسیلهٔ سفر انتخاب نشده"
+          }
+          hint={
+            selection.cost > 0
+              ? `بعد از این انتخاب، حدود ${money(Math.max(0, budget - selection.cost))} از بودجهٔ ${money(budget)} برای اقامت و بقیهٔ سفر می‌ماند.`
+              : "یک بلیت یا ماشین را انتخاب کن؛ بعد اقامتگاه."
+          }
+          ready={selection.cost > 0}
+          blockedNote="برای ادامه، یکی از بلیت‌ها را انتخاب کن یا ماشین شخصی را حساب کن."
+          href="/accommodation"
+          ctaLabel="ادامه به اقامتگاه"
+        />
 
         <div className="mx-auto max-w-6xl pb-16 pt-8">
           {/* ------------------------------------------------ trip summary */}
