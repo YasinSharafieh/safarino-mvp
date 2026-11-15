@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { city?: unknown; limit?: unknown };
     city = typeof body.city === "string" ? body.city.trim().slice(0, 80) : "";
-    const limit = typeof body.limit === "number" && Number.isFinite(body.limit) ? Math.min(40, Math.max(6, Math.round(body.limit))) : 24;
+    const limit = typeof body.limit === "number" && Number.isFinite(body.limit) ? Math.min(60, Math.max(6, Math.round(body.limit))) : 40;
     if (!city) return NextResponse.json({ success: false, error: "نام مقصد را وارد کنید." }, { status: 400 });
     const started = Date.now();
     const base = snapshotKey("pois", { city, limit });

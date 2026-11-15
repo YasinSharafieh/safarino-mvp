@@ -172,7 +172,7 @@ export default function CarPlanner({
               </span>
               <span className="text-[9px] text-slate-500">قابل ویرایش</span>
             </div>
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
               {FUEL_OPTIONS.map((option) => {
                 const active = fuelOption === option.id;
                 return (

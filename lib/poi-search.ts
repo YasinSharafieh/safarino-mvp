@@ -10,8 +10,10 @@ const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const WIKIPEDIA_API = "https://fa.wikipedia.org/w/api.php";
 const USER_AGENT = "Safarino/1.0 (Iranian travel planner; contact: agent@arena.ai)";
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
-const GEOSEARCH_RADIUS_METERS = 10_000;
-const FAMOUS_RADIUS_KM = 25;
+// A city's worth of places, not just its centre: 18 km covers the historic core,
+// the museums on the edge and the parks in between.
+const GEOSEARCH_RADIUS_METERS = 18_000;
+const FAMOUS_RADIUS_KM = 35;
 
 type Coordinate = { latitude: number; longitude: number };
 
@@ -136,10 +138,21 @@ function overpassQuery(center: Coordinate): string {
   way(${around})["tourism"~"^(attraction|museum|viewpoint|gallery|zoo|theme_park)$"]["name"];
   node(${around})["historic"~"^(monument|memorial|castle|archaeological_site|tomb|ruins)$"]["name"];
   way(${around})["historic"~"^(monument|memorial|castle|archaeological_site|tomb|ruins)$"]["name"];
+  node(${around})["historic"~"^(city_gate|bridge|aqueduct|fort|yes)$"]["name"];
+  way(${around})["historic"~"^(city_gate|bridge|aqueduct|fort|yes)$"]["name"];
+  node(${around})["amenity"="place_of_worship"]["name"];
+  way(${around})["amenity"="place_of_worship"]["name"];
+  node(${around})["leisure"="garden"]["name"];
+  way(${around})["leisure"="garden"]["name"];
   way(${around})["leisure"="park"]["name"];
+  node(${around})["leisure"="park"]["name"];
+  way(${around})["tourism"="artwork"]["name"];
   way(${around})["amenity"="marketplace"]["name"];
+  node(${around})["amenity"="marketplace"]["name"];
+  way(${around})["building"="historic"]["name"];
+  way(${around})["tourism"="attraction"]["wikidata"];
 );
-out center tags 150;`;
+out center tags 400;`;
 }
 
 async function fetchOverpass(center: Coordinate): Promise<OverpassTagged[]> {
@@ -182,7 +195,7 @@ function famousQuery(center: Coordinate): string {
 }
 GROUP BY ?item ?label ?coord ?kindLabel
 HAVING(COUNT(?sl) >= 3)
-LIMIT 200`;
+LIMIT 400`;
 }
 
 async function fetchFamousPlaces(center: Coordinate): Promise<WikidataRow[]> {
@@ -298,7 +311,7 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
     };
   }
 
-  const cacheKey = `safarino:pois:v5:${normalizeTerm(city).replace(/\s+/g, "-")}`;
+  const cacheKey = `safarino:pois:v6:${normalizeTerm(city).replace(/\s+/g, "-")}`;
   const cached = await getProviderCache<PoiSearchResult & { pois: PoiWithMeta[] }>(cacheKey);
   if (cached && Array.isArray(cached.pois) && cached.pois.length) {
     return { ...cached, pois: cached.pois.slice(0, limit) };
@@ -405,8 +418,10 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
   const candidates = mergeNearDuplicates(Array.from(merged.values()));
   const ranked = candidates.sort((a, b) => scoreOf(b) - scoreOf(a) || a.distanceKm - b.distanceKm);
 
-  const target = Math.max(limit, 24);
-  const perCategoryCap = Math.max(4, Math.ceil(target * 0.35));
+  // The traveller asked for a real choice, so the list is as long as the sources
+  // can honestly fill — a wide cap per category, and no shorter than the request.
+  const target = Math.max(limit, 30);
+  const perCategoryCap = Math.max(10, Math.ceil(target * 0.45));
   const categoryCount = new Map<string, number>();
   const pois: PoiWithMeta[] = [];
   for (const poi of ranked) {

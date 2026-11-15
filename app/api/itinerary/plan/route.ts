@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   let sources: Record<string, string> = {};
   if (!places.length) {
     if (!city) return NextResponse.json({ success: false, error: "نام مقصد یا فهرست جاذبه‌ها لازم است." }, { status: 400 });
-    const found = await searchCityPois(city, 30);
+    const found = await searchCityPois(city, 45);
     places = found.pois.map((poi) => ({
       id: poi.id,
       name: poi.name,

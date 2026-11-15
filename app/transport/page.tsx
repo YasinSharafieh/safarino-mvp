@@ -14,6 +14,8 @@ import {
   Compass,
   MapPin,
   Pencil,
+  Ticket,
+  X,
   Route,
   Sparkles,
   Users,
@@ -29,7 +31,7 @@ import ModeChooser, { MODE_OPTIONS, type TravelMode } from "@/components/transpo
 import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
-import { parseTripLink } from "@/lib/link-prefill";
+import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 
@@ -120,6 +122,8 @@ function TransportPageContent() {
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [distanceError, setDistanceError] = useState("");
   const [cheapest, setCheapest] = useState<Partial<Record<TicketMode, number | null>>>({});
+  /** The ticket a home-page package was built from, shown as the chosen one. */
+  const [packageTicket, setPackageTicket] = useState<PrefilledTicket | null>(null);
 
   const originCity = resolveIranianCity(travelData.origin);
   const destinationCity = resolveIranianCity(travelData.destination);
@@ -133,28 +137,105 @@ function TransportPageContent() {
   // filled once, so the hotel and plan steps continue with identical values.
   useEffect(() => {
     if (!isHydrated) return;
+    // The exact link is remembered, not a bare flag: a *different* package
+    // clicked later in the same tab must apply too, while a refresh of the same
+    // link must not undo the traveller's own edits.
     let applied = false;
     try {
-      applied = window.sessionStorage.getItem(LINK_APPLIED_KEY) === "1";
+      applied = window.sessionStorage.getItem(LINK_APPLIED_KEY) === window.location.search;
     } catch {
       applied = false;
     }
     if (applied) return;
     const prefill = parseTripLink(window.location.search);
     if (!prefill) return;
-    setTravelData((current) => ({
-      ...current,
-      ...(prefill.origin ? { origin: prefill.origin } : {}),
-      ...(prefill.destination ? { destination: prefill.destination } : {}),
-      ...(prefill.departureDate ? { departureDate: prefill.departureDate } : {}),
-      ...(prefill.returnDate ? { returnDate: prefill.returnDate } : {}),
-      ...(prefill.days ? { days: prefill.days } : {}),
-      ...(prefill.travellers ? { travelers: prefill.travellers } : {}),
-    }));
-    if (prefill.mode) setMode(prefill.mode);
+
+    // A package link starts a *new* trip. Leaving the previous car trip or the
+    // previous hotel in place is exactly how a traveller ends up paying for a
+    // journey they did not choose, so everything trip-specific is replaced.
+    const fromPackage = Boolean(prefill.ticket || prefill.packageId);
+    setTravelData((current) => {
+      if (!fromPackage) {
+        return {
+          ...current,
+          ...(prefill.origin ? { origin: prefill.origin } : {}),
+          ...(prefill.destination ? { destination: prefill.destination } : {}),
+          ...(prefill.departureDate ? { departureDate: prefill.departureDate } : {}),
+          ...(prefill.returnDate ? { returnDate: prefill.returnDate } : {}),
+          ...(prefill.days ? { days: prefill.days } : {}),
+          ...(prefill.travellers ? { travelers: prefill.travellers } : {}),
+        };
+      }
+      const nights = prefill.days ? Math.max(1, prefill.days - 1) : 1;
+      const travellers = prefill.travellers || current.travelers;
+      const stay = prefill.stay;
+      return {
+        ...current,
+        origin: prefill.origin || current.origin,
+        destination: prefill.destination || current.destination,
+        departureDate: prefill.departureDate || current.departureDate,
+        returnDate: prefill.returnDate || current.returnDate,
+        days: prefill.days || current.days,
+        travelers: travellers,
+        children: 0,
+        infants: 0,
+        tripStyle: "",
+        quizResult: "",
+        quizAnswers: {},
+        quizStep: 0,
+        // The room the package was built from, in the same shape the
+        // accommodation step writes — so that page opens with it selected.
+        accommodation: stay
+          ? {
+              status: "selected" as const,
+              id: `pkg-${prefill.packageId || "stay"}-${stay.name}`,
+              kind: "hotel" as const,
+              name: stay.name,
+              typeLabel: stay.typeLabel,
+              cost: stay.priceTotalToman,
+              pricePerNightToman: stay.pricePerNightToman,
+              city: prefill.destination || current.destination,
+              checkIn: prefill.departureDate || current.departureDate,
+              checkOut: prefill.returnDate || current.returnDate,
+              nights,
+              adults: travellers,
+              children: 0,
+              infants: 0,
+              childAges: [],
+              infantAges: [],
+              bookingUrl: stay.bookingUrl,
+              imageUrl: stay.photo,
+              provider: stay.provider,
+              providerLabel: stay.providerLabel,
+              fetchedAt: new Date().toISOString(),
+              fromPackage: true,
+            }
+          : null,
+        transport: null,
+      };
+    });
+
+    if (prefill.ticket) {
+      const travellers = prefill.travellers || travelData.travelers || 2;
+      const unit = prefill.ticket.priceToman;
+      selectVehicle(prefill.ticket.mode, unit * travellers, {
+        unitPrice: unit,
+        offerId: `pkg:${prefill.packageId || prefill.ticket.bookingUrl}`,
+        offerTitle: `${prefill.ticket.operator}${prefill.ticket.service ? ` · ${prefill.ticket.service}` : ""}`,
+        provider: prefill.ticket.provider,
+        providerLabel: prefill.ticket.providerLabel,
+        bookingUrl: prefill.ticket.bookingUrl,
+        fetchedAt: new Date().toISOString(),
+        details: { fromPackage: true, departure: prefill.ticket.departure, arrival: prefill.ticket.arrival },
+      });
+      setPackageTicket(prefill.ticket);
+      setMode(prefill.ticket.mode);
+    } else if (prefill.mode) {
+      setMode(prefill.mode);
+    }
     if (prefill.roundTrip) setRoundTrip(true);
     try {
-      window.sessionStorage.setItem(LINK_APPLIED_KEY, "1");
+      window.sessionStorage.setItem(LINK_APPLIED_KEY, window.location.search);
     } catch {
       // A blocked storage only means the link is applied again on refresh.
     }
@@ -420,6 +501,45 @@ function TransportPageContent() {
               hints={hints}
             />
           </div>
+
+          {/* ------------------------------------ the package's own ticket */}
+          {packageTicket ? (
+            <div className="glass mt-5 flex flex-col gap-3 border border-emerald-400/25 bg-emerald-400/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                  <Ticket className="h-5 w-5" />
+                </span>
+                <div>
+                  <b className="block text-[12.5px] font-black text-white">بلیت همین پیشنهاد ویژه انتخاب شده است</b>
+                  <p className="mt-1 text-[10.5px] leading-6 text-slate-300">
+                    {packageTicket.operator}
+                    {packageTicket.service ? ` · ${packageTicket.service}` : ""} · {money(packageTicket.priceToman)} هر نفر · منبع {packageTicket.providerLabel}
+                    {packageTicket.departure ? ` · حرکت ${formatJalaliDate(packageTicket.departure.slice(0, 10))} ${packageTicket.departure.slice(11, 16)}` : ""}
+                  </p>
+                  <p className="mt-0.5 text-[9.5px] leading-5 text-emerald-200/80">
+                    اقامتگاه این بسته هم ثبت شد؛ در مرحلهٔ اقامتگاه همان انتخاب می‌ماند مگر خودت عوضش کنی.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <a href={packageTicket.bookingUrl} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-bold text-slate-200 hover:bg-white/10">
+                  دیدن در {packageTicket.providerLabel}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPackageTicket(null);
+                    selectVehicle(mode || packageTicket.mode, 0);
+                    try { window.sessionStorage.removeItem(LINK_APPLIED_KEY); } catch { /* ignore */ }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-xl border border-turquoise-400/30 bg-turquoise-400/10 px-3 py-2 text-[10px] font-bold text-turquoise-100 hover:bg-turquoise-400/20"
+                >
+                  <X className="h-3 w-3" />
+                  تغییر این بلیت
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {/* ------------------------------------------------------- panels */}
           <div className="mt-5">

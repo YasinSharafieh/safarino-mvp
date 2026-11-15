@@ -135,7 +135,38 @@ function cheapest(offers: TransportOffer[]): TransportOffer | null {
   return valid.sort((a, b) => a.priceToman - b.priceToman)[0];
 }
 
+/**
+ * The link that carries the *chosen* trip, not just the route.
+ *
+ * The ticket and the room the package was built from travel with the link, so
+ * the next step opens with exactly that bus and that hotel already selected —
+ * and the traveller can still change either of them.
+ */
 function continueUrl(pkg: Omit<TripPackage, "continueUrl">): string {
+  const ticket = {
+    mode: pkg.ticket.mode,
+    operator: pkg.ticket.operator,
+    service: pkg.ticket.serviceLabel,
+    priceToman: pkg.ticket.priceToman,
+    provider: pkg.ticket.providerLabel,
+    providerLabel: pkg.ticket.providerLabel,
+    bookingUrl: pkg.ticket.bookingUrl,
+    departure: pkg.ticket.departure,
+    arrival: pkg.ticket.arrival,
+  };
+  const stay = {
+    name: pkg.stay.name,
+    typeLabel: pkg.stay.typeLabel,
+    location: pkg.stay.location,
+    provider: pkg.stay.provider,
+    providerLabel: pkg.stay.providerLabel,
+    photo: pkg.stay.photo,
+    rating: pkg.stay.rating,
+    pricePerNightToman: pkg.stay.pricePerNightToman,
+    priceTotalToman: pkg.stay.priceTotalToman,
+    bookingUrl: pkg.stay.bookingUrl,
+    nights: pkg.nights,
+  };
   const query = new URLSearchParams({
     from: pkg.origin,
     to: pkg.destination,
@@ -145,6 +176,8 @@ function continueUrl(pkg: Omit<TripPackage, "continueUrl">): string {
     adults: String(pkg.travellers),
     nights: String(pkg.nights),
     pkg: pkg.id,
+    tkt: JSON.stringify(ticket),
+    stay: JSON.stringify(stay),
   });
   return `/transport?${query.toString()}`;
 }
@@ -162,10 +195,10 @@ function withDeadline<T>(task: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** A few destinations for today, never the traveller's own city. */
-export function todaysPackageDestinations(origin: string, count: number, now = new Date()) {
+export function todaysPackageDestinations(origin: string, count: number, now = new Date(), offset = 0) {
   const day = Math.floor(now.getTime() / 86_400_000);
   const pool = PACKAGE_DESTINATIONS.filter((entry) => entry.city !== origin);
-  const start = day % pool.length;
+  const start = (((day + offset) % pool.length) + pool.length) % pool.length;
   const picked: typeof pool = [];
   for (let index = 0; index < pool.length && picked.length < count; index += 1) {
     const entry = pool[(start + index) % pool.length];
@@ -179,6 +212,7 @@ async function buildPackage(
   entry: { city: string; kind: "hotel" | "stay"; mode: TransportMode; days: number },
   travellers: number,
   departOffset: number,
+  force = false,
 ): Promise<TripPackage | null> {
   const destination = entry.city;
   const nights = Math.max(1, entry.days - 1);
@@ -304,10 +338,14 @@ async function buildPackage(
   // A saved package is served instantly. On a cold key the package is built
   // right here and stored, so `refreshed` (which only writes the snapshot) is
   // never awaited for its — empty — return value.
-  const fresh = await readFreshSnapshot<TripPackage>(base);
-  if (fresh) return { ...fresh, fromStoredCopy: false };
+  // «به‌روزرسانی» must mean it: a forced refresh skips the saved copy entirely
+  // and crawls the providers again.
+  if (!force) {
+    const fresh = await readFreshSnapshot<TripPackage>(base);
+    if (fresh) return { ...fresh, fromStoredCopy: false };
+  }
 
-  const stale = await readStaleSnapshot<TripPackage>(base);
+  const stale = force ? null : await readStaleSnapshot<TripPackage>(base);
   if (stale?.value) {
     // Show the last good package and rebuild in the background.
     void build()
@@ -331,15 +369,20 @@ export async function loadTripPackages(options: {
   originSource?: "request" | "geo" | "default";
   travellers?: number;
   limit?: number;
+  /** Rebuild every package from the providers, ignoring the saved copy. */
+  force?: boolean;
 }): Promise<TripPackagesResult> {
   const origin = normaliseCity(options.origin) || "تهران";
   const travellers = Math.min(4, Math.max(1, Math.round(options.travellers || 1)));
   const limit = Math.min(6, Math.max(2, Math.round(options.limit || 4)));
-  const destinations = todaysPackageDestinations(origin, limit);
+  // «به‌روزرسانی» also moves the list on: a fresh crawl shows other real
+  // destinations from the same city, not the same four cards with new numbers.
+  const rotation = options.force ? Math.floor(Date.now() / 60_000) : 0;
+  const destinations = todaysPackageDestinations(origin, limit, new Date(), rotation);
   const offsets = [3, 6, 10, 14, 18, 21];
 
   const settled = await Promise.all(
-    destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length]), 52_000)),
+    destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length], options.force), 52_000)),
   );
   const packages = settled
     .filter((value): value is TripPackage => Boolean(value))

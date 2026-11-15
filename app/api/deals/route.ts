@@ -44,8 +44,11 @@ function emptyResult(origin: string, source: "request" | "geo" | "default", note
 export async function GET(request: NextRequest) {
   const { origin, source } = originFromRequest(request);
   const travellers = Math.min(4, Math.max(1, Number(request.nextUrl.searchParams.get("travellers")) || 1));
+  // `fresh=1` is the traveller pressing «به‌روزرسانی»: crawl instead of serving
+  // the saved copy, so the numbers (and the destinations) really move.
+  const force = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("fresh") || "").toLowerCase());
   try {
-    const result = await loadTripPackages({ origin, originSource: source, travellers, limit: 4 });
+    const result = await loadTripPackages({ origin, originSource: source, travellers, limit: 4, force });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json(

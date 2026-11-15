@@ -52,7 +52,7 @@ export default function CityAttractions({ city, suggestedDays }: { city: string;
     fetch("/api/providers/pois/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ city, limit: 24 }),
+      body: JSON.stringify({ city, limit: 48 }),
     })
       .then((response) => response.json())
       .then((payload: ApiResponse) => {

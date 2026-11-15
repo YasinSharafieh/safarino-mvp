@@ -82,7 +82,8 @@ check("an empty model answer falls back to the local engine", empty.source === "
 
 console.log("The prompts keep the model inside Iran and inside the budget");
 const questions = questionsPrompt({ origin: "تهران", travellers: 2, version: "v1", avoidPrompts: ["قدیمی"] });
-check("the question prompt asks for ten", questions.includes("۱۰ سؤال"));
+check("the question prompt asks for twelve", questions.includes("۱۲ سؤال"));
+check("the question prompt never asks for the budget itself", questions.includes("سؤال بودجه را نپرس"));
 check("the question prompt forbids repeats", questions.includes("یکسان نباشند"));
 const analysis = analysisPrompt({ origin: "تهران", travellers: 2, budgetMillions: 15, days: 3, freeText: "", answers: [{ prompt: "بودجه", label: "کم" }] });
 check("the analysis prompt carries the budget", analysis.includes("15 میلیون"));

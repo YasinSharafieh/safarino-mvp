@@ -48,7 +48,6 @@ import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
 import SiteHeader from "@/components/SiteHeader";
 import {
-  budgetFromDaily,
   describeTrip,
   drawQuestions,
   scoreAnswers,
@@ -141,7 +140,8 @@ export default function TravelQuiz() {
     if (!ready) return;
     let cancelled = false;
     touched.current = false;
-    const local = drawQuestions(Math.random, 10);
+    // The budget is asked as a number at the end, so it is not asked twice.
+    const local = drawQuestions(Math.random, 14).filter((question) => !question.key.startsWith("budget")).slice(0, 12);
     setQuestions(local);
     seenPrompts.current = [...seenPrompts.current, ...local.map((question) => question.prompt)].slice(-40);
     setQuestionSource("local");
@@ -158,8 +158,8 @@ export default function TravelQuiz() {
       .then((response) => response.json())
       .then((data: { success?: boolean; questions?: QuizQuestion[]; source?: "ai" | "local" }) => {
         if (cancelled || touched.current) return;
-        const fresh = Array.isArray(data.questions) ? data.questions : [];
-        if (!fresh.length) return;
+        const fresh = (Array.isArray(data.questions) ? data.questions : []).filter((question) => !question.key.startsWith("budget"));
+        if (fresh.length < 10) return;
         setQuestions(fresh);
         setQuestionSource(data.source || "local");
         seenPrompts.current = [...seenPrompts.current, ...fresh.map((question) => question.prompt)].slice(-40);
@@ -173,9 +173,14 @@ export default function TravelQuiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, round]);
 
-  const totalQuestions = questions.length || 10;
+  const totalQuestions = questions.length || 12;
+  /** The index of the closing budget step, right after the last question. */
+  const moneyStep = questions.length;
   const [step, setStep] = useState(0);
   const [showResult, setShowResult] = useState(false);
+  /** The closing step that is *always* asked: the money and the length. */
+  const [budgetMillions, setBudgetMillions] = useState<number>(() => Math.max(3, Math.round(Number(travelData.budget) || 20)));
+  const [days, setDays] = useState<number>(() => Math.max(2, Math.round(Number(travelData.days) || 3)));
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
@@ -186,6 +191,7 @@ export default function TravelQuiz() {
   const [described, setDescribed] = useState<{ summary: string; words: string[]; days: number | null } | null>(null);
 
   const resultVisible = ready && (Boolean(described) || showResult);
+  const onMoneyStep = !resultVisible && step === moneyStep;
   const question = questions[Math.min(step, Math.max(questions.length - 1, 0))];
   const selectedOption = question ? answers[question.key] : undefined;
   const quizResult = useMemo(() => scoreAnswers(questions, answers), [questions, answers]);
@@ -210,18 +216,24 @@ export default function TravelQuiz() {
           reason: city.reason || profile?.tagline || "",
           score: 0,
           estimatedToman: city.estimatedToman,
-          overBudget: Boolean(travelData.budget && city.estimatedToman && city.estimatedToman > travelData.budget * 1_000_000),
+          overBudget: Boolean(city.estimatedToman && city.estimatedToman > budgetMillions * 1_000_000),
         };
       });
     }
-    return suggestCities(result, { limit: 4, budgetMillions: travelData.budget || null, travellers: peopleCount });
-  }, [analysis, peopleCount, result, travelData.budget]);
-  const progress = resultVisible ? 100 : ((step + 1) / totalQuestions) * 100;
+    return suggestCities(result, { limit: 4, budgetMillions, travellers: peopleCount });
+  }, [analysis, budgetMillions, peopleCount, result]);
+  const progress = resultVisible ? 100 : Math.min(99, ((step + 1) / (totalQuestions + 1)) * 100);
 
   const goNext = () => {
-    if (!selectedOption || resultVisible) return;
+    if (resultVisible) return;
+    if (step === moneyStep) {
+      setDirection(1);
+      setShowResult(true);
+      return;
+    }
+    if (!selectedOption) return;
     setDirection(1);
-    if (step >= questions.length - 1) setShowResult(true);
+    if (step >= questions.length - 1) setStep(moneyStep);
     else setStep(step + 1);
   };
 
@@ -229,7 +241,7 @@ export default function TravelQuiz() {
     if (resultVisible) {
       setDirection(-1);
       setShowResult(false);
-      setStep(Math.max(questions.length - 1, 0));
+      setStep(moneyStep);
       return;
     }
     if (step === 0) return;
@@ -272,8 +284,8 @@ export default function TravelQuiz() {
     const payload = {
       origin: travelData.origin || "",
       travellers: peopleCount,
-      days: result.days,
-      budgetMillions: travelData.budget || null,
+      days,
+      budgetMillions,
       freeText: described ? description : "",
       questions: questions.map((question) => ({
         key: question.key,
@@ -296,7 +308,7 @@ export default function TravelQuiz() {
         // The local result is already on screen.
       })
       .finally(() => setAnalysing(false));
-  }, [answers, description, described, peopleCount, questions, result.days, travelData.budget, travelData.origin]);
+  }, [answers, budgetMillions, days, description, described, peopleCount, questions, travelData.origin]);
 
   useEffect(() => {
     if (!resultVisible) return;
@@ -306,16 +318,16 @@ export default function TravelQuiz() {
   }, [resultVisible]);
 
   const startTrip = (suggestion: CitySuggestion) => {
-    const days = Math.max(1, suggestion.days || 3);
-    const people = Math.max(1, (travelData.travelers || 2) + (travelData.children || 0));
-    const budget = budgetFromDaily(result.dailyToman, days, people);
+    // The traveller's own numbers win: the budget they typed and the days they
+    // chose are what every later step spends.
+    const tripDays = Math.max(1, days || suggestion.days || 3);
     setTravelData((current) => ({
       ...current,
       destination: suggestion.name,
-      days,
+      days: tripDays,
       departureDate: current.departureDate || isoIn(7),
-      returnDate: current.returnDate || isoIn(7 + days),
-      budget: budget ?? current.budget,
+      returnDate: isoIn(7 + tripDays),
+      budget: budgetMillions,
       tripStyle: result.headline,
       quizResult: suggestion.name,
       quizAnswers: answers,
@@ -350,7 +362,7 @@ export default function TravelQuiz() {
               سفر بعدی‌ات <span className="gradient-text">چه حالی</span> دارد؟
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-[11.5px] leading-7 text-slate-400 sm:text-sm">
-              ده سؤال کوتاه — هر بار سؤال‌های تازه — تا بر اساس سلیقه و بودجه‌ات شهر مناسب را در ایران پیدا کنیم.
+              دوازده سؤال کوتاه — هر بار سؤال‌های تازه — و در پایان بودجه و طول سفر؛ تا شهر مناسب را در ایران پیدا کنیم.
             </p>
             {questionSource === "ai" ? (
               <p className="mt-2 text-[9.5px] text-emerald-300/80">سؤال‌های این دور مخصوص همین سفر نوشته شدند؛ دور بعدی سؤال‌های دیگری دارد.</p>
@@ -412,7 +424,7 @@ export default function TravelQuiz() {
             <div className="mb-5">
               <div className="mb-2.5 flex items-center justify-between gap-3 text-[10.5px] text-slate-400">
                 <span aria-live="polite">
-                  {resultVisible ? "نتیجه آماده است" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
+                  {resultVisible ? "نتیجه آماده است" : onMoneyStep ? "آخرین قدم · بودجه و طول سفر" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
                 </span>
                 <b className="text-cyan-300">{faNumber(Math.round(progress))}٪</b>
               </div>
@@ -447,6 +459,110 @@ export default function TravelQuiz() {
                     {Array.from({ length: 4 }).map((_, index) => (
                       <div key={index} className="h-16 animate-pulse rounded-2xl bg-white/5" />
                     ))}
+                  </div>
+                </motion.div>
+              ) : onMoneyStep ? (
+                <motion.div
+                  key="money-step"
+                  custom={direction}
+                  initial={{ opacity: 0, x: direction * 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: direction * -30 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <div className="text-center">
+                    <span className="chip border-turquoise-400/30 bg-turquoise-400/10 !text-turquoise-200">
+                      <Banknote className="h-3.5 w-3.5" />
+                      همیشه پرسیده می‌شود
+                    </span>
+                    <h2 className="mt-3 text-lg font-extrabold leading-8 text-white sm:text-xl">بودجه و طول سفرت چقدر است؟</h2>
+                    <p className="mt-1.5 text-[11px] leading-6 text-slate-400">
+                      این دو عدد پای همهٔ پیشنهادهاست: بلیت، اقامت و آنچه برای غذا و گشت می‌مانَد.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <label className="block">
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-300">
+                        <span>بودجهٔ کل سفر (برای همهٔ نفرات)</span>
+                        <b className="text-cyan-200">{faNumber(budgetMillions)} میلیون تومان</b>
+                      </span>
+                      <span className="mt-2 flex items-center gap-2 rounded-xl border border-white/10 bg-night-800/90 px-3 py-2">
+                        <input
+                          dir="ltr"
+                          type="number"
+                          min={3}
+                          max={300}
+                          step={1}
+                          value={budgetMillions}
+                          onChange={(event) => setBudgetMillions(Math.min(300, Math.max(3, Math.round(Number(event.target.value) || 3))))}
+                          aria-label="بودجهٔ کل سفر به میلیون تومان"
+                          className="w-24 bg-transparent text-center text-base font-black text-white outline-none"
+                        />
+                        <span className="text-[10px] text-slate-400">میلیون تومان</span>
+                        <input
+                          type="range"
+                          min={5}
+                          max={120}
+                          step={1}
+                          value={Math.min(120, budgetMillions)}
+                          onChange={(event) => setBudgetMillions(Number(event.target.value))}
+                          className="mr-auto w-full max-w-[180px] cursor-pointer accent-cyan-400"
+                          aria-label="تنظیم بودجه"
+                        />
+                      </span>
+                    </label>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {[10, 15, 20, 30, 45, 70].map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => setBudgetMillions(amount)}
+                          aria-pressed={budgetMillions === amount}
+                          className={`rounded-full border px-3 py-1 text-[10.5px] font-bold transition ${
+                            budgetMillions === amount ? "border-cyan-400/50 bg-cyan-400/15 text-cyan-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          {faNumber(amount)} میلیون
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 border-t border-white/5 pt-4">
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-300">
+                        <span>چند روز می‌خواهی بمانی؟</span>
+                        <b className="text-cyan-200">{faNumber(days)} روز · {faNumber(Math.max(1, days - 1))} شب</b>
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {[2, 3, 4, 5, 7, 10].map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setDays(amount)}
+                            aria-pressed={days === amount}
+                            className={`rounded-full border px-3 py-1 text-[10.5px] font-bold transition ${
+                              days === amount ? "border-teal-400/50 bg-teal-400/15 text-teal-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                            }`}
+                          >
+                            {faNumber(amount)} روز
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[9.5px] leading-6 text-slate-500">
+                        با این دو عدد، سهم غذا و رفت‌وآمد روزانه هم حساب می‌شود تا پیشنهاد از بودجهٔ واقعی بیرون نزند.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/5 pt-4">
+                    <button type="button" onClick={goBack} className="btn-ghost !px-3.5 !py-2 text-[11px]">
+                      <ArrowRight className="h-3.5 w-3.5" />
+                      قبلی
+                    </button>
+                    <button type="button" onClick={goNext} className="btn-primary !px-4 !py-2.5 text-[11px]">
+                      دیدن پیشنهادها
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </motion.div>
               ) : !resultVisible ? (

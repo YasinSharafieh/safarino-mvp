@@ -43,9 +43,10 @@ check("an empty search returns everything", searchCars("").length === CARS.lengt
 check("spaces are trimmed", searchCars("   ").length === CARS.length);
 
 console.log("Fuel options are the prices on the pump");
-check("two real prices plus a custom one", FUEL_OPTIONS.length === 3);
+check("quota, free, a mix and a custom price", FUEL_OPTIONS.length === 4);
 check("the quota price is 1,500", FUEL_OPTIONS[0].pricePerLiter === 1_500);
-check("the free price is 3,000", FUEL_OPTIONS[1].pricePerLiter === 3_000);
+check("the free price is 10,000", FUEL_OPTIONS[1].pricePerLiter === 10_000);
+check("the free price follows the pump, not the old 3,000", Number(FUEL_OPTIONS[1].pricePerLiter) !== 3_000);
 
 console.log("The car bill adds up");
 const testCar = {

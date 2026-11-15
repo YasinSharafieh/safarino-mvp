@@ -5,7 +5,9 @@
  * exactly where every toman comes from — and can change any assumption:
  *
  *   fuel         = kilometres / 100 × litres-per-100km × price per litre
- *   depreciation = kilometres × (car value / useful life in km)
+ *   depreciation = kilometres × min(car value / useful life, a sane ceiling)
+ *                  — a car does not lose a quarter of its value on one trip,
+ *                  which is what the uncapped formula did for imported cars.
  *   service      = kilometres × service cost per km (tyres, oil, filters)
  *   tolls        = intercity kilometres × toll per km
  *   city         = days × kilometres driven inside the city (fuel + depreciation
@@ -62,8 +64,19 @@ export type CarTripCost = {
 };
 
 export const DEFAULT_CITY_KM_PER_DAY = 35;
-export const DEFAULT_TOLL_PER_KM = 180;
+/** Real motorway tolls sit in this range per kilometre for a passenger car. */
+export const DEFAULT_TOLL_PER_KM = 350;
 export const DEFAULT_PARKING_PER_DAY = 100_000;
+/**
+ * The ceiling on wear per kilometre.
+ *
+ * Dividing a car's price by its lifetime kilometres is right for a Pride and
+ * absurd for an imported SUV whose price is many times its durability: 9 billion
+ * toman over 400,000 km would put 22,500 toman of «depreciation» on every single
+ * kilometre and turn a weekend trip into tens of millions. Wear is capped here,
+ * and the cap is shown in the line's formula so nobody has to guess.
+ */
+export const MAX_DEPRECIATION_PER_KM = 6_000;
 
 const round = (value: number) => Math.round(value);
 const fa = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 });
@@ -85,7 +98,9 @@ export function computeCarTrip(input: CarTripInput): CarTripCost {
   const litres = (totalKm / 100) * input.car.consumption;
 
   const fuel = litres * input.fuelPricePerLiter;
-  const depreciation = totalKm * (valueToman / lifeKm);
+  const rawPerKm = lifeKm > 0 ? valueToman / lifeKm : 0;
+  const depreciationPerKm = Math.min(rawPerKm, MAX_DEPRECIATION_PER_KM);
+  const depreciation = totalKm * depreciationPerKm;
   const service = totalKm * servicePerKm;
   const tolls = intercityKm * tollPerKm;
   const parking = parkingPerDay * days;
@@ -103,7 +118,10 @@ export function computeCarTrip(input: CarTripInput): CarTripCost {
       label: "استهلاک خودرو",
       amount: round(depreciation),
       source: "estimate",
-      formula: `ارزش ${faInt.format(valueToman)} تومان ÷ عمر ${faInt.format(lifeKm)} کیلومتر × ${fa.format(totalKm)} کیلومتر`,
+      formula:
+        rawPerKm > MAX_DEPRECIATION_PER_KM
+          ? `${faInt.format(depreciationPerKm)} تومان هر کیلومتر (سقف منطقی استهلاک) × ${fa.format(totalKm)} کیلومتر — بدون این سقف، ${faInt.format(rawPerKm)} تومان هر کیلومتر درمی‌آمد`
+          : `${faInt.format(valueToman)} تومان ارزش ÷ ${faInt.format(lifeKm)} کیلومتر عمر × ${fa.format(totalKm)} کیلومتر = ${faInt.format(depreciationPerKm)} تومان هر کیلومتر`,
     },
     {
       id: "service",

@@ -189,11 +189,20 @@ export function findCar(id: string): CarModel | undefined {
 /** The car most people start from: cheap, common, easy to compare. */
 export const DEFAULT_CAR_ID = "pride";
 
-/** Fuel prices that are actually on the pump today, per litre. */
+/**
+ * Fuel prices on the pump, per litre.
+ *
+ * Two prices exist at the same time: the subsidised quota that comes with a fuel
+ * card, and the free price anyone pays beyond it. Both are editable in the
+ * calculator, because they change and because a traveller may know better.
+ */
+export const QUOTA_LITRES_PER_MONTH = 60;
+
 export const FUEL_OPTIONS = [
-  { id: "quota", label: "بنزین سهمیه‌ای", pricePerLiter: 1_500, hint: "با کارت سوخت و سهمیهٔ ماهانه" },
-  { id: "free", label: "بنزین آزاد", pricePerLiter: 3_000, hint: "بدون سهمیه، قیمت آزاد" },
-  { id: "custom", label: "قیمت دلخواه", pricePerLiter: 3_000, hint: "اگر قیمت دیگری پرداخت می‌کنید" },
+  { id: "quota", label: "بنزین سهمیه‌ای", pricePerLiter: 1_500, hint: `با کارت سوخت، تا ${QUOTA_LITRES_PER_MONTH} لیتر در ماه` },
+  { id: "free", label: "بنزین آزاد", pricePerLiter: 10_000, hint: "بدون سهمیه یا بیشتر از سقف سهمیه" },
+  { id: "mixed", label: "سهمیه + آزاد", pricePerLiter: 5_750, hint: `میانگین: ${QUOTA_LITRES_PER_MONTH} لیتر سهمیه‌ای و بقیه آزاد` },
+  { id: "custom", label: "قیمت دلخواه", pricePerLiter: 10_000, hint: "اگر قیمت دیگری پرداخت می‌کنید" },
 ] as const;
 
 export type FuelOptionId = (typeof FUEL_OPTIONS)[number]["id"];

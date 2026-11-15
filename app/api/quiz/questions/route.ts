@@ -21,10 +21,15 @@ const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-l
 const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
 // Ten four-option questions in Persian are long; a short cap truncates the
 // JSON and the whole set is lost, so the answer gets room to finish.
-const MAX_OUTPUT_TOKENS = 4000;
+const MAX_OUTPUT_TOKENS = 4800;
 
-/** How many questions a traveller is asked; ten is the floor the user set. */
-const WANTED = 10;
+/**
+ * How many questions a traveller is asked. Ten is the floor; twelve gives room
+ * for the budget, the party, the transport, the climate and the taste to all be
+ * asked properly, and the budget is asked again — with a real number — right
+ * before the result.
+ */
+const WANTED = 12;
 
 function extractJson(content: string): unknown {
   const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");

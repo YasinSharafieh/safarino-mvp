@@ -14,6 +14,8 @@ import {
   MapPin,
   Plane,
   RefreshCw,
+  MapPinOff,
+  MapPinCheck,
   TrainFront,
   Users,
 } from "lucide-react";
@@ -21,6 +23,8 @@ import type { TripPackage, TripPackagesResult } from "@/lib/trip-packages";
 import { estimateBudget } from "@/lib/budget-fit";
 import { useTravel } from "@/app/context/TravelContext";
 import { detectBrowserCity, readSavedOrigin, saveOrigin } from "@/lib/visitor-city";
+import { orderedTravelCities } from "@/lib/start-flow";
+import CityCombobox from "@/components/CityCombobox";
 
 const money = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
 const compact = (value: number) =>
@@ -78,6 +82,11 @@ export default function HomeDeals() {
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [originHint, setOriginHint] = useState<string | null>(null);
+  /** «تغییر مبدأ»: the traveller's own city, editable at any time. */
+  const [originDraft, setOriginDraft] = useState("");
+  const [originEditing, setOriginEditing] = useState(false);
+  /** Bumped by «به‌روزرسانی» so the request really goes back to the providers. */
+  const [refreshToken, setRefreshToken] = useState(0);
   const { travelData } = useTravel();
   const [budgetMillions, setBudgetMillions] = useState<number>(() => Math.max(3, Math.round(Number(travelData.budget) || 15)));
   const [originSource, setOriginSource] = useState<"request" | "geo" | "default" | null>(null);
@@ -112,7 +121,12 @@ export default function HomeDeals() {
     const controller = new AbortController();
     // The section must never hang: if the providers are slow, say so plainly.
     const timer = window.setTimeout(() => controller.abort(), 62_000);
-    const query = originHint ? `?from=${encodeURIComponent(originHint)}` : "";
+    const params = new URLSearchParams();
+    if (originHint) params.set("from", originHint);
+    // Only a press of «به‌روزرسانی» asks for a fresh crawl; the first paint of
+    // the page stays fast and uses the saved copy when it is still warm.
+    if (refreshToken > 0) params.set("fresh", "1");
+    const query = params.toString() ? `?${params.toString()}` : "";
     fetch(`/api/deals${query}`, { cache: "no-store", signal: controller.signal })
       .then((response) => response.json())
       .then((payload: TripPackagesResult) => {
@@ -137,10 +151,11 @@ export default function HomeDeals() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [reloadKey, originHint]);
+  }, [reloadKey, originHint, refreshToken]);
 
   const packages: TripPackage[] = data?.packages || [];
   const origin = data?.origin || originHint || "تهران";
+  const originCities = useMemo(() => orderedTravelCities(), []);
 
   /**
    * The budget the visitor already set (or a sensible default), read against
@@ -174,10 +189,24 @@ export default function HomeDeals() {
         <div>
           <span className="chip">پیشنهادهای ویژه</span>
           <h2 className="section-title mt-3">سفر کامل، از شهر خودت</h2>
-          <p className="mt-3 max-w-xl text-xs leading-6 text-slate-400">
-            مبدأ: <b className="text-white">{origin}</b>
-            {originSource === "geo" ? " (از موقعیت همین دستگاه)" : originSource === "request" ? " (شهر انتخابی شما)" : ""} · هر بسته با
-            بلیت رفت‌وبرگشت واقعی و اقامت واقعی همان تاریخ‌ها، از ارزان به گران.
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-6 text-slate-400">
+            <span>
+              مبدأ: <b className="text-white">{origin}</b>
+              {originSource === "geo" ? " (از موقعیت همین دستگاه)" : originSource === "request" ? " (شهر انتخابی شما)" : ""} · هر بسته با
+              بلیت رفت‌وبرگشت واقعی و اقامت واقعی همان تاریخ‌ها، از ارزان به گران.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setOriginDraft(origin);
+                setOriginEditing((value) => !value);
+              }}
+              aria-expanded={originEditing}
+              className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-extrabold text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              <MapPin className="h-3 w-3" />
+              تغییر مبدأ
+            </button>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -198,7 +227,7 @@ export default function HomeDeals() {
           </label>
           <button
             type="button"
-            onClick={() => setReloadKey((value) => value + 1)}
+            onClick={() => setRefreshToken((value) => value + 1)}
             disabled={loading}
             className="btn-ghost !px-3.5 !py-2 text-[11px] disabled:opacity-50"
           >
@@ -207,6 +236,60 @@ export default function HomeDeals() {
           </button>
         </div>
       </div>
+
+      {originEditing ? (
+        <div className="glass mt-4 border border-cyan-400/25 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <b className="text-[11.5px] font-black text-white">سفر از کدام شهر شروع شود؟</b>
+            <span className="text-[9.5px] text-slate-500">همهٔ بسته‌ها با مبدأ تازه از منابع دوباره خوانده می‌شوند.</span>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <CityCombobox
+              label="شهر مبدأ"
+              value={originDraft}
+              cities={originCities}
+              placeholder="شهر خودت را انتخاب کن…"
+              onChange={(city) => setOriginDraft(city.name)}
+            />
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const name = originDraft.trim();
+                  if (!name) return;
+                  saveOrigin(name);
+                  setOriginHint(name);
+                  setOriginSource("request");
+                  setOriginEditing(false);
+                  // A new origin is a new trip: the old cards must not linger.
+                  setData(null);
+                  setRefreshToken((value) => value + 1);
+                }}
+                className="btn-primary !px-4 !py-2.5 text-[11px]"
+              >
+                <MapPinCheck className="h-3.5 w-3.5" />
+                همین مبدأ
+              </button>
+              <button type="button" onClick={() => setOriginEditing(false)} className="btn-ghost !px-3 !py-2.5 text-[11px]">
+                <MapPinOff className="h-3.5 w-3.5" />
+                انصراف
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {["تهران", "مشهد", "اصفهان", "شیراز", "تبریز", "رشت", "اهواز", "کرج"].filter((city) => city !== origin).map((city) => (
+              <button
+                key={city}
+                type="button"
+                onClick={() => setOriginDraft(city)}
+                className={`rounded-full border px-2.5 py-1 text-[10px] font-bold transition ${originDraft === city ? "border-cyan-400/50 bg-cyan-400/15 text-cyan-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"}`}
+              >
+                {city}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {loading && !packages.length ? (
         <div className="mt-8">

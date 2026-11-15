@@ -38,6 +38,11 @@ export default function StartCitiesPage() {
   const [destination, setDestination] = useState("");
   const [departureDate, setDepartureDate] = useState("");
   const [returnDate, setReturnDate] = useState("");
+  /**
+   * One-way is a real choice, not a disabled field: plenty of trips are one-way
+   * and every ticket source sells them, so the traveller decides here.
+   */
+  const [roundTrip, setRoundTrip] = useState(true);
   const [travelers, setTravelers] = useState(2);
   const [budget, setBudget] = useState(15);
   const [children, setChildren] = useState(0);
@@ -107,7 +112,7 @@ export default function StartCitiesPage() {
     };
   }, [origin, destination]);
 
-  const nights = departureDate && returnDate && returnDate > departureDate
+  const nights = roundTrip && departureDate && returnDate && returnDate > departureDate
     ? Math.round((Date.parse(`${returnDate}T00:00:00Z`) - Date.parse(`${departureDate}T00:00:00Z`)) / 86_400_000)
     : 0;
 
@@ -127,8 +132,12 @@ export default function StartCitiesPage() {
       setError("مبدأ و مقصد نمی‌توانند یکی باشند.");
       return;
     }
-    if (!departureDate || !returnDate || nights < 1) {
-      setError("تاریخ رفت و برگشت را انتخاب کنید؛ حداقل یک شب.");
+    if (!departureDate) {
+      setError("تاریخ حرکت را انتخاب کنید.");
+      return;
+    }
+    if (roundTrip && (!returnDate || nights < 1)) {
+      setError("برای سفر رفت‌وبرگشت، تاریخ برگشت را هم انتخاب کنید؛ حداقل یک شب.");
       return;
     }
     setError("");
@@ -137,8 +146,8 @@ export default function StartCitiesPage() {
       origin,
       destination,
       departureDate,
-      returnDate,
-      days: Math.max(1, nights),
+      returnDate: roundTrip ? returnDate : "",
+      days: Math.max(1, roundTrip ? nights : 1),
       budget,
       travelers,
       children,
@@ -229,14 +238,17 @@ export default function StartCitiesPage() {
             <div className="relative z-30 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
               <p className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
                 <CalendarDays className="h-3.5 w-3.5 text-cyan-300" />
-                تاریخ رفت و برگشت
-                <span className="mr-auto text-[9px] font-normal text-slate-500">پیش‌فرض: امروز</span>
+                تاریخ سفر
+                <span className="mr-auto text-[9px] font-normal text-slate-500">پیش‌فرض: امروز — یک‌طرفه یا رفت‌وبرگشت، هر کدام را بخواهی</span>
               </p>
               <JalaliRangeCalendar
                 departureDate={departureDate}
-                returnDate={returnDate}
-                roundTrip
-                onRoundTripChange={() => {}}
+                returnDate={roundTrip ? returnDate : ""}
+                roundTrip={roundTrip}
+                onRoundTripChange={(value) => {
+                  setRoundTrip(value);
+                  if (value && departureDate && (!returnDate || returnDate <= departureDate)) setReturnDate(addDays(departureDate, 2));
+                }}
                 onChange={(field, isoDate) => {
                   if (field === "departureDate") {
                     setDepartureDate(isoDate);
@@ -262,7 +274,7 @@ export default function StartCitiesPage() {
                 <p className="mt-2 flex items-center gap-1.5 text-[9.5px] leading-5 text-slate-500">
                   <Users className="h-3 w-3 text-cyan-300" />
                   {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر ·{" "}
-                  {nights > 0 ? `${new Intl.NumberFormat("fa-IR").format(nights)} شب` : "تاریخ را انتخاب کنید"}
+                  {roundTrip ? (nights > 0 ? `${new Intl.NumberFormat("fa-IR").format(nights)} شب` : "تاریخ را انتخاب کنید") : "سفر یک‌طرفه"}
                 </p>
               </div>
 
@@ -308,10 +320,10 @@ export default function StartCitiesPage() {
             </div>
           </div>
 
-          {origin && destination && nights > 0 ? (
+          {origin && destination && (roundTrip ? nights > 0 : Boolean(departureDate)) ? (
             <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-2.5 text-[10px] leading-6 text-cyan-100">
-              سفر شما: <b>{origin}</b> → <b>{destination}</b> · {formatJalaliDate(departureDate)} تا {formatJalaliDate(returnDate)} ·{" "}
-              {new Intl.NumberFormat("fa-IR").format(nights)} شب · {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر · بودجهٔ{" "}
+              سفر شما: <b>{origin}</b> → <b>{destination}</b> ·{" "}
+              {roundTrip ? `${formatJalaliDate(departureDate)} تا ${formatJalaliDate(returnDate)} · ${new Intl.NumberFormat("fa-IR").format(nights)} شب` : `${formatJalaliDate(departureDate)} · یک‌طرفه`} · {new Intl.NumberFormat("fa-IR").format(travelers + children + infants)} نفر · بودجهٔ{" "}
               {new Intl.NumberFormat("fa-IR").format(budget)} میلیون تومان
               {distance ? (
                 <span className="mt-1 block text-cyan-200/90">

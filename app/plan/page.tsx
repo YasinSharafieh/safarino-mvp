@@ -48,6 +48,7 @@ import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
 import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
+import { cityPoint } from "@/lib/iran-cities";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = {
@@ -209,51 +210,119 @@ const DAY_SLOTS = ["۰۸:۳۰", "۱۰:۳۰", "۱۲:۳۰", "۱۵:۰۰", "۱۷:۳�
 
 /**
  * «خودت پیشنهاد بده» — no AI, no invention: the traveller's own places are put
- * into real time slots, nearest to the stay first, with the arrival and the
- * check-in at the top of the first day and food in the gaps.
+ * into real time slots, with the timetable the chosen ticket actually produces.
+ *
+ * The day is built like a person plans it:
+ *   arrive (the ticket's own clock time) → transfer to the stay → check in and
+ *   rest → first visit → lunch → afternoon visit → dinner.
+ * Every clock time is derived from the one before it plus a travel leg measured
+ * by the routing service, so «۱۰:۳۰» is a real time, not a label.
  */
+
+/** How long a visit really takes, by what it is. */
+function visitMinutes(category: string): number {
+  const value = category || "";
+  if (/موزه|گالری/.test(value)) return 90;
+  if (/بازار|خرید/.test(value)) return 75;
+  if (/پارک|بوستان|طبیعت|چشم‌انداز/.test(value)) return 60;
+  if (/مسجد|زیارت|آرامگاه|حرم|کلیسا/.test(value)) return 45;
+  if (/قلعه|محوطه|باستانی/.test(value)) return 90;
+  return 75;
+}
+
+/** «09:05» → 545, and back, so the schedule can be arithmetic. */
+function minutesOfClock(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return Math.min(23 * 60 + 59, Math.max(0, hours * 60 + minutes));
+}
+
+function clockOfMinutes(total: number): string {
+  const wrapped = ((Math.round(total) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours = String(Math.floor(wrapped / 60)).padStart(2, "0");
+  const minutes = String(wrapped % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+const faTime = (total: number) => new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false }).format(Math.floor((total % (24 * 60)) / 60)) + ":" + new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false }).format(total % 60);
+
+const faNum = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
+
 function slotDays(input: {
   destination: string;
   days: number;
   places: PlanPoiWithStay[];
   arrivalTime: string | null;
+  /** Real minutes from the terminal (airport/station) to the chosen stay. */
+  transferMinutes?: number | null;
+  /** Real kilometres for the same hop, when it was measured. */
+  transferKm?: number | null;
+  origin?: string;
 }): PlanDay[] {
+  // Nearest to the stay first: the first day needs the least driving.
   const pool = [...input.places].sort((a, b) => {
     const first = typeof a.fromStayKm === "number" ? a.fromStayKm : a.distanceKm;
     const second = typeof b.fromStayKm === "number" ? b.fromStayKm : b.distanceKm;
     return first - second;
   });
+
+  const arrival = minutesOfClock(input.arrivalTime);
+  const transfer = Math.max(10, Math.round(input.transferMinutes ?? 45));
+
   return Array.from({ length: Math.max(1, input.days) }, (_, index) => {
     const day = index + 1;
     const items: PlanItem[] = [];
+    // The clock this day starts from.
+    let clock = day === 1 ? (arrival ?? 9 * 60) : 8 * 60 + 30;
+
     if (day === 1) {
       items.push({
-        time: input.arrivalTime || DAY_SLOTS[0],
-        title: `رسیدن به ${input.destination}`,
+        time: clockOfMinutes(clock),
+        title: input.arrivalTime ? `رسیدن به ${input.destination}` : `حرکت به سمت ${input.destination}`,
         description: input.arrivalTime
-          ? "طبق ساعت بلیت انتخاب‌شده به مقصد می‌رسید؛ بارها را در اقامتگاه بگذارید و کمی استراحت کنید."
-          : "پس از رسیدن به مقصد، اول به سمت اقامتگاه بروید و بارها را بگذارید.",
+          ? `طبق ساعت بلیت انتخاب‌شده، ${faTime(clock)} در ${input.destination} هستید${input.origin ? ` (از ${input.origin} راهی شده‌اید)` : ""}.`
+          : "ساعت رسیدن در بلیت ثبت نشده؛ برنامه از صبح شروع می‌شود و با ساعت واقعی بلیت هماهنگ می‌شود.",
         type: "transport",
       });
+      clock += transfer;
       items.push({
-        time: "۱۳:۳۰",
-        title: "تحویل گرفتن اقامتگاه و استراحت",
-        description: "جا افتادن در اتاق، کمی استراحت و آماده شدن برای اولین بازدید.",
+        time: clockOfMinutes(clock),
+        title: "رسیدن به اقامتگاه",
+        description: input.transferKm && input.transferKm > 0
+          ? `حدود ${faNum(transfer)} دقیقه و ${faNum(input.transferKm)} کیلومتر تا اقامتگاه (مسیر واقعی جاده)؛ بارها را بگذارید و اگر اتاق آماده نبود چمدان را تحویل دهید.`
+          : `حدود ${faNum(transfer)} دقیقه تا اقامتگاه؛ بارها را بگذارید و اگر اتاق آماده نبود چمدان را تحویل دهید.`,
+        type: "rest",
+      });
+      clock += 45;
+      items.push({
+        time: clockOfMinutes(clock),
+        title: "استراحت کوتاه و آماده‌شدن",
+        description: "چای یا قهوه‌ای، یک دوش و شروع اولین بازدید با انرژی.",
         type: "rest",
       });
     } else {
-      items.push({ time: DAY_SLOTS[0], title: "صبحانه و شروع روز", description: "صبحانه و آماده‌شدن برای بازدیدهای امروز.", type: "food" });
+      items.push({ time: clockOfMinutes(clock), title: "صبحانه و شروع روز", description: "صبحانه، آماده‌شدن و مرور برنامهٔ امروز.", type: "food" });
+      clock += 60;
     }
-    let stop = 0;
-    for (const slot of DAY_SLOTS) {
+
+    let visits = 0;
+    let lunchDone = false;
+    while (clock < 20 * 60) {
       const poi = pool.shift();
       if (!poi) break;
-      stop += 1;
+      // Travel to this place, measured when we know where the traveller sleeps.
+      const travel = typeof poi.fromStayMinutes === "number" ? Math.max(10, poi.fromStayMinutes) : 25;
+      clock += travel;
       const km = typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm;
+      const stay = visitMinutes(poi.category);
       items.push({
-        time: slot,
+        time: clockOfMinutes(clock),
         title: poi.name,
-        description: `${poi.name} از جاذبه‌های ${poi.category} است؛ ${new Intl.NumberFormat("fa-IR").format(Math.round(km * 10) / 10)} کیلومتر از اقامتگاه شما${typeof poi.fromStayMinutes === "number" ? ` (حدود ${new Intl.NumberFormat("fa-IR").format(poi.fromStayMinutes)} دقیقه رانندگی)` : ""}.`,
+        description: `${poi.name} از جاذبه‌های ${poi.category} است؛ ${faNum(km)} کیلومتر از اقامتگاه${typeof poi.fromStayMinutes === "number" ? ` (حدود ${faNum(poi.fromStayMinutes)} دقیقه رانندگی)` : ""} · حدود ${faNum(stay)} دقیقه برای بازدید.`,
         type: "sightseeing",
         poiId: poi.id,
         poiCategory: poi.category,
@@ -261,15 +330,39 @@ function slotDays(input: {
         poiWikipediaUrl: poi.wikipediaUrl,
         poiDistanceKm: km,
       });
-      if (stop === 2) {
-        items.push({ time: "۱۳:۰۰", title: "ناهار در همان محله", description: "ناهار ساده و محلی نزدیک جاذبه‌های همین محله.", type: "food" });
+      clock += stay;
+      visits += 1;
+
+      // Lunch sits where a person actually gets hungry — around 12:30.
+      if (!lunchDone && clock >= 12 * 60 + 30 && clock <= 15 * 60) {
+        items.push({
+          time: clockOfMinutes(clock),
+          title: "ناهار در همان محله",
+          description: "ناهار ساده و محلی نزدیک همین جاذبه؛ بعد از آن کمی قدم‌زدن.",
+          type: "food",
+        });
+        clock += 75;
+        lunchDone = true;
       }
+      if (visits >= 3) break;
     }
-    items.push({ time: "۲۰:۳۰", title: "شام و بازگشت به اقامتگاه", description: "پایان روز با شام سبک و استراحت.", type: "food" });
-    items.sort((a, b) => a.time.localeCompare(b.time, "fa"));
+
+    if (!lunchDone) {
+      items.push({ time: clockOfMinutes(Math.max(clock, 12 * 60 + 45)), title: "ناهار", description: "ناهار در محلهٔ اقامتگاه.", type: "food" });
+      clock = Math.max(clock, 12 * 60 + 45) + 75;
+    }
+
+    items.push({
+      time: clockOfMinutes(Math.max(clock + 30, 20 * 60 + 30)),
+      title: "شام و بازگشت به اقامتگاه",
+      description: "پایان روز با شام سبک و استراحت؛ فردا صبح دوباره ادامه می‌دهیم.",
+      type: "food",
+    });
+
+    items.sort((a, b) => a.time.localeCompare(b.time));
     return {
       day,
-      title: `روز ${new Intl.NumberFormat("fa-IR").format(day)} · ${input.destination}`,
+      title: `روز ${faNum(day)} · ${input.destination}`,
       items,
     };
   });
@@ -295,6 +388,8 @@ export default function PlanPage() {
   const [poiData, setPoiData] = useState<PoiResponse | null>(null);
   const [poiLoading, setPoiLoading] = useState(false);
   const [poiDistances, setPoiDistances] = useState<Record<string, { distanceKm: number; durationMinutes: number | null }>>({});
+  /** Measured minutes from the origin city (airport/terminal) to the chosen stay. */
+  const [arrivalTransfer, setArrivalTransfer] = useState<{ minutes: number; distanceKm: number } | null>(null);
   const [distanceMeta, setDistanceMeta] = useState<{ engineLabel: string; engine: string; note: string; neshanConfigured: boolean } | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [placeFilters, setPlaceFilters] = useState<FilterOptions>({ query: "", categories: [], sort: "distance" });
@@ -432,7 +527,7 @@ export default function PlanPage() {
     fetch("/api/providers/pois/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ city, limit: 24 }),
+      body: JSON.stringify({ city, limit: 40 }),
       signal: controller.signal,
     })
       .then((response) => response.json())
@@ -498,6 +593,48 @@ export default function PlanPage() {
       controller.abort();
     };
   }, [poiData, canMeasureFromStay, stayLatitude, stayLongitude]);
+
+  /**
+   * How long it really takes to get from the traveller's own city to the door
+   * of the chosen stay. Without this the first day pretends everyone arrives
+   * at the hotel door. Neshan first, OSM second, and when there is no
+   * measurement the scheduler keeps its honest default.
+   */
+  useEffect(() => {
+    const start = cityPoint(origin.trim());
+    if (!start || !canMeasureFromStay) {
+      setArrivalTransfer(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    fetch("/api/route/poi-distances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origin: start,
+        targets: [{ id: "stay", latitude: stayLatitude, longitude: stayLongitude }],
+      }),
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((payload: { success?: boolean; entries?: { id: string; distanceKm: number; durationMinutes: number | null }[] }) => {
+        if (cancelled || !payload?.success) return;
+        const entry = payload.entries?.find((item) => item.id === "stay");
+        if (!entry || typeof entry.durationMinutes !== "number" || !Number.isFinite(entry.durationMinutes)) {
+          setArrivalTransfer(null);
+          return;
+        }
+        setArrivalTransfer({ minutes: Math.round(entry.durationMinutes), distanceKm: entry.distanceKm });
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalTransfer(null);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [origin, canMeasureFromStay, stayLatitude, stayLongitude]);
 
   useEffect(() => {
     if (!Object.keys(poiDistances).length) return;
@@ -628,7 +765,16 @@ export default function PlanPage() {
     }
     setPlan((current) => ({
       ...current,
-      days: slotDays({ destination, days: dayCount, places, arrivalTime }),
+      days: slotDays({
+        destination,
+        days: dayCount,
+        places,
+        arrivalTime,
+        // Real minutes from the origin city to the hotel, measured — never guessed.
+        transferMinutes: arrivalTransfer?.minutes ?? null,
+        transferKm: arrivalTransfer?.distanceKm ?? null,
+        origin,
+      }),
     }));
     setActiveDay(0);
     setNoticeTone("success");
@@ -822,6 +968,27 @@ export default function PlanPage() {
               })}
             </div>
             <p className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/5 p-3 text-xs leading-6 text-slate-300">{plan.budgetAnalysis.summary} مجموع تخمین: {formatToman(totalSpent)}.</p>
+          </section>
+
+          {/* ------------------------------------------- change one thing only */}
+          <section className="glass print:hidden mt-6 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" aria-label="تغییر انتخاب‌ها">
+            <p className="text-[11px] leading-6 text-slate-400">
+              چیزی را که می‌خواهی عوض کن — فقط همان بخش دوباره انتخاب می‌شود و بقیهٔ سفر دست‌نخورده می‌ماند.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/transport?change=ticket" className="btn-ghost !py-2.5 text-[11px]">
+                <Route className="h-3.5 w-3.5" />
+                تغییر بلیت
+              </Link>
+              <Link href="/accommodation?change=stay" className="btn-ghost !py-2.5 text-[11px]">
+                <BedDouble className="h-3.5 w-3.5" />
+                تغییر اقامتگاه
+              </Link>
+              <Link href="/start/cities" className="btn-ghost !py-2.5 text-[11px]">
+                <MapPin className="h-3.5 w-3.5" />
+                تغییر مبدأ و مقصد
+              </Link>
+            </div>
           </section>
 
           {accommodationDetails.status === "selected" && typeof accommodationDetails.name === "string" && (

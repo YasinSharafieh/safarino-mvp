@@ -103,7 +103,7 @@ async function warmPois(city: string): Promise<Step> {
   try {
     const existing = await readFreshSnapshot<Record<string, unknown>>(base);
     if (existing) return { label: `pois:${city}`, result: "kept", ms: Date.now() - started };
-    const result = await searchCityPois(city, 24);
+    const result = await searchCityPois(city, 40);
     if (!result.pois?.length) return { label: `pois:${city}`, result: "kept", ms: Date.now() - started };
     await writeSnapshot(base, result as unknown as Record<string, unknown>, 86_400, 604_800);
     return { label: `pois:${city}`, result: "refreshed", ms: Date.now() - started };

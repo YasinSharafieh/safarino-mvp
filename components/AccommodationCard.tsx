@@ -7,6 +7,7 @@ import { Check, ExternalLink, Images, MapPin, Star } from "lucide-react";
 import type { AccommodationGroup, AccommodationOffer } from "@/lib/accommodation-types";
 import { categorizeStay, PROVIDER_LABELS } from "@/lib/accommodation-types";
 import AccommodationImage from "./AccommodationImage";
+import { stayPrice } from "@/lib/stay-price";
 import ProviderBadge, { ProviderMark } from "./ProviderBadge";
 
 const numberFormatter = new Intl.NumberFormat("fa-IR");
@@ -24,6 +25,7 @@ export default function AccommodationCard({
   detailQuery = "",
   recommendedId,
   recommendReason,
+  people = 2,
 }: {
   group: AccommodationGroup;
   index: number;
@@ -35,6 +37,8 @@ export default function AccommodationCard({
   /** The offer Safarino suggests for this traveller's budget. */
   recommendedId?: string;
   recommendReason?: string;
+  /** How many guests the price has to be multiplied by. */
+  people?: number;
 }) {
   const [activeId, setActiveId] = useState(group.offers[0].id);
   useEffect(() => {
@@ -44,6 +48,13 @@ export default function AccommodationCard({
   const offer = group.offers.find((item) => item.id === activeId) || group.offers[0];
   const isSelected = selectedId === offer.id;
   const isRecommended = Boolean(recommendedId) && group.offers.some((item) => item.id === recommendedId);
+  const price = stayPrice({
+    priceTotalToman: offer.priceTotalToman,
+    pricePerNightToman: offer.pricePerNightToman,
+    people,
+    nights,
+    kind: offer.kind,
+  });
 
   return (
     <motion.article layout initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.35, delay: Math.min(index, 8) * 0.04 }} className={`glass group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 ${isSelected ? "border-cyan-300/50 shadow-glow" : "hover:border-white/25"}`}>
@@ -80,9 +91,21 @@ export default function AccommodationCard({
         <div className="flex items-start justify-between gap-3">
           <div>
             {offer.priceBeforeDiscountToman && <span className="block text-[10px] text-slate-500 line-through">{formatToman(offer.priceBeforeDiscountToman)}</span>}
-            <b className="text-lg font-black text-cyan-200">{formatToman(offer.priceTotalToman)}</b>
-            <span className="mt-1 block text-[10px] text-slate-500">قیمت کل {formatNumber(nights)} شب{offer.priceIncludesVat === true ? " · با مالیات" : offer.priceIncludesVat === false ? " · پیش از مالیات نهایی" : ""}</span>
-            <span className="mt-1 block text-[10px] text-cyan-300/70">میانگین هر شب {formatToman(offer.pricePerNightToman)}</span>
+            <b className="text-lg font-black text-cyan-200">{formatToman(price.total)}</b>
+            <span className="mt-1 block text-[10px] text-slate-500">
+              {price.perUnit ? `قیمت کل ${formatNumber(price.nights)} شب برای کل اقامتگاه` : `قیمت کل ${formatNumber(price.people)} نفر برای ${formatNumber(price.nights)} شب`}
+              {offer.priceIncludesVat === true ? " · با مالیات" : offer.priceIncludesVat === false ? " · پیش از مالیات نهایی" : ""}
+            </span>
+            <span className="mt-1 block rounded-lg border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1 text-[9.5px] leading-5 text-cyan-100/90">
+              {price.perUnit
+                ? price.formula
+                : `هر نفر هر شب ${formatToman(price.perPersonPerNight)} × ${formatNumber(price.people)} نفر × ${formatNumber(price.nights)} شب = ${formatToman(price.perPersonPerNight * price.people * price.nights)}`}
+            </span>
+            {!price.consistent && (
+              <span className="mt-1 block text-[9px] leading-5 text-amber-300/90">
+                مبلغ اعلام‌شدهٔ منبع {formatToman(price.total)} است؛ ممکن است نوع اتاق یا مالیات متفاوت باشد.
+              </span>
+            )}
           </div>
           <span className="shrink-0 text-[10px] text-slate-500">{offer.reviewCount ? `${formatNumber(offer.reviewCount)} نظر` : "بدون نظر ثبت‌شده"}</span>
         </div>

@@ -85,6 +85,28 @@ import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 import { bestStay, estimateBudget } from "@/lib/budget-fit";
 
+/** Every ordering a traveller reasonably asks for, in one place. */
+export type StaySort = "cheapest" | "priciest" | "rating" | "luxury" | "reviews";
+
+function compareOffers(sort: StaySort) {
+  return (a: AccommodationOffer, b: AccommodationOffer): number => {
+    switch (sort) {
+      case "priciest":
+        return b.priceTotalToman - a.priceTotalToman;
+      case "rating":
+        return (b.rating || 0) - (a.rating || 0) || b.reviewCount - a.reviewCount;
+      case "luxury":
+        // Stars first, then the guest score, then the price (the richer room wins a tie).
+        return (b.stars || 0) - (a.stars || 0) || (b.rating || 0) - (a.rating || 0) || b.priceTotalToman - a.priceTotalToman;
+      case "reviews":
+        return b.reviewCount - a.reviewCount || (b.rating || 0) - (a.rating || 0);
+      case "cheapest":
+      default:
+        return a.priceTotalToman - b.priceTotalToman;
+    }
+  };
+}
+
 export default function AccommodationPage() {
   const { travelData, setTravelData, isHydrated } = useTravel();
   const initialized = useRef(false);
@@ -113,7 +135,7 @@ export default function AccommodationPage() {
   const [minStars, setMinStars] = useState(0);
   const [stayType, setStayType] = useState("all");
   const [amenity, setAmenity] = useState("all");
-  const [sort, setSort] = useState<"price" | "rating">("price");
+  const [sort, setSort] = useState<StaySort>("cheapest");
   const [nameQuery, setNameQuery] = useState("");
   const [budgetOnly, setBudgetOnly] = useState(false);
 
@@ -369,14 +391,10 @@ export default function AccommodationPage() {
         return true;
       });
       if (!matching.length) return [];
-      matching.sort((a, b) => sort === "price"
-        ? a.priceTotalToman - b.priceTotalToman
-        : (b.rating || 0) - (a.rating || 0) || b.reviewCount - a.reviewCount);
+      matching.sort(compareOffers(sort));
       return [{ ...group, id: matching[0].id, offers: matching }];
     });
-    return filtered.sort((a, b) => sort === "price"
-      ? a.offers[0].priceTotalToman - b.offers[0].priceTotalToman
-      : (b.offers[0].rating || 0) - (a.offers[0].rating || 0) || b.offers[0].reviewCount - a.offers[0].reviewCount);
+    return filtered.sort((a, b) => compareOffers(sort)(a.offers[0], b.offers[0]));
   }, [amenity, beforeAccommodation, budgetOnly, groups, kind, maxTotalPrice, minRating, minStars, nameQuery, sort, stayType]);
 
   const recommendation = useMemo(() => {
@@ -394,7 +412,7 @@ export default function AccommodationPage() {
     setStayType("all");
     setAmenity("all");
     setBudgetOnly(false);
-    setSort("price");
+    setSort("cheapest");
   }
 
   return (
@@ -546,7 +564,18 @@ export default function AccommodationPage() {
                       <FilterSelect label="حداقل ستاره هتل" value={String(minStars)} onChange={(next) => setMinStars(Number(next))} options={[{ value: "0", label: "همه هتل‌ها" }, ...[2, 3, 4, 5].map((value) => ({ value: String(value), label: `${formatNumber(value)} ستاره به بالا` }))]} />
                       <FilterSelect label="امکانات" value={amenity} onChange={setAmenity} options={[{ value: "all", label: "همه امکانات" }, { value: "breakfast", label: "صبحانه" }, { value: "wifi", label: "اینترنت / WiFi" }, { value: "pool", label: "استخر" }, { value: "parking", label: "پارکینگ" }]} />
                     </> : <FilterSelect label="نوع اقامتگاه" value={stayType} onChange={setStayType} options={[{ value: "all", label: "همه" }, ...STAY_TYPE_FILTERS.map((item) => ({ value: item.key, label: item.label }))]} />}
-                    <FilterSelect label="مرتب‌سازی" value={sort} onChange={(next) => setSort(next as "price" | "rating")} options={[{ value: "price", label: "ارزان‌ترین قیمت کل" }, { value: "rating", label: "بالاترین امتیاز" }]} />
+                    <FilterSelect
+                      label="مرتب‌سازی"
+                      value={sort}
+                      onChange={(next) => setSort(next as StaySort)}
+                      options={[
+                        { value: "cheapest", label: "کم‌ترین قیمت" },
+                        { value: "priciest", label: "بیشترین قیمت" },
+                        { value: "rating", label: "بالاترین امتیاز مسافران" },
+                        { value: "luxury", label: "لوکس‌ترین (بیشترین ستاره)" },
+                        { value: "reviews", label: "پرتعدادترین نظر" },
+                      ]}
+                    />
                   </aside>
 
                   <section>
@@ -587,7 +616,7 @@ export default function AccommodationPage() {
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <AnimatePresence mode="popLayout">{filteredGroups.map((group, index) => (
-                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
+                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} people={Math.max(1, travelData.travelers + travelData.children)} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
                         ))}</AnimatePresence>
                       </motion.div>
                     ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}

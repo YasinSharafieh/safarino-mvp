@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     const neshanReady = neshanAvailable(requestKey);
     const hasOrigin = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0;
 
-    const poiResult = await searchCityPois(city, 30);
+    const poiResult = await searchCityPois(city, 45);
     const places: NearbyPlace[] = poiResult.pois.map(fromPoi);
     const seen = new Set<string>();
     places.forEach((place) => seen.add(nameKey(place.name)));
