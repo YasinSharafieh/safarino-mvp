@@ -36,6 +36,22 @@ function extractJson(content: string): unknown {
   }
 }
 
+/** Fills a short model-written set from the local bank, never repeating one. */
+function topUp(written: AiQuestion[], wanted: number): AiQuestion[] {
+  const out = written.slice(0, wanted);
+  const keys = new Set(out.map((question) => question.key));
+  const prompts = new Set(out.map((question) => question.prompt));
+  if (out.length >= wanted) return out;
+  for (const candidate of drawQuestions(Math.random, 20)) {
+    if (out.length >= wanted) break;
+    if (keys.has(candidate.key) || prompts.has(candidate.prompt)) continue;
+    out.push(candidate);
+    keys.add(candidate.key);
+    prompts.add(candidate.prompt);
+  }
+  return out;
+}
+
 async function askModel(model: string, prompt: string, apiKey: string) {
   const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
   let actualMicros = 0;
@@ -72,9 +88,13 @@ async function askModel(model: string, prompt: string, apiKey: string) {
     const content = payload?.choices?.[0]?.message?.content;
     if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
     const parsed = extractJson(content) as Record<string, unknown>;
-    const questions = sanitizeQuestions(parsed?.questions ?? parsed, WANTED);
-    if (questions.length < WANTED) throw new Error("Not enough usable questions");
-    return { questions: questions.slice(0, WANTED), model, costMicros: actualMicros };
+    const written = sanitizeQuestions(parsed?.questions ?? parsed, WANTED);
+    if (!written.length) throw new Error("No usable question in the answer");
+    // A model may write eight good questions and two broken ones. The good ones
+    // are kept and the local bank tops the set up to ten — the traveller always
+    // gets ten questions, and none of them is repeated.
+    const questions = topUp(written, WANTED);
+    return { questions, model, costMicros: actualMicros, written: written.length };
   } finally {
     await settleAiBudget(reservation, actualMicros);
   }
@@ -120,7 +140,12 @@ export async function POST(request: NextRequest) {
         success: true,
         questions: result.questions,
         source: "ai",
-        meta: { model, generatedAt: new Date().toISOString(), costUsd: result.costMicros / 1_000_000 },
+        meta: {
+          model,
+          writtenByModel: result.written,
+          generatedAt: new Date().toISOString(),
+          costUsd: result.costMicros / 1_000_000,
+        },
       });
     } catch (caught) {
       if (caught instanceof AiBudgetError) {
