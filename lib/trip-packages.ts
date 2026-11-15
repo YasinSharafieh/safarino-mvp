@@ -384,11 +384,31 @@ export async function loadTripPackages(options: {
   const settled = await Promise.all(
     destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length], options.force), 52_000)),
   );
-  const packages = settled
+  let packages = settled
     .filter((value): value is TripPackage => Boolean(value))
     .sort((a, b) => a.totalToman - b.totalToman);
 
-  const storedCopy = packages.some((pkg) => pkg.fromStoredCopy);
+  /**
+   * A live crawl can come back mostly empty when a provider is slow that
+   * minute. «به‌روزرسانی» must never turn a full row of real packages into an
+   * empty shelf, so the last good packages are served (clearly marked) instead.
+   */
+  let fellBack = false;
+  if (options.force && packages.length < 2) {
+    const salvaged = await Promise.all(
+      destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length], false), 52_000)),
+    );
+    const seen = new Set(packages.map((pkg) => pkg.id));
+    salvaged.forEach((value) => {
+      if (!value || seen.has(value.id)) return;
+      seen.add(value.id);
+      packages.push({ ...value, fromStoredCopy: true });
+      fellBack = true;
+    });
+    packages = packages.sort((a, b) => a.totalToman - b.totalToman);
+  }
+
+  const storedCopy = fellBack || packages.some((pkg) => pkg.fromStoredCopy);
   return {
     success: true,
     origin,
@@ -397,7 +417,9 @@ export async function loadTripPackages(options: {
     generatedAt: new Date().toISOString(),
     note: packages.length
       ? storedCopy
-        ? "بخشی از این قیمت‌ها از نسخهٔ ذخیره‌شدهٔ کمتر از ۲۰ دقیقه پیش منابع است؛ قیمت نهایی را در صفحهٔ ارائه‌دهنده کنترل کنید."
+        ? fellBack
+          ? "منابع در این لحظه پاسخ کامل ندادند؛ همان بسته‌های تأییدشدهٔ قبلی (ذخیره‌شده از منابع واقعی) نشان داده می‌شوند. قیمت نهایی را در صفحهٔ ارائه‌دهنده کنترل کنید."
+          : "بخشی از این قیمت‌ها از نسخهٔ ذخیره‌شدهٔ کمتر از ۲۰ دقیقه پیش منابع است؛ قیمت نهایی را در صفحهٔ ارائه‌دهنده کنترل کنید."
         : "بلیت و اقامت هر بسته همین حالا از منابع رسمی خوانده شده‌اند؛ قیمت نهایی و ظرفیت را پیش از پرداخت در صفحهٔ ارائه‌دهنده کنترل کنید."
       : "منابع بلیت و اقامت الان پاسخ کامل ندادند. کمی بعد دوباره تلاش کنید یا مستقیم جست‌وجو را باز کنید.",
   };
