@@ -15,6 +15,7 @@ import { searchMultiProviderAccommodation } from "./accommodation-search";
 import { PROVIDER_LABELS as STAY_PROVIDER_LABELS } from "./accommodation-types";
 import { IRANIAN_CITIES } from "./iran-cities";
 import { readFreshSnapshot, readStaleSnapshot, snapshotKey, writeSnapshot } from "./snapshot-store";
+import { getProviderCache, setProviderCache } from "./provider-cache";
 import { searchTransport, type TransportSearchPayload } from "./transport-search";
 import type { TransportMode, TransportOffer } from "./transport-types";
 
@@ -207,6 +208,19 @@ export function todaysPackageDestinations(origin: string, count: number, now = n
   return picked;
 }
 
+/**
+ * Every press of «به‌روزرسانی» must move the row on. A clock bucket is not
+ * enough — two presses in the same minute would show the same four cards — so a
+ * small per-origin counter is stored and advanced on each forced refresh.
+ */
+async function nextRotation(origin: string): Promise<number> {
+  const key = `safarino:deals:rotation:${origin}`;
+  const stored = await getProviderCache<{ n: number }>(key);
+  const next = ((Number(stored?.n) || 0) + 1) % 10_000;
+  await setProviderCache(key, { n: next }, 86_400);
+  return next;
+}
+
 async function buildPackage(
   origin: string,
   entry: { city: string; kind: "hotel" | "stay"; mode: TransportMode; days: number },
@@ -377,7 +391,7 @@ export async function loadTripPackages(options: {
   const limit = Math.min(6, Math.max(2, Math.round(options.limit || 4)));
   // «به‌روزرسانی» also moves the list on: a fresh crawl shows other real
   // destinations from the same city, not the same four cards with new numbers.
-  const rotation = options.force ? Math.floor(Date.now() / 60_000) : 0;
+  const rotation = options.force ? (await nextRotation(origin)) : 0;
   const destinations = todaysPackageDestinations(origin, limit, new Date(), rotation);
   const offsets = [3, 6, 10, 14, 18, 21];
 
