@@ -19,7 +19,9 @@ export const dynamic = "force-dynamic";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
 const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
-const MAX_OUTPUT_TOKENS = 1800;
+// Ten four-option questions in Persian are long; a short cap truncates the
+// JSON and the whole set is lost, so the answer gets room to finish.
+const MAX_OUTPUT_TOKENS = 4000;
 
 /** How many questions a traveller is asked; ten is the floor the user set. */
 const WANTED = 10;
@@ -80,7 +82,7 @@ async function askModel(model: string, prompt: string, apiKey: string) {
         ],
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(35_000),
+      signal: AbortSignal.timeout(45_000),
     });
     if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
     const payload = await response.json();
