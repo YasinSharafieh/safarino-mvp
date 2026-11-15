@@ -107,7 +107,7 @@ export default function HomeDeals() {
     setError("");
     const controller = new AbortController();
     // The section must never hang: if the providers are slow, say so plainly.
-    const timer = window.setTimeout(() => controller.abort(), 55_000);
+    const timer = window.setTimeout(() => controller.abort(), 62_000);
     const query = originHint ? `?from=${encodeURIComponent(originHint)}` : "";
     fetch(`/api/deals${query}`, { cache: "no-store", signal: controller.signal })
       .then((response) => response.json())

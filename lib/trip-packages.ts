@@ -192,20 +192,20 @@ async function buildPackage(
   });
 
   const build = async (): Promise<TripPackage | null> => {
-    const [transport, stayResult] = await Promise.all([
-      withDeadline(
-        searchTransport({
-          mode: entry.mode,
-          origin,
-          destination,
-          date: departureDate,
-          returnDate,
-          adults: travellers,
-          children: 0,
-          infants: 0,
-        }),
-        26_000,
-      ),
+    /**
+     * The planned mode is a suggestion, not a promise: a city may have no train
+     * that day. Every alternative is searched for real and the mode that
+     * actually answered is the one the card shows.
+     */
+    const tryMode = async (mode: TransportMode) => {
+      const result = await withDeadline(
+        searchTransport({ mode, origin, destination, date: departureDate, returnDate, adults: travellers, children: 0, infants: 0 }),
+        40_000,
+      );
+      return result?.payload?.offers?.length ? result : null;
+    };
+    const [transportFirst, stayResult] = await Promise.all([
+      tryMode(entry.mode),
       withDeadline(
         searchMultiProviderAccommodation({
           kind: entry.kind,
@@ -216,10 +216,17 @@ async function buildPackage(
           childAges: [],
           infantAges: [],
         }),
-        26_000,
+        40_000,
       ),
     ]);
 
+    let transport = transportFirst;
+    if (!transport) {
+      for (const fallback of (["train", "bus", "plane"] as TransportMode[]).filter((mode) => mode !== entry.mode)) {
+        transport = await tryMode(fallback);
+        if (transport) break;
+      }
+    }
     const payload: TransportSearchPayload | null = transport?.payload ?? null;
     const outbound = payload ? cheapest(payload.offers) : null;
     const inbound = payload ? cheapest(payload.returningOffers) : null;
@@ -235,8 +242,8 @@ async function buildPackage(
     const ticketTotal = outbound.priceToman + backPrice;
 
     const ticket: PackageTicket = {
-      mode: entry.mode,
-      modeLabel: MODE_LABELS[entry.mode],
+      mode: payload?.mode ?? entry.mode,
+      modeLabel: MODE_LABELS[payload?.mode ?? entry.mode],
       operator: outbound.operator,
       serviceLabel: inbound ? `${outbound.serviceLabel} رفت · ${inbound.serviceLabel} برگشت` : outbound.serviceLabel,
       departure: outbound.departure,
@@ -247,8 +254,11 @@ async function buildPackage(
       returnEstimated,
     };
 
+    // Some providers publish only a short name («پاییز»); the type in front keeps
+    // the card honest and readable without inventing anything.
+    const shortName = stayOffer.name.trim().length <= 8 && !stayOffer.name.includes(stayOffer.typeLabel.split(" ")[0]);
     const stay: PackageStay = {
-      name: stayOffer.name,
+      name: shortName ? `${stayOffer.typeLabel.split(" ")[0]} ${stayOffer.name}`.trim() : stayOffer.name,
       typeLabel: stayOffer.typeLabel,
       location: stayOffer.location,
       provider: stayOffer.provider,
@@ -262,7 +272,7 @@ async function buildPackage(
     };
 
     const draft = {
-      id: `${origin}-${destination}-${entry.mode}-${departureDate}`.replace(/\s+/g, "-"),
+      id: `${origin}-${destination}-${payload?.mode ?? entry.mode}-${departureDate}`.replace(/\s+/g, "-"),
       origin,
       destination,
       days: entry.days,
@@ -313,7 +323,7 @@ export async function loadTripPackages(options: {
   const offsets = [3, 6, 10, 14, 18, 21];
 
   const settled = await Promise.all(
-    destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length]), 38_000)),
+    destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length]), 52_000)),
   );
   const packages = settled
     .filter((value): value is TripPackage => Boolean(value))
