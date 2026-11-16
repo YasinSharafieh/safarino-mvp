@@ -35,16 +35,24 @@ const dayOneTimes = result.days[0].items.map((item) => item.time);
 assert.deepEqual(dayOneTimes, [...dayOneTimes].sort((a, b) => a.localeCompare(b, "fa")), "items stay in time order");
 assert.equal(new Set(result.days.flatMap((day) => day.items.filter((i) => i.poiId).map((i) => i.poiId))).size, result.usedPois, "no POI is shown twice");
 
-const budget = synchronizeBudget({ totalBudget: 20_000_000, transportCost: 3_000_000, accommodationCost: 6_000_000, aiFood: 5_000_000, aiActivities: 4_000_000 });
+const budget = synchronizeBudget({ totalBudget: 20_000_000, transportCost: 3_000_000, accommodationCost: 6_000_000, aiFood: 5_000_000, aiActivities: 4_000_000, travellers: 2, days: 3 });
 assert.equal(budget.transport, 3_000_000);
 assert.equal(budget.accommodation, 6_000_000);
-assert.equal(budget.food + budget.activities + budget.remaining, 20_000_000 - 9_000_000);
-assert.ok(budget.food >= Math.round((20_000_000 - 9_000_000) * 0.15) - 1, "food stays realistic");
-assert.ok(budget.food + budget.activities <= 11_000_000, "food and activities never exceed the free budget");
+// Food is the traveller's own assumption: 800,000 per person per day.
+// The model may only raise the floor, never cut the traveller's own food money.
+assert.equal(budget.food, 5_000_000, "the model's higher guess wins");
+assert.equal(
+  synchronizeBudget({ totalBudget: 20_000_000, transportCost: 3_000_000, accommodationCost: 6_000_000, aiFood: 0, aiActivities: 0, travellers: 2, days: 3 }).food,
+  4_800_000,
+  "without a guess, food is 800,000 x 2 people x 3 days",
+);
+assert.equal(budget.localTransport, 1_200_000);
+assert.equal(budget.food + budget.activities + budget.localTransport + budget.remaining, 20_000_000 - 9_000_000);
+assert.ok(budget.activities >= 300_000 * 2 * 3, "activities are counted per person per day too");
 
-const skipped = synchronizeBudget({ totalBudget: 10_000_000, transportCost: 2_000_000, accommodationCost: 0, aiFood: 3_000_000, aiActivities: 1_000_000 });
+const skipped = synchronizeBudget({ totalBudget: 10_000_000, transportCost: 2_000_000, accommodationCost: 0, aiFood: 3_000_000, aiActivities: 1_000_000, travellers: 2, days: 3 });
 assert.equal(skipped.accommodation, 0, "a skipped accommodation adds no cost");
-assert.equal(skipped.food + skipped.activities + skipped.remaining + skipped.transport, 10_000_000);
+assert.equal(skipped.food + skipped.activities + skipped.localTransport + skipped.remaining + skipped.transport, 10_000_000);
 
 const dirty = sanitizePois([
   { id: "a", name: "جاذبه", category: "موزه", latitude: 1, longitude: 2, sourceUrl: "javascript:alert(1)" },

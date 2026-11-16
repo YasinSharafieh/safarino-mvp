@@ -6,7 +6,8 @@ import { stayPrice } from "../lib/stay-price";
 import { computeCarTrip, MAX_DEPRECIATION_PER_KM, DEFAULT_TOLL_PER_KM } from "../lib/car-cost";
 import { findCar, FUEL_OPTIONS } from "../lib/car-catalog";
 import { todaysPackageDestinations } from "../lib/trip-packages";
-import { drawQuestions, preferredTransportMode, scoreAnswers, suggestCities } from "../lib/start-flow";
+import { drawQuestions, preferredModeFromText, preferredTransportMode, scoreAnswers, suggestCities } from "../lib/start-flow";
+import { chosenTransport, transportHeadline } from "../lib/transport-selection";
 import { DAILY_FOOD_TOMAN, estimateBudget, mealsIncluded, roomAffordability } from "../lib/budget-fit";
 
 let failures = 0;
@@ -141,6 +142,25 @@ check("a room that leaves room for food is called suitable", roomFits.tone === "
 check("a room that eats the whole budget is called tight", roomTight.tone === "tight");
 check("a room past the money is called over, with the amount", roomOver.tone === "over" && roomOver.label.includes("۵"));
 check("the food sentence is always there", roomFits.foodNote.includes("۸۰۰") && roomOver.foodNote.includes("۸۰۰"));
+
+console.log("A leftover car can never be shown as the chosen ticket");
+check("a train ticket is read as a train", chosenTransport({ vehicleId: "train", cost: 3_512_000, offerTitle: "قطار ایران" })?.mode === "train");
+check("a car selection keeps its own name", chosenTransport({ vehicleId: "car", cost: 5_858_436, carName: "پراید ۱۱۱" })?.title === "پراید ۱۱۱");
+check("zero money is not a selection", chosenTransport({ vehicleId: "car", cost: 0 }) === null);
+check("an unknown vehicle is refused", chosenTransport({ vehicleId: "spaceship", cost: 1_000_000 }) === null);
+check("nothing stored means no claim", chosenTransport(null) === null);
+check("the headline names the vehicle and the price", (() => {
+  const choice = chosenTransport({ vehicleId: "train", cost: 1_756_500, offerTitle: "قطار ایران" })!;
+  const line = transportHeadline(choice);
+  return line.includes("قطار") && line.includes("قطار ایران") && line.includes("تومان");
+})());
+
+console.log("The traveller's own words choose the vehicle too");
+check("«با قطار می‌روم» means train", preferredModeFromText("می‌خواهم با قطار بروم") === "train");
+check("«پرواز» means plane", preferredModeFromText("پرواز ارزان می‌خواهم") === "plane");
+check("«اتوبوس» means bus", preferredModeFromText("با اتوبوس بروم بهتر است") === "bus");
+check("«ماشین خودم» means car", preferredModeFromText("با ماشین خودم می‌روم") === "car");
+check("a sentence with no vehicle claims nothing", preferredModeFromText("یک جای آرام و ارزان") === "");
 
 if (failures) {
   console.error(`\n❌ ${failures} بررسی شکست خورد`);

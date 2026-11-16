@@ -45,6 +45,8 @@ export default function StartCitiesPage() {
   const [roundTrip, setRoundTrip] = useState(true);
   const [travelers, setTravelers] = useState(2);
   const [budget, setBudget] = useState(15);
+  /** Which vehicle the traveller wants — the transport step opens on this tab. */
+  const [vehicle, setVehicle] = useState<"plane" | "train" | "bus" | "car" | "">("");
   const [children, setChildren] = useState(0);
   const [infants, setInfants] = useState(0);
   const [query, setQuery] = useState("");
@@ -58,6 +60,8 @@ export default function StartCitiesPage() {
     setDestination(travelData.destination || "");
     setTravelers(Math.max(1, Number(travelData.travelers) || 2));
     setBudget(Math.max(1, Number(travelData.budget) || 15));
+    const savedMode = String(travelData.preferredMode || "");
+    if (["plane", "train", "bus", "car"].includes(savedMode)) setVehicle(savedMode as "plane" | "train" | "bus" | "car");
     setChildren(Math.max(0, Number(travelData.children) || 0));
     setInfants(Math.max(0, Number(travelData.infants) || 0));
     if (travelData.departureDate) {
@@ -152,6 +156,7 @@ export default function StartCitiesPage() {
       travelers,
       children,
       infants,
+      preferredMode: vehicle,
     }));
     router.push("/transport");
   };
@@ -316,6 +321,39 @@ export default function StartCitiesPage() {
                 <p className="mt-1.5 text-[9px] leading-5 text-slate-500">
                   کل سفر برای همهٔ مسافران؛ در تقسیم بودجه و انتخاب اقامتگاه همین عدد سقف است.
                 </p>
+              </div>
+
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <span className="text-[10px] font-bold text-slate-300">با چه وسیله‌ای می‌روی؟</span>
+                <span className="mr-1.5 text-[8.5px] text-slate-500">(اختیاری — همان تب در مرحلهٔ بلیت باز می‌شود)</span>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {([
+                    { id: "plane", label: "هواپیما", icon: "✈️" },
+                    { id: "train", label: "قطار", icon: "🚆" },
+                    { id: "bus", label: "اتوبوس", icon: "🚌" },
+                    { id: "car", label: "ماشین شخصی", icon: "🚗" },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setVehicle((current) => (current === option.id ? "" : option.id))}
+                      aria-pressed={vehicle === option.id}
+                      className={`rounded-full border px-3 py-1.5 text-[10px] font-bold transition ${
+                        vehicle === option.id
+                          ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100"
+                          : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      <span className="ml-1" aria-hidden>{option.icon}</span>
+                      {option.label}
+                    </button>
+                  ))}
+                  {vehicle ? (
+                    <button type="button" onClick={() => setVehicle("")} className="rounded-full border border-white/10 px-2.5 py-1.5 text-[9.5px] text-slate-400 hover:text-white">
+                      پاک کردن
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bus,
+  CalendarDays,
   Check,
   Clock3,
   ExternalLink,
@@ -83,6 +84,8 @@ type Props = {
   roundTrip: boolean;
   active: boolean;
   selectedId?: string;
+  /** Opens the trip calendar above, so an empty date can be fixed in place. */
+  onFixDate?: () => void;
   onSelect: (selection: TicketSelection) => void;
   onCheapestChange: (mode: TicketMode, unitPrice: number | null) => void;
 };
@@ -117,7 +120,7 @@ const normalise = (value: string) =>
  * and the results list has its own search box (company, service, time, source),
  * sorting and a price ceiling, exactly like the accommodation list.
  */
-export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange }: Props) {
+export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange, onFixDate }: Props) {
   const { travelData, setTravelData } = useTravel();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
   const [returnOffers, setReturnOffers] = useState<LiveOffer[]>([]);
@@ -503,19 +506,37 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
         <div className="m-4 rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-[10.5px] leading-6 text-rose-100">{error}</div>
       ) : null}
 
-      {!loading && hasSearched && !legOffers.length && (nearbyDates.length > 0 || nearbyLoading) ? (
-        <div className="mx-4 mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
-          <b className="flex items-center gap-1.5 text-[10.5px] font-bold text-cyan-100">
-            <Clock3 className="h-3 w-3" />
-            اگر تاریخ انعطاف دارید، این روزها بلیت دارند
-          </b>
+      {!loading && hasSearched && !legOffers.length ? (
+        <div className="mx-4 mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.06] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <b className="flex items-center gap-1.5 text-[10.5px] font-black text-cyan-100">
+              <CalendarDays className="h-3.5 w-3.5" />
+              اصلاح تاریخ سفر
+            </b>
+            {onFixDate ? (
+              <button
+                type="button"
+                onClick={onFixDate}
+                className="rounded-lg border border-cyan-300/40 bg-cyan-300/15 px-2.5 py-1 text-[9.5px] font-bold text-cyan-50 transition hover:bg-cyan-300/25"
+              >
+                تقویم را باز کن و تاریخ را عوض کن
+              </button>
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-[9.5px] leading-6 text-slate-300">
+            {nearbyLoading
+              ? "روزهای نزدیک را بررسی می‌کنم؛ تا آن وقت می‌توانی تاریخ را هم عوض کنی."
+              : nearbyDates.length
+                ? "برای تاریخ انتخابی بلیتی پیدا نشد، ولی این روزها بلیت واقعی دارند؛ یکی را بزن تا همان تاریخ جست‌وجو شود."
+                : "برای روزهای نزدیک هم بلیتی پیدا نشد؛ تاریخ یا مسیر دیگری را امتحان کن."}
+          </p>
           {nearbyLoading ? (
             <p className="mt-1.5 flex items-center gap-1.5 text-[9.5px] text-slate-400">
               <LoaderCircle className="h-3 w-3 animate-spin" />
               در حال بررسی روزهای نزدیک…
             </p>
-          ) : (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+          ) : nearbyDates.length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {nearbyDates.map((entry) => (
                 <button
                   key={entry.date}
@@ -524,14 +545,14 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                     setNearbyDates([]);
                     void searchForDate(entry.date);
                   }}
-                  className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[9.5px] font-bold text-white transition hover:border-cyan-300/40 hover:bg-white/10"
+                  className="rounded-lg border border-white/10 bg-white/[0.05] px-2 py-1 text-[9.5px] font-bold text-white transition hover:border-cyan-300/40 hover:bg-white/10"
                 >
                   {formatJalaliDate(entry.date)}
                   <span className="mr-1 text-cyan-300">{money(entry.cheapest)}</span>
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
       ) : null}
 

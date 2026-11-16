@@ -54,6 +54,7 @@ import SiteHeader from "@/components/SiteHeader";
 import {
   describeTrip,
   drawQuestions,
+  preferredModeFromText,
   preferredTransportMode,
   scoreAnswers,
   suggestCities,
@@ -379,7 +380,8 @@ export default function TravelQuiz() {
       tripStyle: result.headline,
       quizResult: suggestion.name,
       quizAnswers: answers,
-      preferredMode: preferredTransportMode(questions, answers),
+      // Answers first; when the traveller wrote freely, their own words decide.
+      preferredMode: preferredTransportMode(questions, answers) || preferredModeFromText(description),
       quizStep: questions.length,
     }));
     router.push("/transport");

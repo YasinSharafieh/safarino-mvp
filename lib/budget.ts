@@ -22,7 +22,7 @@ export type BudgetAssumptions = {
 
 export const DEFAULT_BUDGET_ASSUMPTIONS: BudgetAssumptions = {
   cityCostPerKm: 1500,
-  foodPerPersonPerDay: 600_000,
+  foodPerPersonPerDay: 800_000,
   ticketPerStop: 120_000,
   extrasPerPersonPerDay: 200_000,
 };

@@ -32,6 +32,7 @@ import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
 import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
+import { DAILY_FOOD_TOMAN } from "@/lib/budget-fit";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 
@@ -321,12 +322,28 @@ function TransportPageContent() {
   const activeSelection = mode && selection.vehicleId === mode && selection.cost > 0 ? selection : null;
   const selectedName = MODE_OPTIONS.find((option) => option.id === activeSelection?.vehicleId)?.title || "";
   const budgetDifference = budget - (activeSelection?.cost || 0);
+  /** The same food money every other step sets aside. */
+  const foodForTrip = DAILY_FOOD_TOMAN * passengers * days;
+  const forStay = budgetDifference - foodForTrip;
 
   /* ------------------------------------------- keep the choice in the context */
   useEffect(() => {
-    // Nothing is written as «chosen transport» until it belongs to the vehicle
-    // the traveller is looking at.
-    if (!activeSelection) return;
+    /**
+     * Nothing is written as «chosen transport» until it belongs to the vehicle
+     * the traveller is looking at — and a leftover from another vehicle is
+     * cleared right away, so no later page can print «سفر با پراید» for
+     * somebody looking at train tickets.
+     */
+    if (!activeSelection) {
+      setTravelData((current) => {
+        const stored = current.transport;
+        if (!stored) return current;
+        const storedMode = typeof stored.vehicleId === "string" ? stored.vehicleId : "";
+        if (mode && storedMode && storedMode !== mode) return { ...current, transport: null };
+        return current;
+      });
+      return;
+    }
     setTravelData((current) => ({
       ...current,
       transport: {
@@ -403,7 +420,7 @@ function TransportPageContent() {
           }
           hint={
             activeSelection
-              ? `بعد از این انتخاب، حدود ${money(Math.max(0, budget - activeSelection.cost))} از بودجهٔ ${money(budget)} برای اقامت و بقیهٔ سفر می‌ماند.`
+              ? `از بودجهٔ ${money(budget)}، ${money(Math.max(0, budget - activeSelection.cost))} باقی می‌ماند؛ از آن، ${money(foodForTrip)} پول غذا کنار گذاشته می‌شود.`
               : "یک بلیت یا ماشین را انتخاب کن؛ بعد اقامتگاه."
           }
           ready={Boolean(activeSelection)}
@@ -589,6 +606,7 @@ function TransportPageContent() {
             ) : (
               <TicketSearch
                 key={mode}
+                onFixDate={() => setEditingTrip(true)}
                 mode={mode}
                 roundTrip={roundTrip}
                 active
@@ -639,6 +657,12 @@ function TransportPageContent() {
                       ? `از بودجهٔ ${millions(budget)}، ${millions(budgetDifference)} باقی می‌ماند`
                       : `${millions(Math.abs(budgetDifference))} بیشتر از بودجهٔ ${millions(budget)}`}
                   </span>
+                  {budgetDifference >= 0 ? (
+                    <span className="mt-1 block text-[9.5px] leading-5 text-slate-400">
+                      از این {millions(budgetDifference)}، پول غذا {millions(foodForTrip)} کنار گذاشته می‌شود (۸۰۰ هزار تومان هر نفر هر روز × {fa.format(passengers)} نفر × {fa.format(days)} روز)؛
+                      یعنی برای اقامت حدود <b className={forStay >= 0 ? "text-cyan-200" : "text-rose-300"}>{millions(Math.max(0, forStay))}</b> می‌مانَد.
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">

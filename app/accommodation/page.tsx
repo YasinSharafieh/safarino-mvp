@@ -84,6 +84,7 @@ import SnapshotKeeper from "@/components/SnapshotKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 import { bestStay, estimateBudget } from "@/lib/budget-fit";
+import { chosenTransport } from "@/lib/transport-selection";
 
 /** Every ordering a traveller reasonably asks for, in one place. */
 export type StaySort = "cheapest" | "priciest" | "rating" | "luxury" | "reviews";
@@ -144,8 +145,10 @@ export default function AccommodationPage() {
   const selected = accommodation?.status === "selected" ? accommodation : null;
   const selectedId = selected ? String(selected.id || "") : "";
   const totalBudget = travelData.budget * 1_000_000;
-  const contextTransportCost = Number(travelData.transport?.cost);
-  const transportCost = Number.isFinite(contextTransportCost) && contextTransportCost >= 0 ? contextTransportCost : legacyTransportCost;
+  // Only a complete, known selection counts — never a leftover from a vehicle
+  // the traveller is not using.
+  const pickedTransport = chosenTransport(travelData.transport);
+  const transportCost = pickedTransport ? pickedTransport.cost : legacyTransportCost;
   const accommodationCost = selected ? Math.max(0, Number(selected.cost) || 0) : 0;
   const totalSpent = transportCost + accommodationCost;
   const remainingBudget = totalBudget - totalSpent;
@@ -161,10 +164,11 @@ export default function AccommodationPage() {
       estimateBudget({
         totalBudget,
         travellers: Math.max(1, travelData.travelers + travelData.children + travelData.infants),
-        days: Math.max(1, nights),
+        // Food is spent per day of the trip, not per night of the room.
+        days: Math.max(1, Number(travelData.days) || nights || 1),
         tickets: transportCost,
       }),
-    [nights, totalBudget, transportCost, travelData.children, travelData.infants, travelData.travelers],
+    [nights, totalBudget, transportCost, travelData.children, travelData.days, travelData.infants, travelData.travelers],
   );
 
   useEffect(() => {

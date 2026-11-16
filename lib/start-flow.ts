@@ -539,6 +539,25 @@ export function preferredTransportMode(
   return "";
 }
 
+/**
+ * The same question, answered in the traveller's own words: «با قطار می‌روم»,
+ * «ماشین خودم را می‌برم», «پرواز ارزان». Only words that are really there are
+ * read — nothing is guessed from a sentence that never mentions a vehicle.
+ */
+export function preferredModeFromText(text: string): "plane" | "train" | "bus" | "car" | "" {
+  const value = (text || "").replace(/\u064a/g, "\u06cc").replace(/\u0643/g, "\u06a9");
+  const tests: [RegExp, "plane" | "train" | "bus" | "car"][] = [
+    [/(قطار|ریل|ترن|train)/i, "train"],
+    [/(هواپیما|پرواز|فرودگاه|هوایی|plane|flight)/i, "plane"],
+    [/(اتوبوس|باس|اتوبوسی|bus)/i, "bus"],
+    [/(ماشین خودم|با ماشین|خودرو|ماشین شخصی|رانندگی|car|drive)/i, "car"],
+  ];
+  for (const [pattern, mode] of tests) {
+    if (pattern.test(value)) return mode;
+  }
+  return "";
+}
+
 /** The budget the traveller hinted at, as a whole-trip figure in millions. */
 export function budgetFromDaily(dailyToman: number | null, days: number | null, people: number): number | null {
   if (!dailyToman || !days || days < 1) return null;

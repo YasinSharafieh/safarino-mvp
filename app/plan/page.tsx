@@ -49,6 +49,8 @@ import NextStepBar from "@/components/NextStepBar";
 import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
 import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
 import { cityPoint } from "@/lib/iran-cities";
+import { chosenTransport, transportHeadline } from "@/lib/transport-selection";
+import { estimateBudget } from "@/lib/budget-fit";
 
 type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
 type PlanItem = {
@@ -69,6 +71,8 @@ type BudgetAnalysis = {
   accommodation: number;
   food: number;
   activities: number;
+  /** Taxis and metro inside the city, counted per person per day. */
+  localTransport?: number;
   remaining: number;
   summary: string;
 };
@@ -180,11 +184,31 @@ function localDays(destination: string, days: number, pois: PlanPoiWithStay[]): 
   });
 }
 
-function createLocalPlan(destination: string, budget: number, days: number, transport = 0, accommodation = 0, pois: PlanPoiWithStay[] = []): TravelPlan {
-  const free = Math.max(0, budget - transport - accommodation);
-  const food = Math.round(free * 0.3);
-  const activities = Math.round(free * 0.2);
-  const remaining = Math.max(0, free - food - activities);
+function createLocalPlan(
+  destination: string,
+  budget: number,
+  days: number,
+  transport = 0,
+  accommodation = 0,
+  pois: PlanPoiWithStay[] = [],
+  people = 2,
+): TravelPlan {
+  /**
+   * The same arithmetic as the transport and accommodation steps: food is
+   * 800,000 toman per person per day, activities 300,000 and local transport
+   * 200,000 — so the remaining budget on this page matches the pages before it.
+   */
+  const shared = estimateBudget({
+    totalBudget: budget,
+    travellers: Math.max(1, people),
+    days: Math.max(1, days),
+    tickets: transport,
+    stay: accommodation,
+  });
+  const food = shared.food;
+  const activities = shared.activities;
+  const localTransport = shared.localTransport;
+  const remaining = shared.remaining;
   return {
     budgetAnalysis: {
       totalBudget: budget,
@@ -192,6 +216,7 @@ function createLocalPlan(destination: string, budget: number, days: number, tran
       accommodation,
       food,
       activities,
+      localTransport,
       remaining,
       summary: "این نسخه بدون هوش مصنوعی و فقط بر پایهٔ انتخاب‌های واقعی شما (حمل‌ونقل و اقامت) و جاذبه‌های تأییدشدهٔ مقصد ساخته شده است.",
     },
@@ -370,6 +395,7 @@ function slotDays(input: {
 
 export default function PlanPage() {
   const { travelData, setTravelData, isHydrated } = useTravel();
+  const peopleCount = Math.max(1, Number(travelData.travelers || 2) + Number(travelData.children || 0));
   const [origin, setOrigin] = useState("تهران");
   const [destination, setDestination] = useState("مشهد");
   const [budget, setBudget] = useState(15_000_000);
@@ -476,11 +502,12 @@ export default function PlanPage() {
     setBudget(nextBudget);
     setDayCount(nextDays);
 
-    if (travelData.transport) {
-      setTransportDetails(travelData.transport);
-      if (typeof travelData.transport.cost === "number" && Number.isFinite(travelData.transport.cost)) {
-        transportCost = Math.max(0, travelData.transport.cost);
-      }
+    // A leftover from another vehicle is not a choice: it is ignored and the
+    // plan says «انتخاب نشده» rather than pricing a trip nobody picked.
+    const picked = chosenTransport(travelData.transport);
+    if (picked) {
+      setTransportDetails(travelData.transport as Record<string, unknown>);
+      transportCost = picked.cost;
     }
     if (travelData.accommodation) {
       setAccommodationDetails(travelData.accommodation);
@@ -492,10 +519,10 @@ export default function PlanPage() {
     try {
       if (!travelData.transport) {
         const transportRaw = window.localStorage.getItem("safarino-transport-selection-v1");
-        if (transportRaw) {
-          const transport = JSON.parse(transportRaw) as Record<string, unknown>;
-          setTransportDetails(transport);
-          if (typeof transport.cost === "number" && Number.isFinite(transport.cost)) transportCost = Math.max(0, transport.cost);
+        const saved = transportRaw ? chosenTransport(JSON.parse(transportRaw)) : null;
+        if (saved) {
+          setTransportDetails(saved.raw);
+          transportCost = saved.cost;
         }
       }
       if (!travelData.accommodation) {
@@ -511,7 +538,7 @@ export default function PlanPage() {
     } catch {
       // Shared context remains the source of truth when legacy storage is invalid.
     }
-    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, enrichedPois));
+    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, enrichedPois, peopleCount));
     setActiveDay(0);
   }, [isHydrated, travelData]);
 
@@ -536,7 +563,7 @@ export default function PlanPage() {
         setPoiData(payload);
         setPlan((current) => current.poiUsage
           ? current
-          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, (payload.pois ?? []).map((poi) => ({ ...poi, fromStayKm: poiDistances[poi.id]?.distanceKm ?? null, fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null }))));
+          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, (payload.pois ?? []).map((poi) => ({ ...poi, fromStayKm: poiDistances[poi.id]?.distanceKm ?? null, fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null })), peopleCount));
       })
       .catch(() => {
         if (!cancelled) setPoiData({ success: false, city, pois: [], poisWithArticle: 0, sources: { openstreetmap: "failed", wikidata: "failed", wikipedia: "failed" }, note: "خواندن جاذبه‌های واقعی مقصد انجام نشد." });
@@ -641,7 +668,7 @@ export default function PlanPage() {
     setPlan((current) =>
       current.poiUsage
         ? current
-        : createLocalPlan(destination, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, enrichedPois),
+        : createLocalPlan(destination, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, enrichedPois, peopleCount),
     );
     // Only rebuild while the plan is still the local, real-place-only one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -746,7 +773,7 @@ export default function PlanPage() {
       setNoticeTone("success");
       setNotice(`برنامه تازه با ${payload.meta?.model || "هوش مصنوعی"} ساخته شد.`);
     } catch {
-      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois));
+      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois, peopleCount));
       setActiveDay(0);
       setNoticeTone("warning");
       setNotice("اتصال زنده به AI برقرار نشد؛ نسخه آفلاین ساخته شد. روی Netlify ایستا، مسیر API باید به یک سرویس سروری خارجی متصل شود.");
@@ -847,7 +874,7 @@ export default function PlanPage() {
               <span>تاریخ بازگشت: {travelData.returnDate ? formatJalaliDate(travelData.returnDate) : "ثبت‌نشده"}</span>
               <span>مسافران: {formatNumber(travelData.travelers || 1)} بزرگسال{travelData.children ? ` · ${formatNumber(travelData.children)} کودک` : ""}{travelData.infants ? ` · ${formatNumber(travelData.infants)} نوزاد` : ""}</span>
               <span>بودجه کل: {formatToman(plan.budgetAnalysis.totalBudget)}</span>
-              <span>حمل‌ونقل انتخاب‌شده: {plan.budgetAnalysis.transport ? formatToman(plan.budgetAnalysis.transport) : "انتخاب نشده"}{typeof transportDetails.label === "string" ? ` (${transportDetails.label})` : ""}</span>
+              <span>حمل‌ونقل انتخاب‌شده: {(() => { const picked = chosenTransport(transportDetails); return picked ? transportHeadline(picked) : "انتخاب نشده"; })()}</span>
               <span>اقامت انتخاب‌شده: {plan.budgetAnalysis.accommodation ? `${String(accommodationDetails.name ?? "")} · ${formatToman(plan.budgetAnalysis.accommodation)}` : "بدون اقامتگاه"}</span>
             </div>
           </section>
@@ -954,6 +981,7 @@ export default function PlanPage() {
                 { label: "اقامت", value: plan.budgetAnalysis.accommodation, icon: BedDouble, color: "bg-cyan-400" },
                 { label: "غذا", value: plan.budgetAnalysis.food, icon: Utensils, color: "bg-cyan-400" },
                 { label: "تفریح", value: plan.budgetAnalysis.activities, icon: Camera, color: "bg-rose-400" },
+                { label: "رفت‌وآمد شهری", value: plan.budgetAnalysis.localTransport || 0, icon: Route, color: "bg-sky-400" },
                 { label: "باقی‌مانده", value: plan.budgetAnalysis.remaining, icon: WalletCards, color: "bg-emerald-400" },
               ].map((item) => {
                 const Icon = item.icon;

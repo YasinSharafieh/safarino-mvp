@@ -1,3 +1,5 @@
+import { DAILY_ACTIVITIES_TOMAN, DAILY_FOOD_TOMAN, DAILY_LOCAL_TRANSPORT_TOMAN } from "./budget-fit";
+
 /**
  * Turns an AI draft into a validated itinerary that only contains real places.
  * Every sightseeing stop must reference a POI that came from OpenStreetMap,
@@ -127,6 +129,10 @@ export type BudgetInput = {
   accommodationCost: number;
   aiFood: number;
   aiActivities: number;
+  /** How many people eat and pay tickets — the food figure needs it. */
+  travellers?: number;
+  /** How many days the trip lasts. */
+  days?: number;
 };
 
 /**
@@ -140,19 +146,24 @@ export function synchronizeBudget(input: BudgetInput): {
   accommodation: number;
   food: number;
   activities: number;
+  localTransport: number;
   remaining: number;
 } {
   const totalBudget = Math.max(0, Math.round(input.totalBudget));
   const transport = Math.max(0, Math.min(Math.round(input.transportCost), totalBudget));
   const accommodation = Math.max(0, Math.min(Math.round(input.accommodationCost), totalBudget - transport));
-  const free = totalBudget - transport - accommodation;
-
-  const foodFloor = Math.round(free * 0.15);
-  const foodCeiling = Math.round(free * 0.4);
-  const activitiesCeiling = Math.round(free * 0.3);
-  const food = Math.min(Math.max(Math.round(input.aiFood) || foodFloor, foodFloor), Math.max(foodFloor, foodCeiling));
-  const activities = Math.min(Math.max(Math.round(input.aiActivities) || Math.round(free * 0.15), 0), Math.max(0, activitiesCeiling));
-  const remaining = Math.max(0, free - food - activities);
-
-  return { totalBudget, transport, accommodation, food, activities, remaining };
+  /**
+   * Food is not a percentage of what is left: it is the same per-person,
+   * per-day figure the accommodation step uses (800,000 toman), so two pages
+   * can never show two different food numbers. The model's own guess only
+   * wins when it is higher than that floor.
+   */
+  const travellers = Math.max(1, Math.round(input.travellers || 1));
+  const days = Math.max(1, Math.round(input.days || 1));
+  const foodFloor = DAILY_FOOD_TOMAN * travellers * days;
+  const food = Math.max(foodFloor, Math.round(input.aiFood) || 0);
+  const activities = Math.max(DAILY_ACTIVITIES_TOMAN * travellers * days, Math.round(input.aiActivities) || 0);
+  const localTransport = DAILY_LOCAL_TRANSPORT_TOMAN * travellers * days;
+  const remaining = totalBudget - transport - accommodation - food - activities - localTransport;
+  return { totalBudget, transport, accommodation, food, activities, localTransport, remaining };
 }

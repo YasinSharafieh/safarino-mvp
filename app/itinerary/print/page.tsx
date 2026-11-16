@@ -10,6 +10,7 @@ import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
 import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
 import SiteHeader from "@/components/SiteHeader";
+import { chosenTransport } from "@/lib/transport-selection";
 import { CHECKLIST_GROUPS, allItems, readChecklist, type ChecklistState } from "@/lib/checklist";
 
 type SavedItinerary = {
@@ -66,7 +67,7 @@ export default function ItineraryPrintPage() {
   }, []);
 
   const stay = travelData.accommodation && travelData.accommodation.status === "selected" ? travelData.accommodation : null;
-  const transport = travelData.transport;
+  const transport = chosenTransport(travelData.transport)?.raw ?? null;
   const accommodationCost = Number(stay?.cost) || 0;
   const transportCost = Number(transport?.cost) || 0;
   const budgetToman = (Number(travelData.budget) || 0) * 1_000_000;

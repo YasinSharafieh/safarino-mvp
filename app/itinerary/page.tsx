@@ -42,6 +42,7 @@ import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
 import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
+import { chosenTransport } from "@/lib/transport-selection";
 import {
   buildBudgetPlan,
   readBudgetAssumptions,
@@ -356,7 +357,7 @@ function ItineraryContent() {
       : null;
     const stayName = typeof stay?.name === "string" ? stay.name : "";
     const stayNights = Number(stay?.nights);
-    const transport = travelData.transport;
+    const transport = chosenTransport(travelData.transport)?.raw ?? null;
     const transportLabel = transport
       ? String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.title as string) || (transport.kind as string) || "وسیلهٔ انتخاب‌شده")
       : "";
