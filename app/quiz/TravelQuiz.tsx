@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
+import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
 import {
   ArrowLeft,
   ArrowRight,
@@ -52,6 +54,7 @@ import SiteHeader from "@/components/SiteHeader";
 import {
   describeTrip,
   drawQuestions,
+  preferredTransportMode,
   scoreAnswers,
   suggestCities,
   type CitySuggestion,
@@ -186,6 +189,10 @@ export default function TravelQuiz() {
   /** How many people the one budget has to cover — it decides the share of each. */
   const [adults, setAdults] = useState<number>(() => Math.min(6, Math.max(1, Math.round(Number(travelData.travelers) || 1))));
   const [kids, setKids] = useState<number>(() => Math.min(5, Math.max(0, Math.round(Number(travelData.children) || 0))));
+  /** The dates are asked here, so no step later has to invent them. */
+  const [departureDate, setDepartureDate] = useState<string>(() => travelData.departureDate || "");
+  const [returnDate, setReturnDate] = useState<string>(() => travelData.returnDate || "");
+  const [roundTrip, setRoundTrip] = useState<boolean>(true);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
@@ -195,7 +202,7 @@ export default function TravelQuiz() {
   const [textNote, setTextNote] = useState("");
   const [described, setDescribed] = useState<{ summary: string; words: string[]; days: number | null } | null>(null);
 
-  const resultVisible = ready && (Boolean(described) || showResult);
+  const resultVisible = ready && showResult;
   const onMoneyStep = !resultVisible && step === moneyStep;
   const question = questions[Math.min(step, Math.max(questions.length - 1, 0))];
   const selectedOption = question ? answers[question.key] : undefined;
@@ -208,6 +215,33 @@ export default function TravelQuiz() {
     return quizResult;
   }, [described, description, quizResult]);
   /** The number typed on the closing step wins over anything remembered earlier. */
+  /** The trip length follows the calendar the moment both dates exist. */
+  useEffect(() => {
+    if (!departureDate || !returnDate) return;
+    const from = Date.parse(`${departureDate}T00:00:00Z`);
+    const to = Date.parse(`${returnDate}T00:00:00Z`);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return;
+    const nights = Math.round((to - from) / 86_400_000);
+    setDays(Math.min(14, Math.max(1, nights)));
+  }, [departureDate, returnDate]);
+
+  /** The closing step always opens with real dates on the calendar, never blank. */
+  useEffect(() => {
+    if (!onMoneyStep || departureDate) return;
+    const base = addDaysToIso(todayIso(), 7);
+    setDepartureDate(base);
+    if (roundTrip && !returnDate) setReturnDate(addDaysToIso(base, Math.max(1, days)));
+    // Only fills an empty calendar; the traveller's own date always wins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onMoneyStep, departureDate]);
+
+  const setTripDays = (value: number) => {
+    setDays(value);
+    const base = departureDate || addDaysToIso(todayIso(), 7);
+    if (!departureDate) setDepartureDate(base);
+    setReturnDate(addDaysToIso(base, Math.max(1, value)));
+  };
+
   const peopleCount = Math.max(1, adults + kids);
   const perPersonToman = Math.round((budgetMillions * 1_000_000) / peopleCount);
   const perPersonMillions = perPersonToman / 1_000_000;
@@ -278,12 +312,16 @@ export default function TravelQuiz() {
       return;
     }
     setTextNote("");
+    // The free-text path asks the same closing questions (money, people, dates)
+    // before it shows anything — no trip is planned without a date and a budget.
+    if (parsed.result.days && parsed.result.days > 0) setDays(Math.min(14, Math.max(1, parsed.result.days)));
+    setStep(moneyStep);
+    setDirection(1);
     setDescribed({
       summary: parsed.result.summary,
       words: parsed.matchedWords,
       days: parsed.result.days,
     });
-    setDirection(1);
   };
 
   /** Reads the answers: the model first, the local engine as the floor. */
@@ -333,14 +371,15 @@ export default function TravelQuiz() {
       ...current,
       destination: suggestion.name,
       days: tripDays,
-      departureDate: current.departureDate || isoIn(7),
-      returnDate: isoIn(7 + tripDays),
+      departureDate: departureDate || current.departureDate || isoIn(7),
+      returnDate: returnDate || isoIn(7 + tripDays),
       budget: budgetMillions,
       travelers: adults,
       children: kids,
       tripStyle: result.headline,
       quizResult: suggestion.name,
       quizAnswers: answers,
+      preferredMode: preferredTransportMode(questions, answers),
       quizStep: questions.length,
     }));
     router.push("/transport");
@@ -372,7 +411,7 @@ export default function TravelQuiz() {
               سفر بعدی‌ات <span className="gradient-text">چه حالی</span> دارد؟
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-[11.5px] leading-7 text-slate-400 sm:text-sm">
-              دوازده سؤال کوتاه — هر بار سؤال‌های تازه — و در پایان بودجه، تعداد نفرات و طول سفر؛ تا شهر مناسب را در ایران پیدا کنیم.
+              دوازده سؤال کوتاه — هر بار سؤال‌های تازه — و در پایان بودجه، تعداد نفرات، تاریخ رفت و برگشت و طول سفر؛ تا شهر مناسب را در ایران پیدا کنیم.
             </p>
             {questionSource === "ai" ? (
               <p className="mt-2 text-[9.5px] text-emerald-300/80">سؤال‌های این دور مخصوص همین سفر نوشته شدند؛ دور بعدی سؤال‌های دیگری دارد.</p>
@@ -434,7 +473,7 @@ export default function TravelQuiz() {
             <div className="mb-5">
               <div className="mb-2.5 flex items-center justify-between gap-3 text-[10.5px] text-slate-400">
                 <span aria-live="polite">
-                  {resultVisible ? "نتیجه آماده است" : onMoneyStep ? "آخرین قدم · بودجه، نفرات و طول سفر" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
+                  {resultVisible ? "نتیجه آماده است" : onMoneyStep ? "آخرین قدم · بودجه، نفرات، تاریخ و طول سفر" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
                 </span>
                 <b className="text-cyan-300">{faNumber(Math.round(progress))}٪</b>
               </div>
@@ -485,9 +524,9 @@ export default function TravelQuiz() {
                       <Banknote className="h-3.5 w-3.5" />
                       همیشه پرسیده می‌شود
                     </span>
-                    <h2 className="mt-3 text-lg font-extrabold leading-8 text-white sm:text-xl">بودجه، نفرات و طول سفرت چقدر است؟</h2>
+                    <h2 className="mt-3 text-lg font-extrabold leading-8 text-white sm:text-xl">بودجه، نفرات، تاریخ و طول سفرت چقدر است؟</h2>
                     <p className="mt-1.5 text-[11px] leading-6 text-slate-400">
-                      این سه عدد پای همهٔ پیشنهادهاست: بودجه بین همه تقسیم می‌شود، بلیت و اقامت برای همین تعداد حساب می‌شود و شهرهایی پیشنهاد می‌شوند که با سهم هر نفر جور دربیایند.
+                      این چهار چیز پای همهٔ پیشنهادهاست: بودجه بین همه تقسیم می‌شود، بلیت و اقامت برای همین تعداد حساب می‌شود، تاریخ بلیت را واقعی می‌کند و شهرها با سهم هر نفر سنجیده می‌شوند.
                     </p>
                   </div>
 
@@ -610,7 +649,7 @@ export default function TravelQuiz() {
                           <button
                             key={amount}
                             type="button"
-                            onClick={() => setDays(amount)}
+                            onClick={() => setTripDays(amount)}
                             aria-pressed={days === amount}
                             className={`rounded-full border px-3 py-1 text-[10.5px] font-bold transition ${
                               days === amount ? "border-teal-400/50 bg-teal-400/15 text-teal-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
@@ -623,6 +662,49 @@ export default function TravelQuiz() {
                       <p className="mt-2 text-[9.5px] leading-6 text-slate-500">
                         با این عددها، سهم غذا و رفت‌وآمد روزانه هم حساب می‌شود تا پیشنهاد از بودجهٔ واقعی بیرون نزند.
                       </p>
+                    </div>
+
+                    <div className="mt-5 border-t border-white/5 pt-4">
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-300">
+                        <span>تاریخ رفت و برگشت</span>
+                        <b className="text-cyan-200">
+                          {departureDate ? formatJalaliDate(departureDate) : "انتخاب نشده"}
+                          {roundTrip && returnDate ? ` تا ${formatJalaliDate(returnDate)}` : roundTrip ? "" : " · یک‌طرفه"}
+                        </b>
+                      </span>
+                      <p className="mt-1 text-[9.5px] leading-6 text-slate-500">
+                        همان تقویم بلیت: حرکت را بزن، برگشت خودکار چند روز بعد پر می‌شود؛ با کلیک روی برگشت می‌توانی عوضش کنی. بلیت در مرحلهٔ بعد دقیقاً برای همین تاریخ‌ها جست‌وجو می‌شود.
+                      </p>
+                      <div className="relative z-30 mt-2 max-w-lg">
+                        <JalaliRangeCalendar
+                          departureDate={departureDate}
+                          returnDate={returnDate}
+                          roundTrip={roundTrip}
+                          onRoundTripChange={(value) => {
+                            setRoundTrip(value);
+                            if (!value) {
+                              setReturnDate("");
+                              return;
+                            }
+                            const base = departureDate || addDaysToIso(todayIso(), 7);
+                            setDepartureDate(base);
+                            setReturnDate(addDaysToIso(base, Math.max(1, days)));
+                          }}
+                          onChange={(field, value) => {
+                            if (field === "departureDate") {
+                              setDepartureDate(value);
+                              if (roundTrip && value) setReturnDate(addDaysToIso(value, Math.max(1, days)));
+                              return;
+                            }
+                            setReturnDate(value);
+                          }}
+                        />
+                      </div>
+                      {!departureDate ? (
+                        <p className="mt-2 rounded-xl border border-amber-300/25 bg-amber-300/[0.07] px-3 py-2 text-[10px] leading-6 text-amber-100">
+                          تاریخ حرکت را از تقویم انتخاب کن؛ بدون تاریخ، بلیت را نمی‌توان واقعی جست‌وجو کرد.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 

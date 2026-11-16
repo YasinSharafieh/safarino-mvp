@@ -509,6 +509,36 @@ function estimateFor(
   return { estimatedToman, ...(budget ? { overBudget: estimatedToman > budget } : {}) };
 }
 
+/**
+ * Which vehicle the traveller actually asked for while answering the quiz.
+ * The transport step must open on that tab — never on a car they did not pick.
+ */
+export function preferredTransportMode(
+  questions: QuizQuestion[],
+  answers: QuizAnswers,
+): "plane" | "train" | "bus" | "car" | "" {
+  const modes = new Set(["plane", "train", "bus", "car"]);
+  // The dedicated transport question first, then the "how long is the road"
+  // follow-up, then any answer whose chosen option is a vehicle id.
+  const ordered = [...questions].sort((a, b) => {
+    const rank = (key: string) => (key === "transport" ? 0 : key === "transport2" ? 1 : 2);
+    return rank(a.key) - rank(b.key);
+  });
+  for (const question of ordered) {
+    const chosen = answers[question.key];
+    if (!chosen) continue;
+    const option = question.options.find((entry) => entry.id === chosen);
+    if (!option) continue;
+    if (modes.has(option.id)) return option.id as "plane" | "train" | "bus" | "car";
+    if (question.key === "transport2") {
+      // Preferring the shortest way is a flight; the cheapest way is a bus.
+      if (option.id === "short") return "plane";
+      if (option.id === "cheap") return "bus";
+    }
+  }
+  return "";
+}
+
 /** The budget the traveller hinted at, as a whole-trip figure in millions. */
 export function budgetFromDaily(dailyToman: number | null, days: number | null, people: number): number | null {
   if (!dailyToman || !days || days < 1) return null;

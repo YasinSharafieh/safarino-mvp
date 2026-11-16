@@ -242,14 +242,23 @@ function TransportPageContent() {
   }, [isHydrated, setTravelData]);
 
   /* ------------------------------------------------ restore the chosen mode */
+  // Priority: the vehicle asked for in the quiz → the tab used last time.
+  // A traveller who said «با قطار» in the quiz must land on the train tab.
   useEffect(() => {
+    const asked = travelData.preferredMode;
+    if (asked && MODE_OPTIONS.some((option) => option.id === asked)) {
+      setMode(asked as TravelMode);
+      return;
+    }
     try {
       const saved = window.localStorage.getItem(MODE_KEY);
       if (saved && MODE_OPTIONS.some((option) => option.id === saved)) setMode(saved as TravelMode);
     } catch {
       // Ignoring a blocked storage keeps the page usable.
     }
-  }, []);
+    // Runs when the traveller's own request arrives with the saved trip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, travelData.preferredMode]);
 
   useEffect(() => {
     if (!mode) return;
@@ -304,12 +313,24 @@ function TransportPageContent() {
     };
   }, [destinationCity, isHydrated, originCity]);
 
+  /**
+   * A ticket (or a car) chosen for another vehicle must never be presented as
+   * this trip's transport — that is how a traveller ends up reading «سفر با
+   * پراید» after asking for a train. Only the open tab's own choice counts.
+   */
+  const activeSelection = mode && selection.vehicleId === mode && selection.cost > 0 ? selection : null;
+  const selectedName = MODE_OPTIONS.find((option) => option.id === activeSelection?.vehicleId)?.title || "";
+  const budgetDifference = budget - (activeSelection?.cost || 0);
+
   /* ------------------------------------------- keep the choice in the context */
   useEffect(() => {
+    // Nothing is written as «chosen transport» until it belongs to the vehicle
+    // the traveller is looking at.
+    if (!activeSelection) return;
     setTravelData((current) => ({
       ...current,
       transport: {
-        ...selection,
+        ...activeSelection,
         origin: current.origin,
         destination: current.destination,
         departureDate: current.departureDate,
@@ -318,7 +339,8 @@ function TransportPageContent() {
         days: current.days,
       },
     }));
-  }, [selection, setTravelData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSelection, setTravelData]);
 
   const changeJourney = useCallback(
     (field: "origin" | "destination" | "departureDate" | "returnDate", value: string) => {
@@ -352,8 +374,6 @@ function TransportPageContent() {
     car: distanceKm ? "محاسبهٔ کامل با مسافت واقعی" : undefined,
   };
 
-  const selectedName = MODE_OPTIONS.find((option) => option.id === selection.vehicleId)?.title || "";
-  const budgetDifference = budget - selection.cost;
   const modeLabel = MODE_OPTIONS.find((option) => option.id === mode)?.title;
 
   return (
@@ -375,16 +395,18 @@ function TransportPageContent() {
 
         <NextStepBar
           summary={
-            selection.cost > 0
-              ? `${selectedName} · ${money(selection.cost)}${selection.offerTitle ? ` · ${selection.offerTitle}` : ""}`
-              : "هنوز وسیلهٔ سفر انتخاب نشده"
+            activeSelection
+              ? `${selectedName} · ${money(activeSelection.cost)}${activeSelection.offerTitle ? ` · ${activeSelection.offerTitle}` : ""}`
+              : selection.cost > 0
+                ? "این انتخاب مربوط به وسیلهٔ دیگری است — بلیت همین وسیله را انتخاب کن"
+                : "هنوز وسیلهٔ سفر انتخاب نشده"
           }
           hint={
-            selection.cost > 0
-              ? `بعد از این انتخاب، حدود ${money(Math.max(0, budget - selection.cost))} از بودجهٔ ${money(budget)} برای اقامت و بقیهٔ سفر می‌ماند.`
+            activeSelection
+              ? `بعد از این انتخاب، حدود ${money(Math.max(0, budget - activeSelection.cost))} از بودجهٔ ${money(budget)} برای اقامت و بقیهٔ سفر می‌ماند.`
               : "یک بلیت یا ماشین را انتخاب کن؛ بعد اقامتگاه."
           }
-          ready={selection.cost > 0}
+          ready={Boolean(activeSelection)}
           blockedNote="برای ادامه، یکی از بلیت‌ها را انتخاب کن یا ماشین شخصی را حساب کن."
           href="/accommodation"
           ctaLabel="ادامه به اقامتگاه"
@@ -588,7 +610,7 @@ function TransportPageContent() {
           </div>
 
           {/* -------------------------------------------------- comparison */}
-          {mode && selection.cost > 0 ? (
+          {activeSelection ? (
             <motion.section
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -602,14 +624,14 @@ function TransportPageContent() {
                   <span className="text-[10px] text-slate-500">وسیلهٔ انتخابی شما</span>
                   <b className="mt-0.5 block text-[12.5px] text-white">
                     {selectedName}
-                    {selection.vehicleId === "car"
-                      ? selection.carName
-                        ? ` · ${selection.carName}`
+                    {activeSelection.vehicleId === "car"
+                      ? activeSelection.carName
+                        ? ` · ${activeSelection.carName}`
                         : ""
-                      : selection.offerTitle
-                        ? ` · ${selection.offerTitle}`
+                      : activeSelection.offerTitle
+                        ? ` · ${activeSelection.offerTitle}`
                         : ""}{" "}
-                    · {money(selection.cost)}
+                    · {money(activeSelection.cost)}
                   </b>
                   <span className={`mt-0.5 flex items-center gap-1 text-[10px] ${budgetDifference >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
                     <Wallet className="h-3 w-3" />

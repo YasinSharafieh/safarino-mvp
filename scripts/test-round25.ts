@@ -6,7 +6,8 @@ import { stayPrice } from "../lib/stay-price";
 import { computeCarTrip, MAX_DEPRECIATION_PER_KM, DEFAULT_TOLL_PER_KM } from "../lib/car-cost";
 import { findCar, FUEL_OPTIONS } from "../lib/car-catalog";
 import { todaysPackageDestinations } from "../lib/trip-packages";
-import { drawQuestions, scoreAnswers, suggestCities } from "../lib/start-flow";
+import { drawQuestions, preferredTransportMode, scoreAnswers, suggestCities } from "../lib/start-flow";
+import { DAILY_FOOD_TOMAN, estimateBudget, mealsIncluded, roomAffordability } from "../lib/budget-fit";
 
 let failures = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -103,6 +104,43 @@ check("the same budget is tighter for four", four.some((city) => city.overBudget
 const share = (budgetMillions: number, people: number) => Math.round((budgetMillions * 1_000_000) / people);
 check("the per-person share is the budget divided by the people", share(20, 4) === 5_000_000 && share(20, 1) === 20_000_000);
 check("children still count in the share", Math.round((15_000_000) / 3) === 5_000_000);
+
+console.log("The quiz really decides the vehicle and the dates");
+const vehicleQuestions = drawQuestions(() => 0.13, 12);
+const trainAnswer: Record<string, string> = {};
+vehicleQuestions.forEach((question) => {
+  trainAnswer[question.key] = question.options[0].id;
+});
+const trainQuestion = vehicleQuestions.find((question) => question.key === "transport");
+check("the quiz has a vehicle question", Boolean(trainQuestion));
+if (trainQuestion) {
+  const trainOption = trainQuestion.options.find((option) => option.id === "train") || trainQuestion.options[0];
+  trainAnswer[trainQuestion.key] = trainOption.id;
+  const preferred = preferredTransportMode(vehicleQuestions, trainAnswer);
+  check("the chosen vehicle is read back", preferred === trainOption.id, preferred);
+  check("a car answer means the car tab", (() => {
+    const copy = { ...trainAnswer, [trainQuestion.key]: trainQuestion.options.find((option) => option.id === "car")?.id || "" };
+    return preferredTransportMode(vehicleQuestions, copy) === "car";
+  })());
+}
+check("no answer means no claim", preferredTransportMode(vehicleQuestions, {}) === "");
+
+console.log("Food is the traveller's own 800,000 a day, and a paid breakfast counts");
+check("a normal food day is 800,000", DAILY_FOOD_TOMAN === 800_000);
+const plain = estimateBudget({ totalBudget: 30_000_000, travellers: 2, days: 3, tickets: 5_000_000, stay: 6_000_000 });
+const withBreakfast = estimateBudget({ totalBudget: 30_000_000, travellers: 2, days: 3, tickets: 5_000_000, stay: 6_000_000, breakfastIncluded: true });
+check("breakfast in the room lowers the food money", withBreakfast.food < plain.food, `${withBreakfast.food} < ${plain.food}`);
+check("a free breakfast never makes food negative", withBreakfast.food >= 0);
+check("the hotel's own words decide", mealsIncluded({ name: "هتل پارس", amenities: ["صبحانه"] }).breakfast === true);
+check("no meal mentioned means no discount", mealsIncluded({ name: "خانهٔ سنتی", amenities: ["حیاط"] }).breakfast === false);
+check("full board is recognised too", mealsIncluded({ priceNote: "پانسیون کامل با ناهار و شام" }).fullBoard === true);
+const roomFits = roomAffordability({ roomTotal: 6_000_000, roomBudget: 15_000_000, travellers: 2, nights: 3 });
+const roomTight = roomAffordability({ roomTotal: 14_000_000, roomBudget: 15_000_000, travellers: 2, nights: 3 });
+const roomOver = roomAffordability({ roomTotal: 20_000_000, roomBudget: 15_000_000, travellers: 2, nights: 3 });
+check("a room that leaves room for food is called suitable", roomFits.tone === "fits" && roomFits.headroom === 9_000_000);
+check("a room that eats the whole budget is called tight", roomTight.tone === "tight");
+check("a room past the money is called over, with the amount", roomOver.tone === "over" && roomOver.label.includes("۵"));
+check("the food sentence is always there", roomFits.foodNote.includes("۸۰۰") && roomOver.foodNote.includes("۸۰۰"));
 
 if (failures) {
   console.error(`\n❌ ${failures} بررسی شکست خورد`);

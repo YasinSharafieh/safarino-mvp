@@ -8,6 +8,7 @@ import type { AccommodationGroup, AccommodationOffer } from "@/lib/accommodation
 import { categorizeStay, PROVIDER_LABELS } from "@/lib/accommodation-types";
 import AccommodationImage from "./AccommodationImage";
 import { stayPrice } from "@/lib/stay-price";
+import { mealsIncluded, roomAffordability } from "@/lib/budget-fit";
 import ProviderBadge, { ProviderMark } from "./ProviderBadge";
 
 const numberFormatter = new Intl.NumberFormat("fa-IR");
@@ -26,6 +27,8 @@ export default function AccommodationCard({
   recommendedId,
   recommendReason,
   people = 2,
+  /** What is really left for the room once the ticket and the food are set aside. */
+  roomBudget,
 }: {
   group: AccommodationGroup;
   index: number;
@@ -39,6 +42,7 @@ export default function AccommodationCard({
   recommendReason?: string;
   /** How many guests the price has to be multiplied by. */
   people?: number;
+  roomBudget?: number;
 }) {
   const [activeId, setActiveId] = useState(group.offers[0].id);
   useEffect(() => {
@@ -48,6 +52,7 @@ export default function AccommodationCard({
   const offer = group.offers.find((item) => item.id === activeId) || group.offers[0];
   const isSelected = selectedId === offer.id;
   const isRecommended = Boolean(recommendedId) && group.offers.some((item) => item.id === recommendedId);
+  const meals = mealsIncluded(offer);
   const price = stayPrice({
     priceTotalToman: offer.priceTotalToman,
     pricePerNightToman: offer.pricePerNightToman,
@@ -106,6 +111,29 @@ export default function AccommodationCard({
                 مبلغ اعلام‌شدهٔ منبع {formatToman(price.total)} است؛ ممکن است نوع اتاق یا مالیات متفاوت باشد.
               </span>
             )}
+            {typeof roomBudget === "number" && (() => {
+              const fit = roomAffordability({
+                roomTotal: price.total,
+                roomBudget,
+                travellers: price.people,
+                nights: price.nights,
+                breakfastIncluded: meals.breakfast,
+                fullBoardIncluded: meals.fullBoard,
+              });
+              const tone =
+                fit.tone === "fits"
+                  ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-100"
+                  : fit.tone === "tight"
+                    ? "border-amber-300/25 bg-amber-300/[0.07] text-amber-100"
+                    : "border-rose-400/25 bg-rose-400/[0.07] text-rose-100";
+              return (
+                <div className={`mt-1.5 block rounded-lg border px-2 py-1.5 text-[9.5px] leading-5 ${tone}`} data-fit={fit.tone}>
+                  <b className="block font-black">{fit.label}</b>
+                  <span className="mt-0.5 block opacity-80">{fit.foodNote}</span>
+                  {meals.label ? <span className="mt-0.5 block opacity-80">{meals.label}؛ همین در حساب غذا لحاظ شد.</span> : null}
+                </div>
+              );
+            })()}
           </div>
           <span className="shrink-0 text-[10px] text-slate-500">{offer.reviewCount ? `${formatNumber(offer.reviewCount)} نظر` : "بدون نظر ثبت‌شده"}</span>
         </div>

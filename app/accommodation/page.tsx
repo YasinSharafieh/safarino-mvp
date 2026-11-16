@@ -456,16 +456,22 @@ export default function AccommodationPage() {
                 <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="هزینه حمل‌ونقل و اقامت نسبت به بودجه" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(budgetPercent, 100)}>
                   <motion.div className={`h-full rounded-full ${remainingBudget < 0 ? "bg-rose-500" : "bg-emerald-400"}`} animate={{ width: `${Math.min(budgetPercent, 100)}%` }} />
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-5">
                   {[
-                    ["حمل‌ونقل", transportCost],
-                    ["اقامت", accommodationCost],
-                    ["مجموع هزینه", totalSpent],
-                    [remainingBudget >= 0 ? "باقی‌مانده" : "بیشتر از بودجه", Math.abs(remainingBudget)],
-                  ].map(([label, value], index) => (
-                    <div key={String(label)} className="rounded-xl bg-white/[0.035] p-3"><span className="block text-[10px] text-slate-500">{label}</span><b className={`mt-1 block text-xs ${index === 3 ? remainingBudget >= 0 ? "text-emerald-300" : "text-rose-300" : "text-white"}`}>{formatToman(Number(value))}</b></div>
+                    ["بودجهٔ تعیین‌شدهٔ تو", totalBudget, ""],
+                    ["بلیت و حمل‌ونقل", transportCost, ""],
+                    ["پول غذا و گشت (کنار گذاشته‌شده)", stayBudget.food + stayBudget.activities + stayBudget.localTransport, ""],
+                    ["اقامت", accommodationCost, ""],
+                    [remainingBudget >= 0 ? "باقی‌مانده" : "بیشتر از بودجه", Math.abs(remainingBudget), remainingBudget >= 0 ? "text-emerald-300" : "text-rose-300"],
+                  ].map(([label, value, tone]) => (
+                    <div key={String(label)} className="rounded-xl bg-white/[0.035] p-3"><span className="block text-[10px] text-slate-500">{label}</span><b className={`mt-1 block text-xs ${String(tone) || "text-white"}`}>{formatToman(Number(value))}</b></div>
                   ))}
                 </div>
+                <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10.5px] leading-6 text-slate-300">
+                  بودجهٔ سفر که خودت گفتی <b className="text-cyan-200">{formatToman(totalBudget)}</b> است؛
+                  بعد از بلیت، <b className={stayBudget.remaining > 0 ? "text-emerald-300" : "text-rose-300"}>{formatToman(Math.max(0, stayBudget.remaining))}</b> برای اقامت مانده
+                  و <b className="text-white">{formatToman(stayBudget.food)}</b> هم برای غذا کنار گذاشته شده (۸۰۰ هزار تومان هر نفر هر روز × {formatNumber(stayBudget.travellers)} نفر × {formatNumber(stayBudget.days)} شب).
+                </p>
                 {remainingBudget < 0 && <p className="mt-3 flex items-center gap-2 text-[11px] text-rose-300"><CircleAlert className="h-4 w-4 shrink-0" />هزینه‌ها از بودجه بیشتر شده؛ اقامت اقتصادی‌تری انتخاب کنید یا بودجه را افزایش دهید.</p>}
               </div>
             </div>
@@ -616,7 +622,7 @@ export default function AccommodationPage() {
                     {loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="glass h-[29rem] animate-pulse p-5"><div className="h-52 rounded-2xl bg-white/5" /><div className="mt-5 h-5 w-2/3 rounded bg-white/5" /><div className="mt-3 h-4 w-1/2 rounded bg-white/5" /></div>)}</div> : filteredGroups.length ? (
                       <motion.div layout className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <AnimatePresence mode="popLayout">{filteredGroups.map((group, index) => (
-                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} people={Math.max(1, travelData.travelers + travelData.children)} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} />
+                          <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} people={Math.max(1, travelData.travelers + travelData.children)} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} roomBudget={stayBudget.remaining} />
                         ))}</AnimatePresence>
                       </motion.div>
                     ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}

@@ -16,7 +16,14 @@
  * and they are labelled as such wherever they appear.
  */
 
-export const DAILY_FOOD_TOMAN = 700_000;
+/**
+ * A normal day of food for one person, as stated by the traveller: about
+ * 800,000 toman. It is a planning assumption, not a quote, and every place
+ * that uses it says so.
+ */
+export const DAILY_FOOD_TOMAN = 800_000;
+/** When the room includes breakfast, that much of the food money is saved. */
+export const DAILY_BREAKFAST_TOMAN = 180_000;
 export const DAILY_ACTIVITIES_TOMAN = 300_000;
 export const DAILY_LOCAL_TRANSPORT_TOMAN = 200_000;
 
@@ -38,19 +45,45 @@ export type BudgetPlan = {
   note: string;
 };
 
+/**
+ * Reads a room's own text to see whether a meal is already paid for. Nothing
+ * is assumed: only the words the provider itself put on the offer count.
+ */
+export function mealsIncluded(offer: { name?: string; priceNote?: string; amenities?: string[]; details?: string[] }): {
+  breakfast: boolean;
+  fullBoard: boolean;
+  label: string;
+} {
+  const text = [offer.name, offer.priceNote, ...(offer.amenities || []), ...(offer.details || [])]
+    .filter(Boolean)
+    .join(" ");
+  const fullBoard = /(تمام\s* غذا|پانسیون|full\s*board|all\s*inclusive|ناهار و شام)/i.test(text);
+  const breakfast = fullBoard || /(صبحانه|breakfast)/i.test(text);
+  return {
+    breakfast,
+    fullBoard,
+    label: fullBoard ? "غذا در قیمت اقامتگاه هست" : breakfast ? "صبحانه در قیمت اقامتگاه هست" : "",
+  };
+}
+
 export function estimateBudget(input: {
   totalBudget: number;
   travellers: number;
   days: number;
   tickets?: number;
   stay?: number;
+  /** The room's price already covers breakfast / all meals. */
+  breakfastIncluded?: boolean;
+  fullBoardIncluded?: boolean;
 }): BudgetPlan {
   const travellers = Math.max(1, Math.round(input.travellers || 1));
   const days = Math.max(1, Math.round(input.days || 1));
   const totalBudget = Math.max(0, Math.round(input.totalBudget || 0));
   const tickets = Math.max(0, Math.round(input.tickets || 0));
   const stay = Math.max(0, Math.round(input.stay || 0));
-  const food = DAILY_FOOD_TOMAN * travellers * days;
+  const foodSaving =
+    (input.fullBoardIncluded ? DAILY_FOOD_TOMAN / 2 : input.breakfastIncluded ? DAILY_BREAKFAST_TOMAN : 0) * travellers * days;
+  const food = Math.max(0, DAILY_FOOD_TOMAN * travellers * days - foodSaving);
   const activities = DAILY_ACTIVITIES_TOMAN * travellers * days;
   const localTransport = DAILY_LOCAL_TRANSPORT_TOMAN * travellers * days;
   const remaining = totalBudget - tickets - stay - food - activities - localTransport;
@@ -153,5 +186,58 @@ export function bestStay<T extends { id: string; price: number; rating: number |
       bestRating > cheapestRating
         ? `امتیاز مسافرانش از ارزان‌ترین گزینه بالاتر است و با بودجهٔ تو هم جا می‌شود.`
         : `با بودجهٔ تو جا می‌شود و جای بیشتری برای خرج‌های دیگر می‌گذارد.`,
+  };
+}
+
+/**
+ * «آیا این اتاق با پول باقی‌مانده جور است؟» — the sentence a traveller needs
+ * before pressing «انتخاب»: what is left for the room once the ticket, the
+ * food (800,000 per person per day) and the day-to-day costs are set aside.
+ */
+export function roomAffordability(input: {
+  roomTotal: number;
+  /** What is still unspent for the room after the ticket and the daily costs. */
+  roomBudget: number;
+  travellers: number;
+  nights: number;
+  breakfastIncluded?: boolean;
+  fullBoardIncluded?: boolean;
+}): { fits: boolean; tone: "fits" | "tight" | "over"; label: string; foodNote: string; headroom: number } {
+  const nights = Math.max(1, Math.round(input.nights || 1));
+  const travellers = Math.max(1, Math.round(input.travellers || 1));
+  const savings =
+    (input.fullBoardIncluded ? DAILY_FOOD_TOMAN / 2 : input.breakfastIncluded ? DAILY_BREAKFAST_TOMAN : 0) * travellers * nights;
+  const food = Math.max(0, DAILY_FOOD_TOMAN * travellers * nights - savings);
+  const headroom = Math.round(input.roomBudget - input.roomTotal);
+  const ratio = input.roomBudget > 0 ? input.roomTotal / input.roomBudget : 2;
+  const foodNote = input.fullBoardIncluded
+    ? `غذای هر نفر هر روز ۸۰۰ هزار تومان حساب شد و چون غذا در قیمت اقامتگاه هست، نصفش کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
+    : input.breakfastIncluded
+      ? `صبحانه در قیمت هست، پس از ۸۰۰ هزار تومان غذای هر نفر هر روز، ۱۸۰ هزار تومان کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
+      : `غذا برای ${travellers} نفر و ${nights} شب ${toman(food)} حساب شده (۸۰۰ هزار تومان هر نفر هر روز).`;
+  if (headroom >= 0 && ratio <= 0.8) {
+    return {
+      fits: true,
+      tone: "fits",
+      headroom,
+      foodNote,
+      label: `مناسب بودجه‌ات است: ${toman(headroom)} هم بعد از این اقامت و پول غذا باقی می‌ماند.`,
+    };
+  }
+  if (headroom >= 0) {
+    return {
+      fits: true,
+      tone: "tight",
+      headroom,
+      foodNote,
+      label: `جای مانور زیادی نمی‌مانَد: بعد از این اقامت فقط ${toman(headroom)} برای بقیهٔ سفر می‌ماند.`,
+    };
+  }
+  return {
+    fits: false,
+    tone: "over",
+    headroom,
+    foodNote,
+    label: `${toman(Math.abs(headroom))} بیشتر از پولی است که بعد از بلیت و پول غذا می‌ماند.`,
   };
 }
