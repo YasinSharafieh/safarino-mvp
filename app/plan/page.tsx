@@ -1371,6 +1371,12 @@ export default function PlanPage() {
                 ) : null}
               </div>
             </div>
+            {curationNote ? (
+              <p className="mt-2 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.05] px-3 py-2 text-[10px] leading-6 text-cyan-100/90">
+                <Sparkles className="ml-1 inline h-3 w-3" />
+                منطق این چیدمان: {curationNote}
+              </p>
+            ) : null}
             <div className="mt-5 flex gap-2 overflow-x-auto pb-2 print:hidden">
               {plan.days.map((day, index) => (
                 <button key={day.day} type="button" onClick={() => setActiveDay(index)} className={`shrink-0 rounded-xl border px-5 py-2.5 text-xs font-bold transition ${activeDay === index ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>روز {formatNumber(day.day)}</button>
