@@ -249,6 +249,13 @@ export default function PlanPage() {
   const [activeDay, setActiveDay] = useState(0);
   /** Where the current timeline came from: the traveller's list, their taste, or the model. */
   const [scheduleSource, setScheduleSource] = useState<"mine" | "taste" | "ai" | null>(null);
+  /** AI order + one reason per stop, from /api/plan/curate. */
+  const [curateLoading, setCurateLoading] = useState(false);
+  const [curationNote, setCurationNote] = useState("");
+  /** One warm paragraph a day, from /api/plan/guide. */
+  const [guides, setGuides] = useState<Record<number, { text: string; tip: string }>>({});
+  const [guideSource, setGuideSource] = useState<"ai" | "local" | null>(null);
+  const [guideLoading, setGuideLoading] = useState(false);
   const autoBuilt = useRef(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("برای دریافت برنامه اختصاصی، دکمه بازسازی هوشمند را بزنید.");
@@ -723,6 +730,162 @@ export default function PlanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenKey]);
 
+  const tripKey = useMemo(
+    () => `${destination}|${dayCount}|${chosenPois.map((poi) => poi.id).sort().join(",")}`,
+    [chosenPois, dayCount, destination],
+  );
+
+  /**
+   * «چیدن هوشمند»: the model orders the real places the traveller is looking at
+   * and says why each one is there. It never adds a place and never removes a
+   * chosen one — if it cannot answer, the local order stands.
+   */
+  const runCurate = async (silent = false) => {
+    const mine = chosenPois.length > 0;
+    const places = mine ? chosenPois : suggestionPool.length ? suggestionPool : enrichedPois;
+    if (!places.length) return;
+    setCurateLoading(true);
+    if (!silent) setNoticeTone("info");
+    try {
+      const response = await fetch("/api/plan/curate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(45_000),
+        body: JSON.stringify({
+          destination,
+          days: dayCount,
+          mustIncludeAll: mine,
+          taste: { moods: taste.moods, words: taste.words },
+          places: places.map((poi) => ({
+            id: poi.id,
+            name: poi.name,
+            category: poi.category,
+            km: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+            minutes: typeof poi.fromStayMinutes === "number" ? poi.fromStayMinutes : null,
+          })),
+        }),
+      });
+      const payload = (await response.json()) as {
+        success?: boolean;
+        days?: { day: number; stops: { id: string; why: string }[] }[];
+        summary?: string;
+        source?: "ai" | "local";
+        note?: string;
+      };
+      if (!payload?.success || !payload.days?.length) throw new Error("curate failed");
+      const reasons: Record<string, string> = {};
+      payload.days.forEach((day) => day.stops.forEach((stop) => { if (stop.why) reasons[stop.id] = stop.why; }));
+      setPlan((current) => ({
+        ...current,
+        days: slotDays({
+          destination,
+          days: dayCount,
+          places,
+          arrivalTime,
+          transferMinutes: arrivalTransfer?.minutes ?? null,
+          transferKm: arrivalTransfer?.distanceKm ?? null,
+          origin,
+          respectAll: true,
+          maxPerDay: places.length,
+          assignment: payload.days!.map((day) => day.stops.map((stop) => stop.id)),
+          notes: reasons,
+        }),
+      }));
+      setActiveDay(0);
+      setScheduleSource(payload.source === "ai" ? "ai" : mine ? "mine" : "taste");
+      setCurationNote(payload.source === "ai" ? payload.summary || "" : payload.note || "");
+      setNoticeTone("success");
+      setNotice(
+        payload.source === "ai"
+          ? `چیدمان هوشمند آماده شد: ${formatNumber(places.length)} جاذبهٔ واقعی، مرتب‌شده بر اساس سلیقه و فاصله${payload.summary ? ` — ${payload.summary}` : ""}.`
+          : payload.note || "چیدمان محلی (نزدیک‌ترین جاذبه‌ها) اعمال شد.",
+      );
+    } catch {
+      if (!silent) {
+        setNoticeTone("warning");
+        setNotice("چیدن هوشمند انجام نشد؛ همان ترتیب محلی باقی ماند.");
+      }
+    } finally {
+      setCurateLoading(false);
+    }
+  };
+
+  /** «راهنمای روز»: one paragraph a day about exactly what that day holds. */
+  const runGuide = async () => {
+    if (!plan.days.length) return;
+    setGuideLoading(true);
+    try {
+      const response = await fetch("/api/plan/guide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(45_000),
+        body: JSON.stringify({
+          destination,
+          taste: taste.moods.join("، "),
+          days: plan.days.map((day) => ({
+            day: day.day,
+            stops: day.items
+              .filter((item) => item.type === "sightseeing" || item.type === "food" || item.type === "transport")
+              .map((item) => ({ time: item.time, title: item.title, kind: item.type })),
+          })),
+        }),
+      });
+      const payload = (await response.json()) as {
+        success?: boolean;
+        guides?: { day: number; text: string; tip: string }[];
+        source?: "ai" | "local";
+      };
+      if (!payload?.success || !payload.guides?.length) throw new Error("guide failed");
+      const map: Record<number, { text: string; tip: string }> = {};
+      payload.guides.forEach((entry) => { map[entry.day] = { text: entry.text, tip: entry.tip }; });
+      setGuides(map);
+      setGuideSource(payload.source || "local");
+    } catch {
+      // The timeline stands on its own; a missing paragraph is not an error box.
+    } finally {
+      setGuideLoading(false);
+    }
+  };
+
+  /**
+   * The guide is written once per distinct plan (cached for the session), so a
+   * reload never pays for the same paragraph twice.
+   */
+  useEffect(() => {
+    if (!plan.days.length) return;
+    const key = `safarino:guide:${tripKey}:${plan.days.map((day) => day.items.filter((item) => item.type === "sightseeing").map((item) => item.poiId).join("-")).join("_")}`;
+    let saved: Record<number, { text: string; tip: string }> | null = null;
+    let savedSource: "ai" | "local" | null = null;
+    try {
+      const raw = window.sessionStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { guides: Record<number, { text: string; tip: string }>; source: "ai" | "local" };
+        saved = parsed.guides;
+        savedSource = parsed.source;
+      }
+    } catch {
+      saved = null;
+    }
+    if (saved) {
+      setGuides(saved);
+      setGuideSource(savedSource);
+      return;
+    }
+    void runGuide();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripKey, plan.days]);
+
+  useEffect(() => {
+    if (!guideSource || !Object.keys(guides).length) return;
+    const key = `safarino:guide:${tripKey}:${plan.days.map((day) => day.items.filter((item) => item.type === "sightseeing").map((item) => item.poiId).join("-")).join("_")}`;
+    try {
+      window.sessionStorage.setItem(key, JSON.stringify({ guides, source: guideSource }));
+    } catch {
+      // A blocked storage only means the paragraph is written again next time.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guides, guideSource]);
+
   const sharePlan = async () => {
     const text = `برنامه سفر من از ${origin} به ${destination} با سفرینو`;
     try {
@@ -1175,9 +1338,18 @@ export default function PlanPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button type="button" onClick={suggestMyself} className="btn-primary !px-3.5 !py-2 text-[10.5px]">
+                <button type="button" onClick={suggestMyself} className="btn-ghost !px-3.5 !py-2 text-[10.5px]">
                   <RefreshCw className="h-3.5 w-3.5" />
                   {chosenPois.length ? "چیدن دوباره از انتخاب‌های من" : "چیدن پیشنهاد سلیقه‌ای"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runCurate()}
+                  disabled={curateLoading || (!chosenPois.length && !suggestionPool.length)}
+                  className="btn-primary !px-3.5 !py-2 text-[10.5px] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {curateLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {curateLoading ? "در حال چیدن هوشمند…" : "چیدن هوشمند با AI"}
                 </button>
                 {chosenPois.length ? (
                   <button
@@ -1215,7 +1387,38 @@ export default function PlanPage() {
 
             <AnimatePresence mode="wait">
               <motion.div key={selectedDay?.day ?? 0} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="glass print-card mt-4 p-5 sm:p-7 print:hidden">
-                <h3 className="text-lg font-black text-white">{selectedDay?.title}</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-lg font-black text-white">{selectedDay?.title}</h3>
+                  <button
+                    type="button"
+                    onClick={() => void runGuide()}
+                    disabled={guideLoading}
+                    className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9.5px] font-bold text-slate-300 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 print:hidden"
+                  >
+                    {guideLoading ? <LoaderCircle className="ml-1 inline h-3 w-3 animate-spin" /> : <Sparkles className="ml-1 inline h-3 w-3" />}
+                    راهنمای روز را دوباره بنویس
+                  </button>
+                </div>
+
+                {guides[selectedDay?.day ?? 0] ? (
+                  <div className="mt-3 rounded-2xl border border-turquoise-400/20 bg-gradient-to-l from-turquoise-400/[0.09] to-transparent p-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="grid h-6 w-6 place-items-center rounded-lg bg-turquoise-400/15 text-turquoise-200"><Sparkles className="h-3.5 w-3.5" /></span>
+                      <b className="text-[10.5px] font-black text-turquoise-100">
+                        راهنمای {guideSource === "ai" ? "سفرینو (نوشتهٔ هوش مصنوعی)" : "سفرینو"}
+                      </b>
+                    </div>
+                    <p className="mt-2 text-[11.5px] leading-7 text-slate-200">{guides[selectedDay?.day ?? 0].text}</p>
+                    {guides[selectedDay?.day ?? 0].tip ? (
+                      <p className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-6 text-amber-100/90">
+                        <Lightbulb className="mt-0.5 h-3 w-3 shrink-0" />
+                        {guides[selectedDay?.day ?? 0].tip}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : guideLoading ? (
+                  <div className="mt-3 h-16 animate-pulse rounded-2xl bg-white/[0.04]" />
+                ) : null}
                 <div className="relative mt-6 space-y-4 before:absolute before:right-[23px] before:top-4 before:h-[calc(100%-32px)] before:w-px before:bg-white/10 sm:before:right-[27px]">
                   {selectedDay?.items.map((item, index) => {
                     const style = ACTIVITY_STYLES[item.type] ?? ACTIVITY_STYLES.activity;

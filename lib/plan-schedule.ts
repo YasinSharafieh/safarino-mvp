@@ -106,8 +106,14 @@ export type SlotInput = {
   maxPerDay?: number;
   /** Said honestly when the choice does not fit the days the traveller booked. */
   onOverflow?: (dropped: number) => void;
-  /** Lines the traveller wrote when they added the place. */
+  /** Lines the traveller wrote when they added the place, or the AI's one-line reason. */
   notes?: Record<string, string>;
+  /**
+   * A day-by-day assignment of place ids (from the AI curator, or from the
+   * traveller's own order). When it is given the schedule follows it exactly;
+   * anything missing is appended so no place is ever lost.
+   */
+  assignment?: string[][];
 };
 
 /**
@@ -136,10 +142,39 @@ export function distributePlaces<T extends SchedulePlace>(places: T[], days: num
   return buckets;
 }
 
+/**
+ * Turns a list of id-groups into groups of places. Unknown ids are ignored and
+ * any place that the list forgot is added to the least-full day — a plan may be
+ * reordered, never shrink.
+ */
+export function applyAssignment<T extends SchedulePlace>(places: T[], assignment: string[][], days: number): T[][] {
+  const byId = new Map(places.map((place) => [place.id, place]));
+  const used = new Set<string>();
+  const buckets: T[][] = Array.from({ length: Math.max(1, Math.round(days || 1)) }, () => []);
+  assignment.forEach((group, index) => {
+    const bucket = buckets[Math.min(buckets.length - 1, index)];
+    for (const id of group || []) {
+      const place = byId.get(id);
+      if (!place || used.has(id)) continue;
+      bucket.push(place);
+      used.add(id);
+    }
+  });
+  for (const place of places) {
+    if (used.has(place.id)) continue;
+    // Put the forgotten one where the day is lightest.
+    const lightest = buckets.reduce((best, bucket, index) => (bucket.length < buckets[best].length ? index : best), 0);
+    buckets[lightest].push(place);
+  }
+  return buckets;
+}
+
 export function slotDays(input: SlotInput): PlanDay[] {
   const dayCount = Math.max(1, Math.round(input.days || 1));
   const cap = input.respectAll ? Number.POSITIVE_INFINITY : Math.max(1, Math.round(input.maxPerDay || 3));
-  const buckets = distributePlaces(input.places, dayCount, Boolean(input.respectAll));
+  const buckets = input.assignment?.length
+    ? applyAssignment(input.places, input.assignment, dayCount)
+    : distributePlaces(input.places, dayCount, Boolean(input.respectAll));
   const dropped = input.respectAll ? 0 : 0;
   if (dropped && input.onOverflow) input.onOverflow(dropped);
 
