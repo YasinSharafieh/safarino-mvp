@@ -19,6 +19,8 @@ export type TravelData = {
   quizAnswers: Record<string, string>;
   /** The vehicle the traveller asked for in the quiz — the transport step opens on it. */
   preferredMode: string;
+  /** The tastes read from the quiz / their own words, strongest first. */
+  tasteMoods: string[];
   transport: Record<string, unknown> | null;
   accommodation: Record<string, unknown> | null;
 };
@@ -46,6 +48,7 @@ const INITIAL_DATA: TravelData = {
   quizStep: 0,
   quizAnswers: {},
   preferredMode: "",
+  tasteMoods: [],
   transport: null,
   accommodation: null,
 };

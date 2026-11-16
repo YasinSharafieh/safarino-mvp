@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   ArrowRight,
@@ -51,20 +51,10 @@ import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from
 import { cityPoint } from "@/lib/iran-cities";
 import { chosenTransport, transportHeadline } from "@/lib/transport-selection";
 import { estimateBudget } from "@/lib/budget-fit";
+import { findCity } from "@/lib/discover";
 
-type ActivityType = "sightseeing" | "food" | "transport" | "rest" | "activity";
-type PlanItem = {
-  time: string;
-  title: string;
-  description: string;
-  type: ActivityType;
-  poiId?: string;
-  poiCategory?: string;
-  poiSourceUrl?: string | null;
-  poiWikipediaUrl?: string | null;
-  poiDistanceKm?: number;
-};
-type PlanDay = { day: number; title: string; items: PlanItem[] };
+// The schedule lives in lib/plan-schedule so the tests can build it too.
+import { clockOfMinutes, faNum, faTime, minutesOfClock, slotDays, tastePlaces, tasteProfile, visitMinutes, type ActivityType, type PlanDay, type PlanItem } from "@/lib/plan-schedule";
 type BudgetAnalysis = {
   totalBudget: number;
   transport: number;
@@ -244,155 +234,6 @@ const DAY_SLOTS = ["۰۸:۳۰", "۱۰:۳۰", "۱۲:۳۰", "۱۵:۰۰", "۱۷:۳�
  * by the routing service, so «۱۰:۳۰» is a real time, not a label.
  */
 
-/** How long a visit really takes, by what it is. */
-function visitMinutes(category: string): number {
-  const value = category || "";
-  if (/موزه|گالری/.test(value)) return 90;
-  if (/بازار|خرید/.test(value)) return 75;
-  if (/پارک|بوستان|طبیعت|چشم‌انداز/.test(value)) return 60;
-  if (/مسجد|زیارت|آرامگاه|حرم|کلیسا/.test(value)) return 45;
-  if (/قلعه|محوطه|باستانی/.test(value)) return 90;
-  return 75;
-}
-
-/** «09:05» → 545, and back, so the schedule can be arithmetic. */
-function minutesOfClock(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim());
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-  return Math.min(23 * 60 + 59, Math.max(0, hours * 60 + minutes));
-}
-
-function clockOfMinutes(total: number): string {
-  const wrapped = ((Math.round(total) % (24 * 60)) + 24 * 60) % (24 * 60);
-  const hours = String(Math.floor(wrapped / 60)).padStart(2, "0");
-  const minutes = String(wrapped % 60).padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
-
-const faTime = (total: number) => new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false }).format(Math.floor((total % (24 * 60)) / 60)) + ":" + new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false }).format(total % 60);
-
-const faNum = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
-
-function slotDays(input: {
-  destination: string;
-  days: number;
-  places: PlanPoiWithStay[];
-  arrivalTime: string | null;
-  /** Real minutes from the terminal (airport/station) to the chosen stay. */
-  transferMinutes?: number | null;
-  /** Real kilometres for the same hop, when it was measured. */
-  transferKm?: number | null;
-  origin?: string;
-}): PlanDay[] {
-  // Nearest to the stay first: the first day needs the least driving.
-  const pool = [...input.places].sort((a, b) => {
-    const first = typeof a.fromStayKm === "number" ? a.fromStayKm : a.distanceKm;
-    const second = typeof b.fromStayKm === "number" ? b.fromStayKm : b.distanceKm;
-    return first - second;
-  });
-
-  const arrival = minutesOfClock(input.arrivalTime);
-  const transfer = Math.max(10, Math.round(input.transferMinutes ?? 45));
-
-  return Array.from({ length: Math.max(1, input.days) }, (_, index) => {
-    const day = index + 1;
-    const items: PlanItem[] = [];
-    // The clock this day starts from.
-    let clock = day === 1 ? (arrival ?? 9 * 60) : 8 * 60 + 30;
-
-    if (day === 1) {
-      items.push({
-        time: clockOfMinutes(clock),
-        title: input.arrivalTime ? `رسیدن به ${input.destination}` : `حرکت به سمت ${input.destination}`,
-        description: input.arrivalTime
-          ? `طبق ساعت بلیت انتخاب‌شده، ${faTime(clock)} در ${input.destination} هستید${input.origin ? ` (از ${input.origin} راهی شده‌اید)` : ""}.`
-          : "ساعت رسیدن در بلیت ثبت نشده؛ برنامه از صبح شروع می‌شود و با ساعت واقعی بلیت هماهنگ می‌شود.",
-        type: "transport",
-      });
-      clock += transfer;
-      items.push({
-        time: clockOfMinutes(clock),
-        title: "رسیدن به اقامتگاه",
-        description: input.transferKm && input.transferKm > 0
-          ? `حدود ${faNum(transfer)} دقیقه و ${faNum(input.transferKm)} کیلومتر تا اقامتگاه (مسیر واقعی جاده)؛ بارها را بگذارید و اگر اتاق آماده نبود چمدان را تحویل دهید.`
-          : `حدود ${faNum(transfer)} دقیقه تا اقامتگاه؛ بارها را بگذارید و اگر اتاق آماده نبود چمدان را تحویل دهید.`,
-        type: "rest",
-      });
-      clock += 45;
-      items.push({
-        time: clockOfMinutes(clock),
-        title: "استراحت کوتاه و آماده‌شدن",
-        description: "چای یا قهوه‌ای، یک دوش و شروع اولین بازدید با انرژی.",
-        type: "rest",
-      });
-    } else {
-      items.push({ time: clockOfMinutes(clock), title: "صبحانه و شروع روز", description: "صبحانه، آماده‌شدن و مرور برنامهٔ امروز.", type: "food" });
-      clock += 60;
-    }
-
-    let visits = 0;
-    let lunchDone = false;
-    while (clock < 20 * 60) {
-      const poi = pool.shift();
-      if (!poi) break;
-      // Travel to this place, measured when we know where the traveller sleeps.
-      const travel = typeof poi.fromStayMinutes === "number" ? Math.max(10, poi.fromStayMinutes) : 25;
-      clock += travel;
-      const km = typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm;
-      const stay = visitMinutes(poi.category);
-      items.push({
-        time: clockOfMinutes(clock),
-        title: poi.name,
-        description: `${poi.name} از جاذبه‌های ${poi.category} است؛ ${faNum(km)} کیلومتر از اقامتگاه${typeof poi.fromStayMinutes === "number" ? ` (حدود ${faNum(poi.fromStayMinutes)} دقیقه رانندگی)` : ""} · حدود ${faNum(stay)} دقیقه برای بازدید.`,
-        type: "sightseeing",
-        poiId: poi.id,
-        poiCategory: poi.category,
-        poiSourceUrl: poi.wikipediaUrl || poi.sourceUrl,
-        poiWikipediaUrl: poi.wikipediaUrl,
-        poiDistanceKm: km,
-      });
-      clock += stay;
-      visits += 1;
-
-      // Lunch sits where a person actually gets hungry — around 12:30.
-      if (!lunchDone && clock >= 12 * 60 + 30 && clock <= 15 * 60) {
-        items.push({
-          time: clockOfMinutes(clock),
-          title: "ناهار در همان محله",
-          description: "ناهار ساده و محلی نزدیک همین جاذبه؛ بعد از آن کمی قدم‌زدن.",
-          type: "food",
-        });
-        clock += 75;
-        lunchDone = true;
-      }
-      if (visits >= 3) break;
-    }
-
-    if (!lunchDone) {
-      items.push({ time: clockOfMinutes(Math.max(clock, 12 * 60 + 45)), title: "ناهار", description: "ناهار در محلهٔ اقامتگاه.", type: "food" });
-      clock = Math.max(clock, 12 * 60 + 45) + 75;
-    }
-
-    items.push({
-      time: clockOfMinutes(Math.max(clock + 30, 20 * 60 + 30)),
-      title: "شام و بازگشت به اقامتگاه",
-      description: "پایان روز با شام سبک و استراحت؛ فردا صبح دوباره ادامه می‌دهیم.",
-      type: "food",
-    });
-
-    items.sort((a, b) => a.time.localeCompare(b.time));
-    return {
-      day,
-      title: `روز ${faNum(day)} · ${input.destination}`,
-      items,
-    };
-  });
-}
-
 export default function PlanPage() {
   const { travelData, setTravelData, isHydrated } = useTravel();
   const peopleCount = Math.max(1, Number(travelData.travelers || 2) + Number(travelData.children || 0));
@@ -406,6 +247,9 @@ export default function PlanPage() {
   const [preferences, setPreferences] = useState("فرهنگ و تاریخ، غذای محلی، سفر اقتصادی");
   const [plan, setPlan] = useState<TravelPlan>(() => createLocalPlan("مشهد", 15_000_000, 3, 0, 0));
   const [activeDay, setActiveDay] = useState(0);
+  /** Where the current timeline came from: the traveller's list, their taste, or the model. */
+  const [scheduleSource, setScheduleSource] = useState<"mine" | "taste" | "ai" | null>(null);
+  const autoBuilt = useRef(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("برای دریافت برنامه اختصاصی، دکمه بازسازی هوشمند را بزنید.");
   const [noticeTone, setNoticeTone] = useState<"info" | "success" | "warning">("info");
@@ -696,12 +540,36 @@ export default function PlanPage() {
     return null;
   }, [transportDetails]);
 
+  /** The taste from the quiz (or their own words), plus the character of the destination. */
+  const taste = useMemo(() => {
+    const cityMoods = findCity(destination)?.moods || [];
+    const picked = Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : [];
+    return tasteProfile({
+      // Their stated taste first, then the nature of the city they are visiting.
+      moods: Array.from(new Set([...picked, ...cityMoods])).slice(0, 4),
+      text: `${travelData.tripStyle || ""} ${travelData.quizResult || ""}`,
+    });
+  }, [destination, travelData.quizResult, travelData.tasteMoods, travelData.tripStyle]);
+
+  /** Which places the suggestion may use when nothing was chosen. */
+  const suggestionPool = useMemo(() => {
+    const pool = nearestPois.length ? nearestPois : enrichedPois;
+    return tastePlaces(pool, taste, { days: dayCount, maxPerDay: 3 });
+  }, [dayCount, enrichedPois, nearestPois, taste]);
+
   /** Only the places the traveller added, matched to the live POI list. */
   const chosenPois = useMemo(
     () => enrichedPois.filter((poi) => chosenIds.has(poi.id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [enrichedPois, chosenIds],
   );
+
+  /** «برنامهٔ من» — taken from the traveller's own list, never from somewhere else. */
+  const planSource = (plan.days.flatMap((day) => day.items).filter((item) => item.poiId).length)
+    ? chosenPois.length && plan.budgetAnalysis
+      ? "mine"
+      : "mixed"
+    : "none";
 
   /** The diagram above the day list: arrival, bags, then the visits of that day. */
   const daySteps: SchematicStep[] = useMemo(() => {
@@ -770,6 +638,7 @@ export default function PlanPage() {
       }
       setPlan(payload.plan as TravelPlan);
       setActiveDay(0);
+      setScheduleSource("ai");
       setNoticeTone("success");
       setNotice(`برنامه تازه با ${payload.meta?.model || "هوش مصنوعی"} ساخته شد.`);
     } catch {
@@ -782,9 +651,16 @@ export default function PlanPage() {
     }
   };
 
-  /** «خودت پیشنهاد بده»: the traveller's own places, fitted to real hours. */
+  /**
+   * «برنامهٔ من»: the traveller's own places, fitted to real hours.
+   *
+   * Whatever they added is in the plan — all of it, even when the day gets
+   * busy — because a chosen place that silently disappears is a broken promise.
+   * With nothing chosen, the suggestion comes from their taste instead.
+   */
   const suggestMyself = () => {
-    const places = chosenPois.length ? chosenPois : nearestPois.length ? nearestPois : enrichedPois;
+    const mine = chosenPois.length > 0;
+    const places = mine ? chosenPois : suggestionPool.length ? suggestionPool : enrichedPois;
     if (!places.length) {
       setNoticeTone("warning");
       setNotice("اول چند جاذبه را با «افزودن به برنامهٔ سفر» انتخاب کن، بعد ساعت‌ها را می‌چینم.");
@@ -801,16 +677,51 @@ export default function PlanPage() {
         transferMinutes: arrivalTransfer?.minutes ?? null,
         transferKm: arrivalTransfer?.distanceKm ?? null,
         origin,
+        // A chosen list is a promise: every place is scheduled.
+        respectAll: mine,
+        maxPerDay: mine ? places.length : 3,
       }),
     }));
     setActiveDay(0);
+    setScheduleSource(mine ? "mine" : "taste");
     setNoticeTone("success");
     setNotice(
-      chosenPois.length
-        ? `برنامه از ${formatNumber(places.length)} مکان انتخابی خودت و در ساعت‌های واقعی روز چیده شد.`
-        : "چون مکانی انتخاب نکرده بودی، نزدیک‌ترین جاذبه‌ها را در ساعت‌های روز چیدم.",
+      mine
+        ? `برنامه دقیقاً از ${formatNumber(places.length)} جاذبه‌ای که خودت انتخاب کردی و در ساعت‌های واقعی روز چیده شد؛ هیچ جای دیگری اضافه نشد.`
+        : `مکانی انتخاب نکرده بودی، پس ${formatNumber(places.length)} جاذبه را بر اساس سلیقه‌ات (${taste.moods.join("، ") || "طبیعت و تاریخ"}) و فاصله از اقامتگاه چیدم.`,
     );
   };
+
+  /**
+   * The list of days must never contradict the places the traveller picked, so
+   * the schedule is built once on arrival: from their own list when they have
+   * one, otherwise from their taste. Running it here (not in an effect chain)
+   * keeps a single, predictable build.
+   */
+  useEffect(() => {
+    if (autoBuilt.current || !isHydrated) return;
+    if (!chosenPois.length && !suggestionPool.length) return;
+    autoBuilt.current = true;
+    suggestMyself();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenPois.length, suggestionPool.length, isHydrated]);
+
+  /**
+   * Adding or removing a place rebuilds the schedule right away, so the
+   * timeline and the list of chosen places can never drift apart.
+   */
+  const chosenKey = useMemo(() => chosenPois.map((poi) => poi.id).sort().join("|"), [chosenPois]);
+  useEffect(() => {
+    if (!autoBuilt.current) return;
+    if (scheduleSource === "ai") return;
+    if (!chosenKey) {
+      if (scheduleSource === "mine") suggestMyself();
+      return;
+    }
+    suggestMyself();
+    // Only the chosen list triggers a rebuild; the builder is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenKey]);
 
   const sharePlan = async () => {
     const text = `برنامه سفر من از ${origin} به ${destination} با سفرینو`;
@@ -944,25 +855,29 @@ export default function PlanPage() {
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
+                    onClick={suggestMyself}
+                    className="btn-primary flex-1 !py-3 text-xs"
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    چیدن برنامه از همین {formatNumber(chosenPlaces.length)} جاذبه (بدون AI)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void regenerate(chosenPois)}
                     disabled={loading}
-                    className="btn-primary flex-1 !py-3 text-xs disabled:cursor-wait disabled:opacity-60"
+                    className="btn-ghost flex-1 !py-3 text-xs disabled:cursor-wait disabled:opacity-60"
                   >
                     {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    ساخت برنامهٔ روزها از این مکان‌ها با هوش مصنوعی
-                  </button>
-                  <button type="button" onClick={suggestMyself} className="btn-ghost flex-1 !py-3 text-xs">
-                    <Wand2 className="h-4 w-4" />
-                    خودت پیشنهاد بده (بدون AI)
+                    ساخت روایت روزها با هوش مصنوعی
                   </button>
                 </div>
                 <p className="mt-2 text-[9.5px] leading-5 text-slate-500">
-                  «خودت پیشنهاد بده» مکان‌های انتخابی تو را به ترتیب نزدیکی به اقامتگاه در ساعت‌های واقعی روز می‌چیند؛ هیچ مکان تازه‌ای ساخته نمی‌شود.
+                  «چیدن برنامه» همهٔ جاذبه‌های انتخابی تو را — نه کم و نه زیاد — به ترتیب نزدیکی به اقامتگاه در ساعت‌های واقعی روز می‌گذارد؛ ناهار، شام، رفت‌وآمد و ساعت رسیدن بلیت هم حساب می‌شود. «هوش مصنوعی» فقط توضیح و روایت همان مکان‌ها را می‌نویسد.
                 </p>
               </>
             ) : (
               <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 p-3 text-[10.5px] leading-6 text-amber-100">
-                هنوز مکانی انتخاب نکرده‌ای. از فهرست «جاذبه‌های واقعی {destination}» یا «نزدیک‌ترین جاذبه‌ها» شروع کن — یک یا چند مکان.
+                هنوز مکانی انتخاب نکرده‌ای — و لازم هم نیست: برنامهٔ پایین از سلیقه‌ات ساخته می‌شود. اگر جای خاصی را می‌خواهی، از فهرست «جاذبه‌های واقعی {destination}» یا «نزدیک‌ترین جاذبه‌ها» با «افزودن به برنامهٔ سفر» اضافه کن؛ بعد همان لحظه برنامه از فهرست خودت ساخته می‌شود.
               </p>
             )}
           </section>
@@ -1228,6 +1143,61 @@ export default function PlanPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div><span className="chip print:hidden">تایم‌لاین زنده</span><h2 className="mt-3 text-2xl font-black text-white">برنامه ساعت‌به‌ساعت سفر</h2></div>
               <span className="text-xs text-slate-500">{formatNumber(plan.days.length)} روز برنامه‌ریزی‌شده</span>
+            </div>
+
+            <div
+              className={`mt-4 flex flex-col gap-3 rounded-2xl border p-3.5 print:hidden sm:flex-row sm:items-center sm:justify-between ${
+                scheduleSource === "mine"
+                  ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                  : "border-cyan-400/20 bg-cyan-400/[0.05]"
+              }`}
+              aria-label="منبع برنامه"
+            >
+              <div className="flex items-start gap-2.5">
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${scheduleSource === "mine" ? "bg-emerald-400/15 text-emerald-300" : "bg-cyan-400/15 text-cyan-200"}`}>
+                  {scheduleSource === "mine" ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
+                </span>
+                <div>
+                  <b className="block text-[12px] font-black text-white">
+                    {scheduleSource === "mine"
+                      ? `این برنامه دقیقاً از ${formatNumber(chosenPois.length)} جاذبه‌ای است که خودت انتخاب کردی`
+                      : scheduleSource === "taste"
+                        ? "این برنامه پیشنهاد سفرینو بر اساس سلیقهٔ توست"
+                        : scheduleSource === "ai"
+                          ? "این برنامه با هوش مصنوعی از انتخاب‌های تو ساخته شد"
+                          : "برنامهٔ روزها"}
+                  </b>
+                  <span className="mt-0.5 block text-[10px] leading-5 text-slate-400">
+                    {scheduleSource === "mine"
+                      ? "ترتیب از نزدیک‌ترین به اقامتگاه، با ساعت واقعی رسیدن بلیت؛ اگر مکانی را اضافه یا حذف کنی، همین برنامه با فهرست تازه دوباره چیده می‌شود."
+                      : `سلیقهٔ خوانده‌شده: ${taste.moods.length ? taste.moods.join("، ") : "طبیعت و تاریخ"} — هر مکانی که خودت اضافه کنی جای پیشنهاد را می‌گیرد.`}
+                  </span>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button type="button" onClick={suggestMyself} className="btn-primary !px-3.5 !py-2 text-[10.5px]">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {chosenPois.length ? "چیدن دوباره از انتخاب‌های من" : "چیدن پیشنهاد سلیقه‌ای"}
+                </button>
+                {chosenPois.length ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const places = suggestionPool.length ? suggestionPool : enrichedPois;
+                      if (!places.length) return;
+                      setPlan((current) => ({ ...current, days: slotDays({ destination, days: dayCount, places, arrivalTime, transferMinutes: arrivalTransfer?.minutes ?? null, transferKm: arrivalTransfer?.distanceKm ?? null, origin }) }));
+                      setActiveDay(0);
+                      setScheduleSource("taste");
+                      setNoticeTone("info");
+                      setNotice("پیشنهاد سلیقه‌ای نشان داده شد؛ با «چیدن دوباره از انتخاب‌های من» به فهرست خودت برمی‌گردی.");
+                    }}
+                    className="btn-ghost !px-3.5 !py-2 text-[10.5px]"
+                  >
+                    <Wand2 className="h-3.5 w-3.5" />
+                    پیشنهاد سلیقه‌ای هم ببینم
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div className="mt-5 flex gap-2 overflow-x-auto pb-2 print:hidden">
               {plan.days.map((day, index) => (

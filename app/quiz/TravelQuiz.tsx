@@ -382,6 +382,9 @@ export default function TravelQuiz() {
       quizAnswers: answers,
       // Answers first; when the traveller wrote freely, their own words decide.
       preferredMode: preferredTransportMode(questions, answers) || preferredModeFromText(description),
+      // The taste is kept for the plan page: when nothing is picked, the days
+      // are suggested from exactly this.
+      tasteMoods: result.moods.slice(0, 3).map((entry) => entry.mood),
       quizStep: questions.length,
     }));
     router.push("/transport");
