@@ -6,6 +6,7 @@ import { stayPrice } from "../lib/stay-price";
 import { computeCarTrip, MAX_DEPRECIATION_PER_KM, DEFAULT_TOLL_PER_KM } from "../lib/car-cost";
 import { findCar, FUEL_OPTIONS } from "../lib/car-catalog";
 import { todaysPackageDestinations } from "../lib/trip-packages";
+import { drawQuestions, scoreAnswers, suggestCities } from "../lib/start-flow";
 
 let failures = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -84,6 +85,24 @@ const nextPress = todaysPackageDestinations("تهران", 4, base, 4).map((entry
 check("a second press shares no card with the first", nextPress.every((city) => !todayCities.includes(city)), nextPress.join("، "));
 check("the traveller's own city is never a destination", !todayCities.includes("تهران") && !refreshedCities.includes("تهران"));
 check("four distinct destinations each time", new Set(todayCities).size === 4 && new Set(refreshedCities).size === 4);
+
+console.log("The budget is shared between the people who travel");
+// The same taste, once with one traveller and once with four.
+const questions = drawQuestions(() => 0.42, 3);
+const answers: Record<string, string> = {};
+questions.forEach((question) => {
+  answers[question.key] = question.options[0].id;
+});
+const tastes = scoreAnswers(questions, answers);
+const one = suggestCities(tastes, { limit: 4, budgetMillions: 12, travellers: 1 });
+const four = suggestCities(tastes, { limit: 4, budgetMillions: 12, travellers: 4 });
+const sameCity = one.find((city) => four.some((other) => other.name === city.name));
+check("the same taste gives the same cities", Boolean(sameCity));
+check("four travellers cost more than one", (sameCity?.estimatedToman ?? 0) < (four.find((city) => city.name === sameCity!.name)?.estimatedToman ?? 0));
+check("the same budget is tighter for four", four.some((city) => city.overBudget) || !one.some((city) => city.overBudget));
+const share = (budgetMillions: number, people: number) => Math.round((budgetMillions * 1_000_000) / people);
+check("the per-person share is the budget divided by the people", share(20, 4) === 5_000_000 && share(20, 1) === 20_000_000);
+check("children still count in the share", Math.round((15_000_000) / 3) === 5_000_000);
 
 if (failures) {
   console.error(`\n❌ ${failures} بررسی شکست خورد`);

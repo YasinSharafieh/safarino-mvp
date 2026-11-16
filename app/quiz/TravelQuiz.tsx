@@ -26,6 +26,8 @@ import {
   Hotel,
   Banknote,
   Baby,
+  Minus,
+  Plus,
   User,
   PartyPopper,
   AlarmClock,
@@ -181,6 +183,9 @@ export default function TravelQuiz() {
   /** The closing step that is *always* asked: the money and the length. */
   const [budgetMillions, setBudgetMillions] = useState<number>(() => Math.max(3, Math.round(Number(travelData.budget) || 20)));
   const [days, setDays] = useState<number>(() => Math.max(2, Math.round(Number(travelData.days) || 3)));
+  /** How many people the one budget has to cover — it decides the share of each. */
+  const [adults, setAdults] = useState<number>(() => Math.min(6, Math.max(1, Math.round(Number(travelData.travelers) || 1))));
+  const [kids, setKids] = useState<number>(() => Math.min(5, Math.max(0, Math.round(Number(travelData.children) || 0))));
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
@@ -202,7 +207,10 @@ export default function TravelQuiz() {
     }
     return quizResult;
   }, [described, description, quizResult]);
-  const peopleCount = Math.max(1, (travelData.travelers || 2) + (travelData.children || 0));
+  /** The number typed on the closing step wins over anything remembered earlier. */
+  const peopleCount = Math.max(1, adults + kids);
+  const perPersonToman = Math.round((budgetMillions * 1_000_000) / peopleCount);
+  const perPersonMillions = perPersonToman / 1_000_000;
   const suggestions: CitySuggestion[] = useMemo(() => {
     if (analysis?.cities?.length) {
       return analysis.cities.slice(0, 4).map((city) => {
@@ -328,6 +336,8 @@ export default function TravelQuiz() {
       departureDate: current.departureDate || isoIn(7),
       returnDate: isoIn(7 + tripDays),
       budget: budgetMillions,
+      travelers: adults,
+      children: kids,
       tripStyle: result.headline,
       quizResult: suggestion.name,
       quizAnswers: answers,
@@ -362,7 +372,7 @@ export default function TravelQuiz() {
               سفر بعدی‌ات <span className="gradient-text">چه حالی</span> دارد؟
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-[11.5px] leading-7 text-slate-400 sm:text-sm">
-              دوازده سؤال کوتاه — هر بار سؤال‌های تازه — و در پایان بودجه و طول سفر؛ تا شهر مناسب را در ایران پیدا کنیم.
+              دوازده سؤال کوتاه — هر بار سؤال‌های تازه — و در پایان بودجه، تعداد نفرات و طول سفر؛ تا شهر مناسب را در ایران پیدا کنیم.
             </p>
             {questionSource === "ai" ? (
               <p className="mt-2 text-[9.5px] text-emerald-300/80">سؤال‌های این دور مخصوص همین سفر نوشته شدند؛ دور بعدی سؤال‌های دیگری دارد.</p>
@@ -424,7 +434,7 @@ export default function TravelQuiz() {
             <div className="mb-5">
               <div className="mb-2.5 flex items-center justify-between gap-3 text-[10.5px] text-slate-400">
                 <span aria-live="polite">
-                  {resultVisible ? "نتیجه آماده است" : onMoneyStep ? "آخرین قدم · بودجه و طول سفر" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
+                  {resultVisible ? "نتیجه آماده است" : onMoneyStep ? "آخرین قدم · بودجه، نفرات و طول سفر" : `سؤال ${faNumber(step + 1)} از ${faNumber(totalQuestions)}`}
                 </span>
                 <b className="text-cyan-300">{faNumber(Math.round(progress))}٪</b>
               </div>
@@ -475,9 +485,9 @@ export default function TravelQuiz() {
                       <Banknote className="h-3.5 w-3.5" />
                       همیشه پرسیده می‌شود
                     </span>
-                    <h2 className="mt-3 text-lg font-extrabold leading-8 text-white sm:text-xl">بودجه و طول سفرت چقدر است؟</h2>
+                    <h2 className="mt-3 text-lg font-extrabold leading-8 text-white sm:text-xl">بودجه، نفرات و طول سفرت چقدر است؟</h2>
                     <p className="mt-1.5 text-[11px] leading-6 text-slate-400">
-                      این دو عدد پای همهٔ پیشنهادهاست: بلیت، اقامت و آنچه برای غذا و گشت می‌مانَد.
+                      این سه عدد پای همهٔ پیشنهادهاست: بودجه بین همه تقسیم می‌شود، بلیت و اقامت برای همین تعداد حساب می‌شود و شهرهایی پیشنهاد می‌شوند که با سهم هر نفر جور دربیایند.
                     </p>
                   </div>
 
@@ -530,6 +540,68 @@ export default function TravelQuiz() {
 
                     <div className="mt-5 border-t border-white/5 pt-4">
                       <span className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-300">
+                        <span>چند نفر می‌روید؟</span>
+                        <b className="text-cyan-200">{faNumber(peopleCount)} نفر</b>
+                      </span>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300"><User className="h-3.5 w-3.5 text-cyan-300" />بزرگسال</span>
+                          <span className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setAdults((value) => Math.max(1, value - 1))}
+                              disabled={adults <= 1}
+                              aria-label="یک بزرگسال کمتر"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-35"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <b className="w-6 text-center text-sm font-black text-white">{faNumber(adults)}</b>
+                            <button
+                              type="button"
+                              onClick={() => setAdults((value) => Math.min(6, value + 1))}
+                              disabled={adults >= 6}
+                              aria-label="یک بزرگسال بیشتر"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-35"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300"><Baby className="h-3.5 w-3.5 text-turquoise-300" />کودک</span>
+                          <span className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setKids((value) => Math.max(0, value - 1))}
+                              disabled={kids <= 0}
+                              aria-label="یک کودک کمتر"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-35"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <b className="w-6 text-center text-sm font-black text-white">{faNumber(kids)}</b>
+                            <button
+                              type="button"
+                              onClick={() => setKids((value) => Math.min(5, value + 1))}
+                              disabled={kids >= 5}
+                              aria-label="یک کودک بیشتر"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-35"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-2 flex flex-wrap items-baseline gap-1.5 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.06] px-3 py-2 text-[10.5px] leading-6 text-cyan-100">
+                        <span>سهم هر نفر از این بودجه:</span>
+                        <b className="text-[13px] font-black text-cyan-200">{faNumber(Math.round(perPersonMillions * 10) / 10)} میلیون تومان</b>
+                        <span className="text-slate-400">({faNumber(perPersonToman)} تومان) — شهرها با همین سهم سنجیده می‌شوند.</span>
+                      </p>
+                    </div>
+
+                    <div className="mt-5 border-t border-white/5 pt-4">
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-300">
                         <span>چند روز می‌خواهی بمانی؟</span>
                         <b className="text-cyan-200">{faNumber(days)} روز · {faNumber(Math.max(1, days - 1))} شب</b>
                       </span>
@@ -549,7 +621,7 @@ export default function TravelQuiz() {
                         ))}
                       </div>
                       <p className="mt-2 text-[9.5px] leading-6 text-slate-500">
-                        با این دو عدد، سهم غذا و رفت‌وآمد روزانه هم حساب می‌شود تا پیشنهاد از بودجهٔ واقعی بیرون نزند.
+                        با این عددها، سهم غذا و رفت‌وآمد روزانه هم حساب می‌شود تا پیشنهاد از بودجهٔ واقعی بیرون نزند.
                       </p>
                     </div>
                   </div>
@@ -729,8 +801,10 @@ export default function TravelQuiz() {
                                 ) : null}
                                 {suggestion.estimatedToman ? (
                                   <span className={`text-[9px] ${suggestion.overBudget ? "text-amber-300" : "text-slate-500"}`}>
-                                    حدود {faNumber(Math.round(suggestion.estimatedToman / 1_000_000))} میلیون تومان برای {faNumber(suggestion.days)} روز
-                                    {suggestion.overBudget ? " · کمی بیشتر از بودجه‌ات" : ""}
+                                    حدود {faNumber(Math.round(suggestion.estimatedToman / 1_000_000))} میلیون تومان برای {faNumber(peopleCount)} نفر و {faNumber(suggestion.days)} روز
+                                    {suggestion.overBudget
+                                      ? " · بیشتر از بودجه‌ات"
+                                      : ` · سهم هر نفر ${faNumber(Math.round((suggestion.estimatedToman / peopleCount) / 1_000_000))} میلیون`}
                                   </span>
                                 ) : null}
                               </span>
