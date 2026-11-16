@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { dedupeTransportOffers, citySlug, persianCityName, type TransportOffer } from "../lib/transport-types";
-import { parseRouteCodes, normalizeSafar724Items } from "../lib/safar724-bus";
+import { parseRouteCodes, normalizeSafar724Items, terminalName } from "../lib/safar724-bus";
 
 assert.equal(citySlug("THR"), "tehran");
 assert.equal(citySlug("اصفهان"), "esfahan");
@@ -81,3 +81,39 @@ assert.equal(live.offers.length, 3, "same companies merge, a different company a
 assert.equal(live.removed, 2);
 
 console.log("Transport provider parsing and deduplication tests passed.");
+
+// —— «چرا اطلاعات کامل نمایش داده نمی‌شد؟» — what the ticket list needs to be complete.
+const enriched = [
+  {
+    id: "train-1",
+    provider: "alibaba" as const,
+    mode: "train" as const,
+    operator: "رجا · قطار 318",
+    serviceLabel: "4 ستاره غزال",
+    departure: "2026-11-18T09:10:00",
+    arrival: "2026-11-18T21:30:00",
+    priceToman: 915_050,
+    childPriceToman: null,
+    infantPriceToman: null,
+    seatsLeft: 4,
+    details: ["کوپهٔ 4 نفره", "سرمایش و گرمایش"],
+    bookingUrl: "https://www.alibaba.ir/train/THR-MHD",
+    bookingNote: "",
+  },
+];
+assert.equal(enriched[0].operator.includes("رجا"), true, "the company is in the operator field");
+assert.equal(terminalName("south-khazaneh"), "پایانهٔ جنوب (خزانه)", "a known terminal slug gets its Iranian name");
+assert.equal(terminalName("some-new-terminal"), "some new terminal", "an unknown slug is never invented into a name");
+assert.equal(terminalName("پایانهٔ امام رضا"), "پایانهٔ امام رضا", "a Persian name is already a name");
+
+// A safar724 offer now carries a readable Persian terminal instead of a slug.
+const safarSlug = normalizeSafar724Items(
+  [{ id: 5, price: 13_000_000, availableSeatCount: 9, departureTime: "18:00", arrivalTime: "05:00", departureDate: "1405/08/27", status: "Available", vehicleType: "Bus", companyPersianName: "تعاونی 11 آریا سفر", originTerminalName: "south-khazaneh", destinationTerminalName: "emamreza" }],
+  "tehran",
+  "mashhad",
+  "2026-11-18",
+  "https://www.safar724.com/bus/tehran-mashhad",
+);
+assert.deepEqual(safarSlug[0].details, ["پایانهٔ جنوب (خزانه)", "پایانهٔ امام رضا"]);
+
+console.log("Transport completeness tests passed.");

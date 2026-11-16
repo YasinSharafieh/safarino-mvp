@@ -243,7 +243,7 @@ async function crawlTransport(input: TransportSearchInput): Promise<TransportSea
  */
 /** Provider text with Persian digits, so «4 ستاره» reads like «۴ ستاره». */
 function faDigits(value: string): string {
-  return value.replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
+  return value.replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]).replace(/%/g, "٪");
 }
 
 function readableOffer(offer: TransportOffer): TransportOffer & { title: string; subtitle: string; logoUrl: string | null } {
@@ -252,7 +252,10 @@ function readableOffer(offer: TransportOffer): TransportOffer & { title: string;
     operator: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
     title: faDigits(offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما")),
     subtitle: faDigits(offer.serviceLabel || ""),
-    details: offer.details.map((detail) => faDigits(detail)),
+    // The service line already says the wagon/class; repeating it is noise.
+    details: offer.details
+      .map((detail) => faDigits(detail).trim())
+      .filter((detail, index, all) => detail && !detail.includes(faDigits(offer.serviceLabel || "\u0000")) && all.indexOf(detail) === index),
     logoUrl: offer.logoUrl || null,
   };
 }

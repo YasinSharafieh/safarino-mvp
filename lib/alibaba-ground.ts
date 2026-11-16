@@ -86,7 +86,8 @@ function normalizeTrains(rows: unknown): GroundOffer[] {
       details: [
         train.isCompartment === true && Number(train.compartmentCapacity) > 0 ? `کوپهٔ ${Number(train.compartmentCapacity)} نفره` : "",
         text(train.wagonName),
-        text(train.wagonClass),
+        // A bare code such as "S" tells the traveller nothing — kept only when readable.
+        text(train.wagonClass).length > 2 ? text(train.wagonClass) : "",
         train.hasAirCondition === true ? "سرمایش و گرمایش" : "",
         train.hasMedia === true ? "نمایشگر و سرگرمی" : "",
         train.hasFreeFood === true ? "غذای رایگان" : train.hasFoodOffer === true ? "امکان خرید غذا" : "",

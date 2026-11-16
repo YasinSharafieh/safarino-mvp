@@ -627,7 +627,11 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                     ) : null}
                   </div>
                   {offer.subtitle ? <span className="mt-0.5 block text-[10px] text-slate-400">{offer.subtitle}</span> : null}
-                  {offer.details?.length ? <span className="mt-0.5 block text-[9.5px] leading-5 text-slate-500">{offer.details.join(" · ")}</span> : null}
+                  {offer.details?.length ? (
+                    <span className="mt-0.5 block text-[9.5px] leading-5 text-slate-500">
+                      {offer.details.filter((detail) => detail && !offer.subtitle?.includes(detail)).join(" · ")}
+                    </span>
+                  ) : null}
                   {offer.alsoAvailableAt?.length ? (
                     <span className="mt-1 block text-[9.5px] leading-5 text-slate-400">
                       همین بلیت در{" "}
