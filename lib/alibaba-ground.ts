@@ -77,8 +77,21 @@ function normalizeTrains(rows: unknown): GroundOffer[] {
       arrival: text(train.arrivalDateTime) || null,
       priceToman,
       seatsLeft: Math.round(seatsLeft),
+      /**
+       * Everything the provider actually published about this train, in the
+       * traveller's language: compartment size, class, air conditioning, media,
+       * food, discounts and the refund rule. Nothing is added that the API
+       * did not send.
+       */
       details: [
-        train.compartmentCapacity ? `${Number(train.compartmentCapacity)} نفره` : "",
+        train.isCompartment === true && Number(train.compartmentCapacity) > 0 ? `کوپهٔ ${Number(train.compartmentCapacity)} نفره` : "",
+        text(train.wagonName),
+        text(train.wagonClass),
+        train.hasAirCondition === true ? "سرمایش و گرمایش" : "",
+        train.hasMedia === true ? "نمایشگر و سرگرمی" : "",
+        train.hasFreeFood === true ? "غذای رایگان" : train.hasFoodOffer === true ? "امکان خرید غذا" : "",
+        ...(Array.isArray(train.specialOfferTexts) ? train.specialOfferTexts.map((line) => text(line)) : []),
+        train.isCharter === true ? "چارتری" : "",
         train.nonRefundable === true ? "غیرقابل استرداد" : "قابل استرداد",
       ].filter(Boolean),
     }];
@@ -160,7 +173,9 @@ async function searchBusOffers(input: FlightSearchInput): Promise<GroundOffer[]>
     const departure = text(bus.departureDateTime);
     if (priceToman === null || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
     return [{
-      id: text(bus.proposalId) || `${originCode}-${departure}-${index}`,
+      // The provider id is an unreadable token; a short stable key is enough —
+      // the purchase link is the dated route page, not this id.
+      id: `alibaba-bus-${originCode}-${destinationCode}-${departure}-${index}`,
       logoUrl: alibabaCdnUrl(bus.logoPath),
       title: text(bus.companyName) || "اتوبوس",
       subtitle: text(bus.busType) || "اتوبوس بین‌شهری",
@@ -168,7 +183,10 @@ async function searchBusOffers(input: FlightSearchInput): Promise<GroundOffer[]>
       arrival: null,
       priceToman,
       seatsLeft: Math.round(seatsLeft),
-      details: [text(bus.orginTerminal), text(bus.destinationTerminal)].filter(Boolean),
+      details: [
+        text(bus.orginTerminal) ? `مبدأ: ${text(bus.orginTerminal)}` : "",
+        text(bus.destinationTerminal) ? `مقصد: ${text(bus.destinationTerminal)}` : "",
+      ].filter(Boolean),
     }];
   });
 

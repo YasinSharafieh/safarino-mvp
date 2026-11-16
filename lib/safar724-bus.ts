@@ -94,7 +94,42 @@ type Safar724Item = {
   originCode?: string;
   destinationCode?: string;
   serviceNumber?: string;
+  /** Terminal objects (public list carries both codes and names). */
+  originTerminal?: { name?: string; persianName?: string; engName?: string; code?: string };
+  destinationTerminal?: { name?: string; persianName?: string; engName?: string; code?: string };
+  company?: { name?: string; persianName?: string };
+  busType?: string;
+  busClassName?: string;
+  duration?: string | number;
 };
+
+/**
+ * Public terminal slugs → the name Iranians actually use. Only the handful we
+ * can state for certain; anything else keeps its slug so nothing is invented.
+ */
+const TERMINAL_NAMES: Record<string, string> = {
+  "south-khazaneh": "پایانهٔ جنوب (خزانه)",
+  "khazaneh": "پایانهٔ جنوب (خزانه)",
+  "west-azadi": "پایانهٔ غرب (آزادی)",
+  "azadi": "پایانهٔ غرب (آزادی)",
+  "east-tehranpars": "پایانهٔ شرق (تهران‌پارس)",
+  "tehranpars": "پایانهٔ شرق (تهران‌پارس)",
+  "beihaghi": "پایانهٔ بیهقی",
+  "emamreza": "پایانهٔ امام رضا",
+  "imam-reza": "پایانهٔ امام رضا",
+  "shahinshahr": "پایانهٔ شاهین‌شهر",
+  "sofia": "پایانهٔ صوفیا",
+  "karandish": "پایانهٔ کاراندیش",
+  "jannatabad": "پایانهٔ جنّت‌آباد",
+};
+
+export function terminalName(slug: string): string {
+  const key = slug.trim().toLowerCase();
+  if (!key) return "";
+  // A Persian value is already a name.
+  if (/[\u0600-\u06FF]/.test(key)) return slug.trim();
+  return TERMINAL_NAMES[key] || key.replace(/-/g, " ");
+}
 
 export function normalizeSafar724Items(
   items: Safar724Item[],
@@ -116,7 +151,22 @@ export function normalizeSafar724Items(
     if (item.vehicleType && item.vehicleType !== "Bus") return [];
     if (toAsciiDigits(text(item.departureDate)) !== expectedDate) return [];
     if (!/^\d{2}:\d{2}$/.test(departureTime)) return [];
-    const operator = text(item.companyPersianName) || text(item.companyName) || "شرکت اتوبوسرانی";
+    const operator =
+      text(item.companyPersianName)
+      || text(item.companyName)
+      || text(item.company?.persianName)
+      || text(item.company?.name)
+      || "شرکت اتوبوسرانی";
+    /**
+     * Terminal names arrive either as Persian names or as public slugs such as
+     * "south-khazaneh". A slug is translated only when it is a terminal we can
+     * name for certain; otherwise the slug is shown as-is rather than invented.
+     */
+    const terminal = (raw: unknown, name: unknown, persian: unknown, eng: unknown) => {
+      const persianName = text(persian) || text(name);
+      if (persianName) return persianName;
+      return terminalName(text(raw) || text(eng));
+    };
     return [{
       id: `safar724:${item.id}`,
       provider: "safar724",
@@ -129,7 +179,10 @@ export function normalizeSafar724Items(
       childPriceToman: null,
       infantPriceToman: null,
       seatsLeft: Math.round(seats),
-      details: [text(item.originTerminalName), text(item.destinationTerminalName)].filter(Boolean),
+      details: [
+        terminal(item.originTerminalName, item.originTerminal?.name, item.originTerminal?.persianName, item.originTerminal?.engName),
+        terminal(item.destinationTerminalName, item.destinationTerminal?.name, item.destinationTerminal?.persianName, item.destinationTerminal?.engName),
+      ].filter(Boolean),
       bookingUrl,
       bookingNote: "قیمت هر صندلی در فهرست عمومی سفر۷۲۴ منتشر شده و به تومان تبدیل شده است؛ ظرفیت و مبلغ نهایی را پیش از پرداخت در همان صفحه کنترل کنید.",
     }];

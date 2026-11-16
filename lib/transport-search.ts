@@ -50,7 +50,7 @@ export type TransportSearchPayload = {
 
 /** The live answer, served from the shared snapshot store when one exists. */
 export async function searchTransport(input: TransportSearchInput): Promise<{ payload: TransportSearchPayload; source: string; savedAt?: string }> {
-  const base = snapshotKey("transport", {
+  const base = snapshotKey("transport-v2", {
     mode: input.mode,
     origin: input.origin,
     destination: input.destination,
@@ -241,12 +241,18 @@ async function crawlTransport(input: TransportSearchInput): Promise<TransportSea
  * printed book) gets `title`, `subtitle` and `logoUrl` next to the internal
  * names, so no page can end up showing a bare «قطار» instead of the company.
  */
+/** Provider text with Persian digits, so «4 ستاره» reads like «۴ ستاره». */
+function faDigits(value: string): string {
+  return value.replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
+}
+
 function readableOffer(offer: TransportOffer): TransportOffer & { title: string; subtitle: string; logoUrl: string | null } {
   return {
     ...offer,
     operator: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
-    title: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
-    subtitle: offer.serviceLabel || "",
+    title: faDigits(offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما")),
+    subtitle: faDigits(offer.serviceLabel || ""),
+    details: offer.details.map((detail) => faDigits(detail)),
     logoUrl: offer.logoUrl || null,
   };
 }
