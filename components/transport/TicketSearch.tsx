@@ -184,9 +184,15 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       onCheapestChange(mode, cheapest);
       if (!outbound.length) {
         const working = (data.providerStatuses || []).filter((status) => status.status === "ok");
+        // Why it can be empty at a far date, said plainly — and never invented.
+        const farDate = (Date.parse(`${travelData.departureDate}T00:00:00Z`) - Date.now()) / 86_400_000 > 7;
         setError(
           working.length
-            ? "برای این مسیر و تاریخ، بلیتی با صندلی و قیمت پیدا نشد."
+            ? mode === "train"
+              ? farDate
+                ? "برای این تاریخ هنوز قطاری در سیستم فروش نیست؛ بلیت قطار معمولاً نزدیک تاریخ حرکت (حدود یک هفته قبل) باز می‌شود. روزهای نزدیک‌تر را ببین یا برای همین سفر اتوبوس/هواپیما را انتخاب کن."
+                : "برای این مسیر و تاریخ قطاری با صندلی خالی پیدا نشد. روزهای نزدیک‌تر را ببین یا اتوبوس/هواپیما را انتخاب کن."
+              : "برای این مسیر و تاریخ، بلیتی با صندلی و قیمت پیدا نشد."
             : "هیچ منبعی برای این مسیر پاسخ نداد؛ وضعیت هر منبع پایین‌تر آمده است.",
         );
         // Being empty on one date does not mean the route is dead: check the
@@ -236,7 +242,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   const findNearbyDates = useCallback(async () => {
     if (!originCity || !destinationCity || !travelData.departureDate) return;
     setNearbyLoading(true);
-    const offsets = [-3, -1, 1, 3, 7];
+    const offsets = [-7, -3, -1, 1, 3, 7, 10];
     const base = Date.parse(`${travelData.departureDate}T00:00:00Z`);
     try {
       const results = await Promise.all(
