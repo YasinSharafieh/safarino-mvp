@@ -227,6 +227,7 @@ export function companionGauge(context: CompanionContext): BudgetGauge {
     accommodationToman: context.stayToman || 0,
     travellers: context.travellers,
     days: context.days,
+    city: context.destination || "",
     cheaperAlternative: context.cheaperAlternative || null,
   });
 }

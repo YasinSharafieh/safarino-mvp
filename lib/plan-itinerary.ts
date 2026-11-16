@@ -1,4 +1,4 @@
-import { DAILY_ACTIVITIES_TOMAN, DAILY_FOOD_TOMAN, DAILY_LOCAL_TRANSPORT_TOMAN } from "./budget-fit";
+import { cityCosts } from "./city-costs";
 
 /**
  * Turns an AI draft into a validated itinerary that only contains real places.
@@ -133,6 +133,8 @@ export type BudgetInput = {
   travellers?: number;
   /** How many days the trip lasts. */
   days?: number;
+  /** The destination — sightseeing is priced per city. */
+  city?: string | null;
 };
 
 /**
@@ -154,16 +156,18 @@ export function synchronizeBudget(input: BudgetInput): {
   const accommodation = Math.max(0, Math.min(Math.round(input.accommodationCost), totalBudget - transport));
   /**
    * Food is not a percentage of what is left: it is the same per-person,
-   * per-day figure the accommodation step uses (800,000 toman), so two pages
-   * can never show two different food numbers. The model's own guess only
-   * wins when it is higher than that floor.
+   * per-day figure the other steps use (one million toman), and sightseeing
+   * comes from the destination's own rate — so two pages can never show two
+   * different numbers. The model's own guess only wins when it is higher than
+   * that floor.
    */
   const travellers = Math.max(1, Math.round(input.travellers || 1));
   const days = Math.max(1, Math.round(input.days || 1));
-  const foodFloor = DAILY_FOOD_TOMAN * travellers * days;
+  const costs = cityCosts(input.city);
+  const foodFloor = costs.foodPerPersonPerDay * travellers * days;
   const food = Math.max(foodFloor, Math.round(input.aiFood) || 0);
-  const activities = Math.max(DAILY_ACTIVITIES_TOMAN * travellers * days, Math.round(input.aiActivities) || 0);
-  const localTransport = DAILY_LOCAL_TRANSPORT_TOMAN * travellers * days;
+  const activities = Math.max(costs.activitiesPerPersonPerDay * travellers * days, Math.round(input.aiActivities) || 0);
+  const localTransport = costs.localTransportPerPersonPerDay * travellers * days;
   const remaining = totalBudget - transport - accommodation - food - activities - localTransport;
   return { totalBudget, transport, accommodation, food, activities, localTransport, remaining };
 }

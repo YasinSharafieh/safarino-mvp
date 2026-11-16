@@ -385,3 +385,33 @@ body {
 [data-theme="light"] [class*="bg-cyan-400"] {
   color: #3b1580 !important;
 }
+
+/* Violet / fuchsia accents (the companion, the deals, the «پیشنهاد» badge)
+   are darkened in light mode too — they used to disappear on white cards. */
+[data-theme="light"] [class*="text-fuchsia-1"],
+[data-theme="light"] [class*="text-fuchsia-2"],
+[data-theme="light"] [class*="text-fuchsia-3"] {
+  color: #86198f !important;
+}
+
+[data-theme="light"] [class*="text-violet-1"],
+[data-theme="light"] [class*="text-violet-2"],
+[data-theme="light"] [class*="text-violet-3"],
+[data-theme="light"] [class*="text-purple-1"],
+[data-theme="light"] [class*="text-purple-2"],
+[data-theme="light"] [class*="text-purple-3"] {
+  color: #5b21b6 !important;
+}
+
+/* Text that sits on a saturated accent surface must stay light in both
+   themes, otherwise a violet button gets dark-on-violet. */
+[data-theme="light"] [class*="bg-fuchsia-500"],
+[data-theme="light"] [class*="bg-fuchsia-500"] *,
+[data-theme="light"] [class*="bg-violet-500"],
+[data-theme="light"] [class*="bg-violet-500"] *,
+[data-theme="light"] [class*="bg-emerald-400"],
+[data-theme="light"] [class*="bg-emerald-400"] *,
+[data-theme="light"] [class*="bg-rose-500"],
+[data-theme="light"] [class*="bg-rose-500"] * {
+  color: #ffffff !important;
+}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Compass, MapPin, Sparkles, Wand2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import VoiceTripButton from "@/components/VoiceTripButton";
+import ResumeTripPrompt from "@/components/ResumeTripPrompt";
 
 export const metadata: Metadata = {
   title: "شروع برنامه‌ریزی سفر",
@@ -28,6 +29,10 @@ export default function StartPage() {
       </div>
 
       <SiteHeader />
+
+      <div className="mx-auto mt-6 max-w-4xl">
+        <ResumeTripPrompt />
+      </div>
 
       <section className="mx-auto mt-10 max-w-4xl text-center">
         <h1 className="text-2xl font-black leading-tight text-white sm:text-4xl">سفرت را از کجا شروع کنیم؟</h1>

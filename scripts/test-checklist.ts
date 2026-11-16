@@ -7,6 +7,7 @@ import fs from "node:fs";
 import {
   CHECKLIST_GROUPS,
   CHECKLIST_STORAGE_KEY,
+  checklistKeyFor,
   DEFAULT_CHECKLIST,
   MAX_CUSTOM_ITEMS,
   addCustomItem,
@@ -117,10 +118,12 @@ check("built-in items cannot be removed", allItems(removeCustomItem(empty, "id-c
 console.log("Storage problems are survived");
 const memory = new Map<string, string>();
 const store = { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value); } };
-check("saving works", saveChecklist(toggleDone(empty, "cash"), store) === true);
-check("reading gives the same state", readChecklist(store).done.includes("cash"));
-memory.set(CHECKLIST_STORAGE_KEY, "{not json");
-check("broken storage gives an empty list", readChecklist(store).done.length === 0);
+const TRIP = { origin: "تهران", destination: "یزد", departureDate: "2026-12-01", days: 3 };
+check("saving works", saveChecklist(toggleDone(empty, "cash"), store, TRIP) === true);
+check("reading gives the same state", readChecklist(store, TRIP).done.includes("cash"));
+check("another trip does not inherit the ticks", readChecklist(store, { ...TRIP, destination: "کیش" }).done.length === 0);
+memory.set(checklistKeyFor(TRIP), "{not json");
+check("broken storage gives an empty list", readChecklist(store, TRIP).done.length === 0);
 const blocked = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
 check("a blocked storage never crashes", readChecklist(blocked).done.length === 0 && saveChecklist(empty, blocked) === false);
 check("no storage at all still works", readChecklist(null).done.length === 0);

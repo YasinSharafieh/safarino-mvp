@@ -12,6 +12,7 @@ import {
   daysUntil,
   readChecklist,
   removeCustomItem,
+  tripSignature,
   resetChecklist,
   saveChecklist,
   toggleDone,
@@ -24,7 +25,21 @@ import {
  * Everything stays on this device; the countdown is read from the trip dates
  * the traveller already chose.
  */
-export default function TripChecklist({ departureDate, compact = false }: { departureDate: string; compact?: boolean }) {
+export default function TripChecklist({
+  departureDate,
+  destination = "",
+  origin = "",
+  days = 0,
+  compact = false,
+}: {
+  departureDate: string;
+  /** The trip this list belongs to — its ticks never leak into another trip. */
+  destination?: string;
+  origin?: string;
+  days?: number;
+  compact?: boolean;
+}) {
+  const signature = tripSignature({ origin, destination, departureDate, days });
   const [state, setState] = useState<ChecklistState>({ done: [], custom: [] });
   const [ready, setReady] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -32,16 +47,16 @@ export default function TripChecklist({ departureDate, compact = false }: { depa
   const [newDays, setNewDays] = useState(1);
 
   useEffect(() => {
-    setState(readChecklist());
+    setState(readChecklist(undefined, signature));
     setReady(true);
-    const sync = () => setState(readChecklist());
+    const sync = () => setState(readChecklist(undefined, signature));
     window.addEventListener(CHECKLIST_EVENT, sync);
     return () => window.removeEventListener(CHECKLIST_EVENT, sync);
-  }, []);
+  }, [signature]);
 
   const update = (next: ChecklistState) => {
     setState(next);
-    saveChecklist(next);
+    saveChecklist(next, undefined, signature);
     try {
       window.dispatchEvent(new Event(CHECKLIST_EVENT));
     } catch {
@@ -69,7 +84,7 @@ export default function TripChecklist({ departureDate, compact = false }: { depa
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-[11px] font-black text-emerald-100">
           <ListChecks className="h-4 w-4" />
-          چک‌لیست سفر
+          چک‌لیست همین سفر
         </p>
         <span className="flex items-center gap-1.5 text-[9.5px] text-slate-400">
           <AlarmClock className="h-3.5 w-3.5 text-emerald-300" />

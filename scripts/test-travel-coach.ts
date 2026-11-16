@@ -78,7 +78,7 @@ assert.ok(saved.hint.includes("اتوبوس"), "the hint names the real cheaper 
 assert.ok(saved.hint.includes("تومان"), "and says how much it saves");
 
 // The gauge and the rest of the app use one arithmetic: food for everyone.
-assert.equal(calm.foodToman, 800_000 * 2 * 3);
+assert.equal(calm.foodToman, 1_000_000 * 2 * 3);
 
 /* -------------------------------------------------------------- packing */
 

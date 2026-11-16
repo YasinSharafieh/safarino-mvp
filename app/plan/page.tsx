@@ -54,7 +54,9 @@ import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSche
 import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
 import { cityPoint } from "@/lib/iran-cities";
 import { chosenTransport, transportHeadline } from "@/lib/transport-selection";
-import { estimateBudget } from "@/lib/budget-fit";
+import { tripCostBreakdown, costTableFootnote } from "@/lib/trip-costs";
+import { ticketStayCheck } from "@/lib/ticket-timing";
+import TripCostTable from "@/components/TripCostTable";
 import { findCity } from "@/lib/discover";
 
 // The schedule lives in lib/plan-schedule so the tests can build it too.
@@ -186,16 +188,19 @@ function createLocalPlan(
   accommodation = 0,
   pois: PlanPoiWithStay[] = [],
   people = 2,
+  city = "",
 ): TravelPlan {
   /**
-   * The same arithmetic as the transport and accommodation steps: food is
-   * 800,000 toman per person per day, activities 300,000 and local transport
-   * 200,000 — so the remaining budget on this page matches the pages before it.
+   * The same table as the transport and accommodation steps — food 1,000,000
+   * per person per day, sightseeing priced for this city, and 200,000 of city
+   * transport — so the remaining budget on this page matches the pages before it.
    */
-  const shared = estimateBudget({
+  const shared = tripCostBreakdown({
     totalBudget: budget,
     travellers: Math.max(1, people),
     days: Math.max(1, days),
+    nights: Math.max(1, days - 1),
+    city,
     tickets: transport,
     stay: accommodation,
   });
@@ -393,7 +398,7 @@ export default function PlanPage() {
     } catch {
       // Shared context remains the source of truth when legacy storage is invalid.
     }
-    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, enrichedPois, peopleCount));
+    setPlan(createLocalPlan(nextDestination, nextBudget, nextDays, transportCost, accommodationCost, enrichedPois, peopleCount, nextDestination));
     setActiveDay(0);
   }, [isHydrated, travelData]);
 
@@ -418,7 +423,7 @@ export default function PlanPage() {
         setPoiData(payload);
         setPlan((current) => current.poiUsage
           ? current
-          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, (payload.pois ?? []).map((poi) => ({ ...poi, fromStayKm: poiDistances[poi.id]?.distanceKm ?? null, fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null })), peopleCount));
+          : createLocalPlan(city, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, (payload.pois ?? []).map((poi) => ({ ...poi, fromStayKm: poiDistances[poi.id]?.distanceKm ?? null, fromStayMinutes: poiDistances[poi.id]?.durationMinutes ?? null })), peopleCount, city));
       })
       .catch(() => {
         if (!cancelled) setPoiData({ success: false, city, pois: [], poisWithArticle: 0, sources: { openstreetmap: "failed", wikidata: "failed", wikipedia: "failed" }, note: "خواندن جاذبه‌های واقعی مقصد انجام نشد." });
@@ -523,7 +528,7 @@ export default function PlanPage() {
     setPlan((current) =>
       current.poiUsage
         ? current
-        : createLocalPlan(destination, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, enrichedPois, peopleCount),
+        : createLocalPlan(destination, current.budgetAnalysis.totalBudget, current.days.length, current.budgetAnalysis.transport, current.budgetAnalysis.accommodation, enrichedPois, peopleCount, destination),
     );
     // Only rebuild while the plan is still the local, real-place-only one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -613,9 +618,41 @@ export default function PlanPage() {
 
   const totalSpent = useMemo(() => {
     const analysis = plan.budgetAnalysis;
-    return analysis.transport + analysis.accommodation + analysis.food + analysis.activities;
+    // Every row counts, including the city transport that used to be forgotten.
+    return analysis.transport + analysis.accommodation + analysis.food + analysis.activities + (analysis.localTransport || 0);
   }, [plan]);
+
+  /** The very same five rows the transport and accommodation pages print. */
+  const costTable = useMemo(
+    () =>
+      tripCostBreakdown({
+        totalBudget: plan.budgetAnalysis.totalBudget,
+        travellers: Math.max(1, peopleCount),
+        days: Math.max(1, plan.days.length || dayCount),
+        nights: Math.max(1, (plan.days.length || dayCount) - 1),
+        city: destination,
+        tickets: plan.budgetAnalysis.transport,
+        stay: plan.budgetAnalysis.accommodation,
+      }),
+    [dayCount, destination, peopleCount, plan],
+  );
   const spentPercent = Math.round((totalSpent / Math.max(plan.budgetAnalysis.totalBudget, 1)) * 100);
+
+  /**
+   * «بلیت و شب‌های اقامت با هم می‌خوانند؟» — the ticket's own clock against the
+   * room's own dates. A night paid for before the traveller has landed is a real
+   * mistake, so it is said out loud instead of hidden behind a clean plan.
+   */
+  const timing = useMemo(
+    () =>
+      ticketStayCheck({
+        departure: typeof transportDetails.departure === "string" ? transportDetails.departure : null,
+        arrival: typeof transportDetails.arrival === "string" ? transportDetails.arrival : null,
+        checkIn: typeof accommodationDetails.checkIn === "string" ? accommodationDetails.checkIn : null,
+        checkOut: typeof accommodationDetails.checkOut === "string" ? accommodationDetails.checkOut : null,
+      }),
+    [accommodationDetails.checkIn, accommodationDetails.checkOut, transportDetails.arrival, transportDetails.departure],
+  );
 
   const regenerate = async (pool?: PlanPoiWithStay[]) => {
     const requested = pool && pool.length ? pool : enrichedPois;
@@ -653,7 +690,7 @@ export default function PlanPage() {
       setNoticeTone("success");
       setNotice(`برنامه تازه با ${payload.meta?.model || "هوش مصنوعی"} ساخته شد.`);
     } catch {
-      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois, peopleCount));
+      setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois, peopleCount, destination));
       setActiveDay(0);
       setNoticeTone("warning");
       setNotice("اتصال زنده به AI برقرار نشد؛ نسخه آفلاین ساخته شد. روی Netlify ایستا، مسیر API باید به یک سرویس سروری خارجی متصل شود.");
@@ -1057,6 +1094,24 @@ export default function PlanPage() {
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
               <motion.div className="h-full rounded-full bg-gradient-to-l from-emerald-400 via-cyan-400 to-cyan-400" animate={{ width: `${Math.min(spentPercent, 100)}%` }} />
             </div>
+            {/* بلیت و شب‌های اقامت — the two real clocks of the trip. */}
+            <div className="mt-4 space-y-1.5" aria-label="هم‌خوانی بلیت و اقامت">
+              {timing.issues.map((issue) => (
+                <div
+                  key={issue.title}
+                  className={`rounded-xl border px-3 py-2 text-[10px] leading-6 ${
+                    issue.tone === "problem"
+                      ? "border-rose-400/30 bg-rose-400/[0.08] text-rose-100"
+                      : issue.tone === "warn"
+                        ? "border-amber-300/25 bg-amber-300/[0.07] text-amber-100"
+                        : "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-100"
+                  }`}
+                >
+                  <b className="block text-[10.5px] font-black">{issue.title}</b>
+                  {issue.body}
+                </div>
+              ))}
+            </div>
             <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
               {[
                 { label: "حمل‌ونقل", value: plan.budgetAnalysis.transport, icon: CarFront, color: "bg-sky-400" },
@@ -1078,6 +1133,9 @@ export default function PlanPage() {
               })}
             </div>
             <p className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/5 p-3 text-xs leading-6 text-slate-300">{plan.budgetAnalysis.summary} مجموع تخمین: {formatToman(totalSpent)}.</p>
+            <div className="mt-4">
+              <TripCostTable breakdown={costTable} title="جدول هزینهٔ سفر (همان جدول همهٔ صفحه‌ها)" footnote={costTableFootnote(costTable)} />
+            </div>
           </section>
 
           {/* ------------------------------------------- change one thing only */}

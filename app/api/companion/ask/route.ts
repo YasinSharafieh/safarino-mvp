@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { askJson, shortText } from "@/lib/ai-openrouter";
 import { AiBudgetError } from "@/lib/ai-budget";
 import { getProviderCache, setProviderCache } from "@/lib/provider-cache";
-import { answerLocally, askPrompt, keepOnlyRealNumbers, type AskFacts } from "@/lib/companion-ask";
+import { answerLocally, askPrompt, keepOnlyRealNumbers, questionTopic, type AskFacts } from "@/lib/companion-ask";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +51,20 @@ function parseFacts(raw: unknown): AskFacts | null {
           .filter((day): day is NonNullable<typeof day> => Boolean(day))
       : [],
     archetypeName: shortText(body.archetypeName, 40) || undefined,
+    destinationProfile: (() => {
+      const profile = body.destinationProfile;
+      if (!profile || typeof profile !== "object") return null;
+      const record = profile as Record<string, unknown>;
+      const list = (value: unknown) =>
+        Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 6).map((item) => shortText(item, 90)) : [];
+      return {
+        tagline: shortText(record.tagline, 160),
+        highlights: list(record.highlights),
+        bestFor: list(record.bestFor),
+        bestSeason: shortText(record.bestSeason, 80),
+        province: shortText(record.province, 40) || undefined,
+      };
+    })(),
   };
 }
 
@@ -80,7 +94,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, answer: local, source: "local", note: "پاسخ از حساب‌های خودِ سفر تو ساخته شد." });
   }
 
-  const cacheKey = `safarino:ask:v1:${encodeURIComponent(`${facts.destination}|${facts.days}|${facts.budgetToman}|${facts.remainingToman}|${question}`).slice(0, 320)}`;
+  const cacheKey = `safarino:ask:v2:${encodeURIComponent(`${facts.destination}|${facts.days}|${facts.budgetToman}|${facts.remainingToman}|${question}`).slice(0, 320)}`;
   const cached = await getProviderCache<{ answer: string }>(cacheKey);
   if (cached?.answer) return NextResponse.json({ success: true, answer: cached.answer, source: "ai", cached: true });
 
@@ -90,12 +104,15 @@ export async function POST(request: NextRequest) {
       maxTokens: 240,
       temperature: 0.4,
       system:
-        "تو «همسفر سفرینو» هستی: کوتاه، دقیق و صادق. فقط از اعداد و واقعیت‌های داده‌شده استفاده می‌کنی، هیچ عدد یا قیمت یا ساعتی نمی‌سازی و اگر جواب در داده نیست صریح می‌گویی نمی‌دانی. فقط JSON معتبر می‌نویسی.",
+        "تو «همسفر سفرینو» هستی: کوتاه، دقیق و صادق. برای پول و برنامهٔ سفر فقط از اعداد داده‌شده استفاده می‌کنی و هیچ قیمت یا ساعتی نمی‌سازی؛ برای سؤال دربارهٔ خودِ شهر، دانش عمومی و شناخته‌شدهٔ ایران را می‌گویی و اگر مطمئن نیستی صریح می‌گویی نمی‌دانی. فقط JSON معتبر می‌نویسی.",
       prompt: askPrompt(question, facts),
     });
     const written = shortText((raw as Record<string, unknown>)?.answer, 700);
     const kept = keepOnlyRealNumbers(written, facts);
-    if (!kept) {
+    // A question about the city must never come back with a price the site
+    // never read.
+    const moneyInPlaceAnswer = questionTopic(question) === "destination" && /(تومان|ریال|دلار)/.test(kept || "");
+    if (!kept || moneyInPlaceAnswer) {
       return NextResponse.json({ success: true, answer: local, source: "local", note: "پاسخ پیشنهادی عددی داشت که در سفر تو نبود؛ همان حساب خودمان را نشان می‌دهم." });
     }
     await setProviderCache(cacheKey, { answer: kept }, CACHE_SECONDS);

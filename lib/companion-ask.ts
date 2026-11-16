@@ -28,7 +28,60 @@ export type AskFacts = {
   placeNames: string[];
   weather: { label: string; minC: number | null; maxC: number | null; rainProbability: number | null }[];
   archetypeName?: string;
+  /** What we really know about the destination — used for questions about the city itself. */
+  destinationProfile?: {
+    tagline: string;
+    highlights: string[];
+    bestFor: string[];
+    bestSeason: string;
+    province?: string;
+  } | null;
 };
+
+/** Which of the two brains a question needs. */
+export type AskTopic = "trip" | "destination";
+
+const DESTINATION_PATTERNS = [
+  /(مردم|فرهنگ|رسم|آداب|سنت|زبان|لهجه)/,
+  /(غذای محلی|غذاشناسی|چی بخورم|بخورم|غذا|کجا غذا|رستوران|کافه|صبحانه|شیرینی|سوغات)/,
+  /(تاریخ|تاریخی|دوره|سلسله|بنای|اثر باستانی|موزه)/,
+  /(طبیعت|کوه|جنگل|دریا|ساحل|کویر|آبشار|دریاچه)/,
+  /(بخرم|خرید|بازار|صنایع دستی|فرش)/,
+  /(جاهای دیدنی|جاذبه|دیدنی|کجا برم|چی ببینم)/,
+  /(آب و هوا|اقلیم|بهترین فصل|چه فصلی)/,
+  /(دربارهٔ|درباره|اهل|مردمش)/,
+];
+
+/** Trip questions are about *my numbers*; destination questions are about *the place*. */
+export function questionTopic(question: string): AskTopic {
+  const text = (question || "").replace(/[يى]/g, "ی").replace(/ك/g, "ک");
+  const budgetish = /(بودجه|پول|خرج|هزینه|باقی‌مانده|باقی مانده|چقدر)/.test(text);
+  const tripish = /(اقامت|هتل|اتاق|بلیت|قطار|هواپیما|اتوبوس|ماشین|برنامهٔ من|برنامه من|سفرم|روزهام|روزها)/.test(text);
+  if (budgetish && !/(جاهای دیدنی|جاذبه|دیدنی)/.test(text)) return "trip";
+  if (tripish) return "trip";
+  if (DESTINATION_PATTERNS.some((pattern) => pattern.test(text))) return "destination";
+  return "trip";
+}
+
+/** What the companion says about the city from data we already hold — never invented. */
+export function answerAboutDestination(question: string, facts: AskFacts): string | null {
+  const profile = facts.destinationProfile;
+  if (!profile) return null;
+  const text = (question || "").replace(/[يى]/g, "ی").replace(/ك/g, "ک");
+  const head = `${facts.destination}${profile.province ? ` (${profile.province})` : ""}: ${profile.tagline}`;
+  if (/(غذا|بخورم|رستوران|کافه|شیرینی|سوغات)/.test(text)) {
+    return `${head}. برای خوردن، سراغ خوراک محلی و بازار همان شهر برو؛ قیمت‌ها را همان‌جا ببین، چون من قیمت به‌روز رستوران‌ها را ندارم و از خودم نمی‌سازم.`;
+  }
+  if (/(طبیعت|کوه|جنگل|دریا|ساحل|کویر|آبشار|دریاچه)/.test(text)) {
+    return `${head}. نزدیک‌ترین طبیعت‌های شناخته‌شدهٔ این مقصد: ${profile.highlights.slice(0, 3).join("، ")}.`;
+  }
+  if (/(فصل|آب و هوا|اقلیم|کی برم)/.test(text)) {
+    return `${head}. بهترین فصل سفر به ${facts.destination}: ${profile.bestSeason}. برای دمای دقیق روزهای سفرت، پیش‌بینی واقعی بالای همین صفحه را ببین.`;
+  }
+  return `${head}. چیزهایی که این مقصد برایشان شناخته می‌شود: ${profile.highlights.slice(0, 3).join("، ")}${
+    profile.bestFor.length ? `؛ مناسب برای ${profile.bestFor.slice(0, 3).join("، ")}` : ""
+  }. اگر بخواهی، برنامه‌ات را هم با همین‌ها تنظیم می‌کنم.`;
+}
 
 export const ASK_EXAMPLES = [
   "با این بودجه بیشتر کجا رو ببینم؟",
@@ -72,7 +125,12 @@ export function answerLocally(question: string, facts: AskFacts): string {
   }
 
   if (has(/(کجا|جاذبه|ببینم|گشت|برنامه|چی ببینم)/)) {
-    if (!facts.placeNames.length) return `برای ${facts.destination} هنوز جاذبهٔ تأییدشده‌ای در فهرست تو نیست؛ در صفحهٔ برنامه، فهرست جاذبه‌ها را باز کن.`;
+    if (!facts.placeNames.length) {
+      return (
+        answerAboutDestination(question, facts) ||
+        `برای ${facts.destination} هنوز جاذبهٔ تأییدشده‌ای در فهرست تو نیست؛ در صفحهٔ برنامه، فهرست جاذبه‌ها را باز کن.`
+      );
+    }
     return `از جاذبه‌های تأییدشدهٔ ${facts.destination} این‌ها در دسترس تو هستند: ${facts.placeNames.slice(0, 5).join("، ")}${
       facts.placeNames.length > 5 ? " و چند مورد دیگر" : ""
     }. برای ${fa(facts.days)} روز، روزی دو تا سه مورد کافی است.`;
@@ -105,6 +163,10 @@ export function answerLocally(question: string, facts: AskFacts): string {
       facts.travellers ? `برای ${fa(facts.travellers)} نفر برنامه ریخته‌ایم.` : ""
     }`;
   }
+
+  // A question about the place itself, not about the money.
+  const aboutPlace = answerAboutDestination(question, facts);
+  if (aboutPlace) return aboutPlace;
 
   return `این‌ها را از سفر خودت می‌دانم: مقصد ${facts.destination}، ${fa(facts.days)} روز، ${fa(facts.travellers)} نفر، بودجهٔ ${money(
     facts.budgetToman,
@@ -160,6 +222,16 @@ export function keepOnlyRealNumbers(answer: string, facts: AskFacts): string | n
 }
 
 export function askPrompt(question: string, facts: AskFacts): string {
+  const topic = questionTopic(question);
+  const destinationBlock = facts.destinationProfile
+    ? `دربارهٔ ${facts.destination} (دادهٔ ثبت‌شدهٔ خودمان): ${facts.destinationProfile.tagline} | دیدنی‌ها: ${facts.destinationProfile.highlights.join("، ")} | مناسب برای: ${facts.destinationProfile.bestFor.join("، ")} | بهترین فصل: ${facts.destinationProfile.bestSeason}`
+    : `دربارهٔ ${facts.destination} دادهٔ ثبت‌شده‌ای نداریم.`;
+
+  const rules =
+    topic === "destination"
+      ? `سؤال مسافر دربارهٔ خودِ مقصد است. با دانش عمومی و شناخته‌شدهٔ ایرانی دربارهٔ ${facts.destination} جواب بده (فرهنگ، غذا، دیدنی‌ها، آداب، فصل سفر، سوغات). هیچ قیمت، نرخ، ساعت کاری یا شماره تلفنی نگو و هیچ عدد تازه‌ای نساز. اگر مطمئن نیستی، صریح بگو که مطمئن نیستی.`
+      : `سؤال مسافر دربارهٔ حساب‌وکتاب سفرش است. فقط از اعداد و واقعیت‌های بالا استفاده کن؛ هیچ عدد تازه‌ای (قیمت، درصد، ساعت) نساز. اگر جواب در داده نیست، صریح بگو که نمی‌دانی و حدس نمی‌زنی.`;
+
   return `سفر مسافر:
 مقصد: ${facts.destination} | مبدأ: ${facts.origin} | ${facts.days} روز | ${facts.travellers} نفر${facts.children ? ` (${facts.children} کودک)` : ""}
 بودجهٔ کل: ${facts.budgetToman} تومان
@@ -170,9 +242,10 @@ export function askPrompt(question: string, facts: AskFacts): string {
 تاریخ حرکت: ${facts.departureDate || "نامشخص"}
 جاذبه‌های تأییدشده: ${facts.placeNames.slice(0, 10).join("، ") || "ثبت نشده"}
 هوا (پیش‌بینی واقعی): ${facts.weather.map((day) => `${day.label} ${day.minC ?? "?"}/${day.maxC ?? "?"}`).join(" | ") || "در دسترس نیست"}
+${destinationBlock}
 
 سؤال مسافر: «${question}»
 
-در حداکثر سه جملهٔ فارسی و صمیمی جواب بده. فقط از اعداد و واقعیت‌های بالا استفاده کن؛ هیچ عدد تازه‌ای (قیمت، درصد، ساعت) نساز. اگر جواب در داده نیست، صریح بگو که نمی‌دانی و حدس نمی‌زنی.
+در حداکثر سه جملهٔ فارسی و صمیمی جواب بده. ${rules}
 فرمت: {"answer":"..."}`;
 }

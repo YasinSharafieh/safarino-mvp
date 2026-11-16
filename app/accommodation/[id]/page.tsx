@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { roomMix } from "@/lib/stay-price";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
@@ -104,6 +105,12 @@ export default function AccommodationDetailPage() {
 
   const rawId = decodeURIComponent(String(params?.id || ""));
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  /** The rooms this party books — the same rule the search layer priced with. */
+  const partySize = Math.max(
+    1,
+    (snapshot?.adults || 1) + (snapshot?.childAges?.length || 0) + (snapshot?.infantAges?.length || 0),
+  );
+  const roomLabel = roomMix(partySize).label;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeOfferId, setActiveOfferId] = useState(rawId);
@@ -330,6 +337,16 @@ export default function AccommodationDetailPage() {
             </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+              {/* An easy way back, at the top: pick another room without restarting. */}
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <button type="button" onClick={backToResults} className="btn-ghost !py-2.5 text-xs">
+                  <ArrowRight className="h-4 w-4" />
+                  بازگشت به فهرست اقامتگاه‌ها
+                </button>
+                <p className="text-[10.5px] leading-6 text-slate-400">
+                  اتاق یا اقامتگاه دیگری می‌خواهی؟ همین‌جا برگرد؛ انتخاب‌های قبلی‌ات از دست نمی‌رود.
+                </p>
+              </div>
               <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
                 {/* Gallery */}
                 <section aria-label="گالری تصاویر" className="glass overflow-hidden p-3">
@@ -416,9 +433,14 @@ export default function AccommodationDetailPage() {
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4">
-                    <span className="block text-[10px] text-slate-400">قیمت کل {formatNumber(snapshot?.nights || 1)} شب · {PROVIDER_LABELS[offer.provider]}</span>
+                    <span className="block text-[10px] text-slate-400">
+                      قیمت کل {formatNumber(snapshot?.nights || 1)} شب · {roomLabel} · {PROVIDER_LABELS[offer.provider]}
+                    </span>
                     <b className="mt-1 block text-2xl font-black text-cyan-100">{formatToman(offer.priceTotalToman)}</b>
                     <span className="mt-1 block text-[10px] text-slate-400">میانگین هر شب {formatToman(offer.pricePerNightToman)}</span>
+                    <span className="mt-2 block rounded-lg border border-cyan-300/20 bg-cyan-300/[0.08] px-2 py-1.5 text-[10px] leading-5 text-cyan-100">
+                      {formatToman(offer.pricePerNightToman)} تومان هر شب ({roomLabel}) × {formatNumber(snapshot?.nights || 1)} شب = {formatToman(offer.priceTotalToman)}
+                    </span>
                     <p className="mt-2 text-[10px] leading-5 text-slate-500">{offer.priceNote}</p>
                   </div>
 

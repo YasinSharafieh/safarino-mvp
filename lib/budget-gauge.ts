@@ -38,6 +38,8 @@ export type GaugeInput = {
   days?: number;
   /** Cheapest real alternative the page already knows about. */
   cheaperAlternative?: { mode: string; priceToman: number } | null;
+  /** The destination, so the dial uses the same per-city sightseeing rate. */
+  city?: string | null;
 };
 
 const MODE_LABEL: Record<string, string> = { plane: "هواپیما", train: "قطار", bus: "اتوبوس", car: "ماشین شخصی" };
@@ -57,6 +59,7 @@ export function budgetGauge(input: GaugeInput): BudgetGauge {
     totalBudget: totalToman,
     travellers,
     days,
+    city: input.city,
     tickets: transportToman,
     stay: accommodationToman,
   });

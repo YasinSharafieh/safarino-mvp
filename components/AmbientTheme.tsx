@@ -15,6 +15,10 @@ const SOUND_KEY = "safarino-ambient-sound";
  * same contrast, so dark and light mode both stay readable. Sound is off until
  * the traveller turns it on (a browser never plays audio by itself), and it is a
  * two-second gentle swell, never a loop.
+ *
+ * It used to float in the bottom-right corner — a dark pill with no explanation
+ * that looked like a stray switch. It now sits *inside* the header, in the flow
+ * of the page, so it can never cover content and always looks like what it is.
  */
 export default function AmbientTheme() {
   const { travelData, isHydrated } = useTravel();
@@ -85,8 +89,8 @@ export default function AmbientTheme() {
   if (!isHydrated || !travelData.destination) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-30 print:hidden" dir="rtl">
-      <div className="flex items-center gap-1 rounded-full border border-white/10 bg-[#0d0820]/85 px-1.5 py-1 text-[8.5px] text-slate-300 shadow-lg backdrop-blur">
+    <div className="print:hidden" dir="rtl">
+      <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.05] px-2 py-1.5 text-[9px] text-slate-300">
         <span className="flex items-center gap-1 px-1" title={ambient.why}>
           <Globe2 className="h-3 w-3 text-cyan-300" />
           <span className="hidden sm:inline">حال‌وهوای {travelData.destination}</span>

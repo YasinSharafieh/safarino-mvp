@@ -83,7 +83,10 @@ function savedStatus(value: Record<string, unknown> | null): Choice | null {
 import SnapshotKeeper from "@/components/SnapshotKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
-import { bestStay, estimateBudget } from "@/lib/budget-fit";
+import { bestStay } from "@/lib/budget-fit";
+import TripCostTable from "@/components/TripCostTable";
+import { ticketStayCheck } from "@/lib/ticket-timing";
+import { costTableFootnote, tripCostBreakdown } from "@/lib/trip-costs";
 import { chosenTransport } from "@/lib/transport-selection";
 import BudgetGauge from "@/components/BudgetGauge";
 import { robinPlan, type RobinOffer } from "@/lib/budget-robin";
@@ -154,26 +157,57 @@ export default function AccommodationPage() {
   const pickedTransport = chosenTransport(travelData.transport);
   const transportCost = pickedTransport ? pickedTransport.cost : legacyTransportCost;
   const accommodationCost = selected ? Math.max(0, Number(selected.cost) || 0) : 0;
-  const totalSpent = transportCost + accommodationCost;
-  const remainingBudget = totalBudget - totalSpent;
-  const beforeAccommodation = totalBudget - transportCost;
-  const budgetPercent = Math.round((totalSpent / Math.max(totalBudget, 1)) * 100);
   const nights = checkIn && checkOut && checkOut > checkIn
     ? Math.round((Date.parse(`${checkOut}T00:00:00Z`) - Date.parse(`${checkIn}T00:00:00Z`)) / 86_400_000)
     : 0;
-  // What is really left for the room once food and everyday costs are set
-  // aside — the same arithmetic the plan page uses, so the numbers agree.
-  const stayBudget = useMemo(
+  const destination = city || travelData.destination || "";
+  const partySize = Math.max(1, travelData.travelers + travelData.children + travelData.infants);
+  const tripDays = Math.max(1, Number(travelData.days) || nights || 1);
+
+  /**
+   * One table for the whole site. Food, sightseeing (per city) and city
+   * transport are all subtracted — the old version only removed the ticket and
+   * the room, which made the remaining number a fantasy.
+   */
+  const costs = useMemo(
     () =>
-      estimateBudget({
+      tripCostBreakdown({
         totalBudget,
-        travellers: Math.max(1, travelData.travelers + travelData.children + travelData.infants),
-        // Food is spent per day of the trip, not per night of the room.
-        days: Math.max(1, Number(travelData.days) || nights || 1),
+        travellers: partySize,
+        days: tripDays,
+        nights: Math.max(1, nights || tripDays - 1 || 1),
+        city: destination,
         tickets: transportCost,
+        stay: accommodationCost,
       }),
-    [nights, totalBudget, transportCost, travelData.children, travelData.days, travelData.infants, travelData.travelers],
+    [accommodationCost, destination, nights, partySize, totalBudget, transportCost, tripDays],
   );
+
+  /**
+   * The ticket's own clock against the room's dates — the same check the plan
+   * page runs, so a night nobody can use is flagged before booking.
+   */
+  const timing = ticketStayCheck({
+    departure: pickedTransport?.departure || null,
+    arrival: pickedTransport?.arrival || null,
+    checkIn: checkIn || null,
+    checkOut: checkOut || null,
+  });
+
+  const totalSpent = costs.totalSpent;
+  const remainingBudget = costs.remaining;
+  const beforeAccommodation = totalBudget - transportCost;
+  const budgetPercent = Math.round((totalSpent / Math.max(totalBudget, 1)) * 100);
+  // What is really left for a room: everything except the room itself.
+  const stayBudget = {
+    totalBudget,
+    travellers: costs.travellers,
+    days: costs.days,
+    food: costs.food,
+    activities: costs.activities,
+    localTransport: costs.localTransport,
+    remaining: totalBudget - costs.tickets - costs.food - costs.activities - costs.localTransport,
+  };
 
   /**
    * The dial, using the very same numbers printed under it: the chosen ticket,
@@ -188,8 +222,9 @@ export default function AccommodationPage() {
         accommodationToman: accommodationCost,
         travellers: Math.max(1, travelData.travelers + travelData.children + travelData.infants),
         days: Math.max(1, Number(travelData.days) || nights || 1),
+        city: destination,
       }),
-    [accommodationCost, nights, totalBudget, transportCost, travelData.budget, travelData.children, travelData.days, travelData.infants, travelData.travelers],
+    [accommodationCost, destination, nights, totalBudget, transportCost, travelData.budget, travelData.children, travelData.days, travelData.infants, travelData.travelers],
   );
 
   useEffect(() => {
@@ -515,16 +550,25 @@ export default function AccommodationPage() {
                 <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="هزینه حمل‌ونقل و اقامت نسبت به بودجه" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(budgetPercent, 100)}>
                   <motion.div className={`h-full rounded-full ${remainingBudget < 0 ? "bg-rose-500" : "bg-emerald-400"}`} animate={{ width: `${Math.min(budgetPercent, 100)}%` }} />
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-5">
-                  {[
-                    ["بودجهٔ تعیین‌شدهٔ تو", totalBudget, ""],
-                    ["بلیت و حمل‌ونقل", transportCost, ""],
-                    ["پول غذا و گشت (کنار گذاشته‌شده)", stayBudget.food + stayBudget.activities + stayBudget.localTransport, ""],
-                    ["اقامت", accommodationCost, ""],
-                    [remainingBudget >= 0 ? "باقی‌مانده" : "بیشتر از بودجه", Math.abs(remainingBudget), remainingBudget >= 0 ? "text-emerald-300" : "text-rose-300"],
-                  ].map(([label, value, tone]) => (
-                    <div key={String(label)} className="rounded-xl bg-white/[0.035] p-3"><span className="block text-[10px] text-slate-500">{label}</span><b className={`mt-1 block text-xs ${String(tone) || "text-white"}`}>{formatToman(Number(value))}</b></div>
-                  ))}
+                <div className="mt-4 space-y-1.5">
+                  {timing.issues
+                    .filter((issue) => issue.tone !== "ok")
+                    .map((issue) => (
+                      <div
+                        key={issue.title}
+                        className={`rounded-xl border px-3 py-2 text-[10px] leading-6 ${
+                          issue.tone === "problem"
+                            ? "border-rose-400/30 bg-rose-400/[0.08] text-rose-100"
+                            : "border-amber-300/25 bg-amber-300/[0.07] text-amber-100"
+                        }`}
+                      >
+                        <b className="block text-[10.5px] font-black">{issue.title}</b>
+                        {issue.body}
+                      </div>
+                    ))}
+                </div>
+                <div className="mt-4">
+                  <TripCostTable breakdown={costs} title="جدول هزینهٔ سفر (همان جدول همهٔ صفحه‌ها)" footnote={costTableFootnote(costs)} />
                 </div>
                 <div className="mt-3">
                   <BudgetGauge gauge={gauge} title="کیلومترشمار بودجهٔ سفر" />
@@ -544,8 +588,8 @@ export default function AccommodationPage() {
                 ) : null}
                 <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10.5px] leading-6 text-slate-300">
                   بودجهٔ سفر که خودت گفتی <b className="text-cyan-200">{formatToman(totalBudget)}</b> است؛
-                  بعد از بلیت، <b className={stayBudget.remaining > 0 ? "text-emerald-300" : "text-rose-300"}>{formatToman(Math.max(0, stayBudget.remaining))}</b> برای اقامت مانده
-                  و <b className="text-white">{formatToman(stayBudget.food)}</b> هم برای غذا کنار گذاشته شده (۸۰۰ هزار تومان هر نفر هر روز × {formatNumber(stayBudget.travellers)} نفر × {formatNumber(stayBudget.days)} شب).
+                  بعد از بلیت، غذا و خرج روزانه، <b className={stayBudget.remaining > 0 ? "text-emerald-300" : "text-rose-300"}>{formatToman(Math.max(0, stayBudget.remaining))}</b> برای اقامت مانده
+                  (پول غذا {formatToman(stayBudget.food)} برای {formatNumber(stayBudget.travellers)} نفر و {formatNumber(stayBudget.days)} روز با نرخ {formatToman(1_000_000)} هر نفر هر روز).
                 </p>
                 {remainingBudget < 0 && <p className="mt-3 flex items-center gap-2 text-[11px] text-rose-300"><CircleAlert className="h-4 w-4 shrink-0" />هزینه‌ها از بودجه بیشتر شده؛ اقامت اقتصادی‌تری انتخاب کنید یا بودجه را افزایش دهید.</p>}
               </div>

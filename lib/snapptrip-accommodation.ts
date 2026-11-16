@@ -108,7 +108,17 @@ export async function searchSnapptripAccommodation(input: AccommodationSearchInp
   const results = await Promise.all(pages.map(async (page) => {
     try {
       const payload = await publicProviderJson(`${API}/search-city`, {
-        query: { city_id: cityId, date_from: input.checkIn, date_to: input.checkOut, page, order_by: "best_selling", token: "Jek", no_rooms: 1 },
+        query: {
+          city_id: cityId,
+          date_from: input.checkIn,
+          date_to: input.checkOut,
+          page,
+          order_by: "best_selling",
+          token: "Jek",
+          // One room per booking step: the party's rooms are added up by
+          // `lib/accommodation-search`, which prices the room mix exactly once.
+          no_rooms: 1,
+        },
         headers: HEADERS,
         timeoutMs: 20_000,
       });

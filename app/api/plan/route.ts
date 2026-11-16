@@ -186,8 +186,12 @@ function normalizePlan(raw: unknown, input: TravelInput) {
     accommodationCost: selectionCost(input.accommodation),
     aiFood: cleanNumber(budget.food, 0, 0, 1_000_000_000),
     aiActivities: cleanNumber(budget.activities, 0, 0, 1_000_000_000),
-    travellers: Math.max(1, Number(input.travelers) || 2) + Math.max(0, Number((input as Record<string, unknown>).children) || 0),
+    travellers:
+      Math.max(1, Number(input.travelers) || 2) +
+      Math.max(0, Number((input as Record<string, unknown>).children) || 0) +
+      Math.max(0, Number((input as Record<string, unknown>).infants) || 0),
     days: input.days,
+    city: input.destination,
   });
 
   const stringList = (value: unknown) =>

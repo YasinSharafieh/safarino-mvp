@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Compass, Home, Sparkles } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import AmbientTheme from "@/components/AmbientTheme";
 import OriginSwitch from "@/components/OriginSwitch";
 
 type Props = {
@@ -46,6 +47,7 @@ export default function SiteHeader({ actions, minimal = false }: Props) {
           </>
         ) : null}
         {actions}
+        <AmbientTheme />
         <a href="/" className="btn-ghost !px-2.5 !py-2 text-[11px]" aria-label="بازگشت به صفحهٔ اصلی">
           <Home className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">صفحهٔ اصلی</span>

@@ -6,7 +6,8 @@ import type {
   ProviderSearchResult,
   ProviderSearchStatus,
 } from "./accommodation-types";
-import { PROVIDER_LABELS } from "./accommodation-types";
+import { PROVIDER_LABELS, accommodationGuests, accommodationNights } from "./accommodation-types";
+import { stayPrice } from "./stay-price";
 import { searchAlibabaAccommodation } from "./alibaba-accommodation";
 import { searchJajigaAccommodation } from "./jajiga-accommodation";
 import { searchJabamaAccommodation } from "./jabama-accommodation";
@@ -346,6 +347,40 @@ export function deduplicateAccommodationOffers(offers: readonly AccommodationOff
   return groups.sort((a, b) => a.offers[0].priceTotalToman - b.offers[0].priceTotalToman);
 }
 
+/**
+ * Providers quote a *room*, not a party. This rewrites every offer into the
+ * price the traveller will actually pay: the rooms a party of this size books
+ * (۲ نفر → دو نفره، ۳ نفر → سه نفره، ۴ نفر → چهار نفره) times the nights.
+ *
+ * Villas and homes are priced for the whole unit, so they are left alone except
+ * for the nights multiplication — never divided by the number of guests.
+ */
+export function priceOffersForParty(offers: AccommodationOffer[], input: AccommodationSearchInput): AccommodationOffer[] {
+  const guests = Math.max(1, accommodationGuests(input));
+  const nights = Math.max(1, accommodationNights(input));
+  return offers.map((offer) => {
+    const quote = stayPrice({
+      priceTotalToman: offer.priceTotalToman,
+      pricePerNightToman: offer.pricePerNightToman,
+      people: guests,
+      guests,
+      nights,
+      kind: offer.kind,
+      basis: offer.kind === "stay" ? "unit" : "room",
+    });
+    return {
+      ...offer,
+      priceTotalToman: quote.total,
+      pricePerNightToman: quote.perNight,
+      priceBeforeDiscountToman:
+        offer.priceBeforeDiscountToman !== null && offer.priceBeforeDiscountToman > 0
+          ? Math.round((offer.priceBeforeDiscountToman / Math.max(1, offer.priceTotalToman)) * quote.total)
+          : null,
+      priceNote: [offer.priceNote, quote.roomMixNote, quote.assumptionNote].filter(Boolean).join(" "),
+    };
+  });
+}
+
 function providerError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("CITY_NOT_FOUND")) return "این مقصد در فهرست عمومی منبع پیدا نشد.";
@@ -393,7 +428,8 @@ export async function searchMultiProviderAccommodation(input: AccommodationSearc
     });
   }
 
-  const groups = deduplicateAccommodationOffers(allOffers);
+  const pricedOffers = priceOffersForParty(allOffers, input);
+  const groups = deduplicateAccommodationOffers(pricedOffers);
   const fetchedAt = new Date().toISOString();
   return {
     provider: "multi",
@@ -406,9 +442,11 @@ export async function searchMultiProviderAccommodation(input: AccommodationSearc
     infantAges: input.infantAges,
     fetchedAt,
     found: statuses.reduce((sum, status) => sum + (status.status === "ok" || status.status === "empty" ? status.found : 0), 0),
-    offerCount: allOffers.length,
+    offerCount: pricedOffers.length,
     propertyCount: groups.length,
-    deduplicatedCount: allOffers.length - groups.length,
+    deduplicatedCount: pricedOffers.length - groups.length,
+    guests: accommodationGuests(input),
+    nights: accommodationNights(input),
     offers: groups.map((group) => group.offers[0]),
     groups,
     providerStatuses: statuses,

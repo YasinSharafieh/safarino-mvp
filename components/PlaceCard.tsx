@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { faText } from "@/lib/persian-text";
 import { ExternalLink, ChevronDown, Heart, Info, Navigation2, Plus, Check } from "lucide-react";
 import { FAVORITES_EVENT, isFavoritePlace, toggleFavorite } from "@/lib/favorites";
 import PlaceNavigator from "./PlaceNavigator";
@@ -79,7 +80,7 @@ export default function PlaceCard({
       sourceUrl: place.sourceUrl,
     });
   };
-  const description = (place.description || "").trim();
+  const description = faText(place.description).trim();
   const isLong = description.length > 150;
   const articleLink = place.imageCreditUrl || place.wikipediaUrl || place.sourceUrl || null;
 
@@ -119,7 +120,7 @@ export default function PlaceCard({
       <div className="flex flex-1 flex-col p-3">
         <div className="flex items-start justify-between gap-2">
           <h3 className="min-w-0 text-sm font-black leading-6 text-white">
-            <b className="line-clamp-2">{place.name}</b>
+            <b className="line-clamp-2">{faText(place.name)}</b>
           </h3>
           <span className="flex shrink-0 items-center gap-1">
             <button
@@ -146,7 +147,7 @@ export default function PlaceCard({
           </span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
-          <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{place.category}</span>
+          <span className="rounded-md bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">{faText(place.category)}</span>
           {place.sourceLabel ? <span>{place.sourceLabel}</span> : null}
           {place.distanceEngine && place.distanceKm !== null && place.distanceKm !== undefined ? <span>فاصله: {place.distanceEngine}</span> : null}
         </div>

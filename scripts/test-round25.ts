@@ -53,15 +53,18 @@ check("a ticket without a booking link is refused", parseTripLink(`?from=تهر�
 check("an enormous payload is refused", parseTripLink(`?from=تهران&stay=${"a".repeat(4000)}`)?.stay === undefined);
 check("an ordinary link still works", parseTripLink("?from=تهران&to=شیراز&date=2026-12-01")?.destination === "شیراز");
 
-console.log("A room price is multiplied by people and nights, and it is visible");
+console.log("A room is priced by the room the party books, times the nights");
 const hotel = stayPrice({ priceTotalToman: 6_000_000, pricePerNightToman: 3_000_000, people: 2, nights: 2, kind: "hotel" });
-check("per person per night is a third of the nightly total for two guests", hotel.perPersonPerNight === 1_500_000, String(hotel.perPersonPerNight));
-check("the multiplication really adds up", hotel.perPersonPerNight * hotel.people * hotel.nights === hotel.total);
-check("the sentence shows the whole arithmetic", hotel.formula.includes("×") && hotel.formula.includes("۲ نفر"));
-check("provider totals that do not add up are flagged", stayPrice({ priceTotalToman: 10_000_000, pricePerNightToman: 3_000_000, people: 2, nights: 2 }).consistent === false);
+check("two guests mean one double room at the provider's rate", hotel.rooms === 1 && hotel.perNight === 3_000_000, String(hotel.perNight));
+check("the multiplication really adds up", hotel.perNight * hotel.nights === hotel.total, String(hotel.total));
+check("the sentence shows the whole arithmetic", hotel.formula.includes("×") && hotel.formula.includes("۲ شب"));
+check("per person is only a derived convenience, never the price", hotel.perPersonPerNight * 2 === hotel.perNight);
+const triple = stayPrice({ priceTotalToman: 3_239_000, pricePerNightToman: 3_239_000, people: 2, nights: 2, kind: "hotel", guests: 3 });
+check("three guests get a triple room for two nights", triple.roomLabel.includes("سه‌نفره") && triple.total === triple.perNight * 2, String(triple.total));
+check("a party larger than the room is called out as an assumption", triple.adjusted === true && triple.assumptionNote.includes("تخمین"));
 const villa = stayPrice({ priceTotalToman: 8_000_000, pricePerNightToman: 4_000_000, people: 4, nights: 2, kind: "stay" });
 check("a villa is priced per unit, not per person", villa.perUnit === true && villa.formula.includes("هر شب"));
-check("one guest for one night is simply the nightly price", stayPrice({ priceTotalToman: 1_500_000, pricePerNightToman: 1_500_000, people: 1, nights: 1 }).perPersonPerNight === 1_500_000);
+check("one guest for one night is simply the nightly price", stayPrice({ priceTotalToman: 1_500_000, pricePerNightToman: 1_500_000, people: 1, nights: 1 }).total === 1_500_000);
 
 console.log("The car cost is believable again");
 check("free petrol is 10,000 a litre", FUEL_OPTIONS.find((option) => option.id === "free")?.pricePerLiter === 10_000);
@@ -126,8 +129,8 @@ if (trainQuestion) {
 }
 check("no answer means no claim", preferredTransportMode(vehicleQuestions, {}) === "");
 
-console.log("Food is the traveller's own 800,000 a day, and a paid breakfast counts");
-check("a normal food day is 800,000", DAILY_FOOD_TOMAN === 800_000);
+console.log("Food is one million toman a day (the traveller's own figure), and a paid breakfast counts");
+check("a normal food day is 1,000,000", DAILY_FOOD_TOMAN === 1_000_000);
 const plain = estimateBudget({ totalBudget: 30_000_000, travellers: 2, days: 3, tickets: 5_000_000, stay: 6_000_000 });
 const withBreakfast = estimateBudget({ totalBudget: 30_000_000, travellers: 2, days: 3, tickets: 5_000_000, stay: 6_000_000, breakfastIncluded: true });
 check("breakfast in the room lowers the food money", withBreakfast.food < plain.food, `${withBreakfast.food} < ${plain.food}`);
@@ -141,7 +144,7 @@ const roomOver = roomAffordability({ roomTotal: 20_000_000, roomBudget: 15_000_0
 check("a room that leaves room for food is called suitable", roomFits.tone === "fits" && roomFits.headroom === 9_000_000);
 check("a room that eats the whole budget is called tight", roomTight.tone === "tight");
 check("a room past the money is called over, with the amount", roomOver.tone === "over" && roomOver.label.includes("۵"));
-check("the food sentence is always there", roomFits.foodNote.includes("۸۰۰") && roomOver.foodNote.includes("۸۰۰"));
+check("the food sentence is always there", roomFits.foodNote.includes("۱٬۰۰۰٬۰۰۰") && roomOver.foodNote.includes("۱٬۰۰۰٬۰۰۰"));
 
 console.log("A leftover car can never be shown as the chosen ticket");
 check("a train ticket is read as a train", chosenTransport({ vehicleId: "train", cost: 3_512_000, offerTitle: "قطار ایران" })?.mode === "train");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { faText } from "@/lib/persian-text";
 import Link from "next/link";
 import { ArrowLeft, Info, LoaderCircle, MapPin, Sparkles } from "lucide-react";
 import PlaceToolbar from "@/components/PlaceToolbar";
@@ -155,17 +156,17 @@ export default function CityAttractions({ city, suggestedDays }: { city: string;
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <b className="block truncate text-[11px] font-extrabold text-white">{full.name}</b>
+                    <b className="block truncate text-[11px] font-extrabold text-white">{faText(full.name)}</b>
                     <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
                       {/* A category name from Wikipedia can be a whole sentence; keep the chip one line. */}
                       <span title={full.category} className="max-w-[9rem] truncate rounded bg-cyan-400/10 px-1.5 py-0.5 text-cyan-200">
-                        {full.category.split(/[(،,]/)[0].trim().slice(0, 24)}
+                        {faText(full.category.split(/[(،,]/)[0].trim().slice(0, 24))}
                       </span>
                       {full.imageKind === "map" ? <span>تصویر: نقشهٔ نشان</span> : null}
                       {full.wikipediaUrl ? <span>مقالهٔ ویکی‌پدیا</span> : null}
                     </span>
                     {full.description ? (
-                      <p className="mt-1 line-clamp-2 text-[9.5px] leading-5 text-slate-400">{full.description}</p>
+                      <p className="mt-1 line-clamp-2 text-[9.5px] leading-5 text-slate-400">{faText(full.description)}</p>
                     ) : null}
                     <a
                       href={`https://nshn.ir/?lat=${full.latitude}&lng=${full.longitude}`}

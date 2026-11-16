@@ -32,7 +32,7 @@ import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
 import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
-import { DAILY_FOOD_TOMAN } from "@/lib/budget-fit";
+import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
 import { budgetGauge } from "@/lib/budget-gauge";
 import { pingCompanion } from "@/components/TripCompanion";
@@ -325,9 +325,24 @@ function TransportPageContent() {
   const activeSelection = mode && selection.vehicleId === mode && selection.cost > 0 ? selection : null;
   const selectedName = MODE_OPTIONS.find((option) => option.id === activeSelection?.vehicleId)?.title || "";
   const budgetDifference = budget - (activeSelection?.cost || 0);
-  /** The same food money every other step sets aside. */
-  const foodForTrip = DAILY_FOOD_TOMAN * passengers * days;
-  const forStay = budgetDifference - foodForTrip;
+  /**
+   * The very same cost table every other page prints — food, per-city
+   * sightseeing and city transport included, not just the food line.
+   */
+  const costs = useMemo(
+    () =>
+      tripCostBreakdown({
+        totalBudget: budget,
+        travellers: passengers,
+        days,
+        nights: Math.max(1, days - 1),
+        city: travelData.destination || "",
+        tickets: activeSelection?.cost || 0,
+      }),
+    [activeSelection?.cost, budget, days, passengers, travelData.destination],
+  );
+  const dailyCosts = costs.food + costs.activities + costs.localTransport;
+  const forStay = budget - (activeSelection?.cost || 0) - dailyCosts;
 
   /**
    * The dial at the top of the choice: the same arithmetic as the lines around
@@ -350,9 +365,10 @@ function TransportPageContent() {
         transportToman: activeSelection?.cost || 0,
         travellers: passengers,
         days,
+        city: travelData.destination || "",
         cheaperAlternative: gaugeAlternative,
       }),
-    [activeSelection, days, gaugeAlternative, passengers, travelData.budget],
+    [activeSelection, days, gaugeAlternative, passengers, travelData.budget, travelData.destination],
   );
 
   // A red dial is exactly the moment the orb should speak up.
@@ -455,7 +471,7 @@ function TransportPageContent() {
           }
           hint={
             activeSelection
-              ? `از بودجهٔ ${money(budget)}، ${money(Math.max(0, budget - activeSelection.cost))} باقی می‌ماند؛ از آن، ${money(foodForTrip)} پول غذا کنار گذاشته می‌شود.`
+              ? `از بودجهٔ ${money(budget)}، ${money(Math.max(0, budget - activeSelection.cost))} باقی می‌ماند؛ از آن، ${money(costs.food)} پول غذا و ${money(costs.activities + costs.localTransport)} گشت‌وگذار و رفت‌وآمد شهری کنار گذاشته می‌شود.`
               : "یک بلیت یا ماشین را انتخاب کن؛ بعد اقامتگاه."
           }
           ready={Boolean(activeSelection)}
@@ -694,7 +710,7 @@ function TransportPageContent() {
                   </span>
                   {budgetDifference >= 0 ? (
                     <span className="mt-1 block text-[9.5px] leading-5 text-slate-400">
-                      از این {millions(budgetDifference)}، پول غذا {millions(foodForTrip)} کنار گذاشته می‌شود (۸۰۰ هزار تومان هر نفر هر روز × {fa.format(passengers)} نفر × {fa.format(days)} روز)؛
+                      از این {millions(budgetDifference)}، پول غذا {millions(costs.food)}، گشت‌وگذار {millions(costs.activities)} و رفت‌وآمد شهری {millions(costs.localTransport)} کنار گذاشته می‌شود (هر نفر هر روز ۱٬۰۰۰٬۰۰۰ غذا و گشت‌وگذار و رفت‌وآمد، برای {fa.format(passengers)} نفر و {fa.format(days)} روز)؛
                       یعنی برای اقامت حدود <b className={forStay >= 0 ? "text-cyan-200" : "text-rose-300"}>{millions(Math.max(0, forStay))}</b> می‌مانَد.
                     </span>
                   ) : null}

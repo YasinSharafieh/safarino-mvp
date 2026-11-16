@@ -1,3 +1,11 @@
+import {
+  BREAKFAST_PER_PERSON_PER_DAY,
+  DEFAULT_ACTIVITIES_PER_PERSON_PER_DAY,
+  FOOD_PER_PERSON_PER_DAY,
+  LOCAL_TRANSPORT_PER_PERSON_PER_DAY,
+} from "./city-costs";
+import { tripCostBreakdown } from "./trip-costs";
+
 /**
  * «بهترین برای تو» — the money side of every choice.
  *
@@ -17,15 +25,17 @@
  */
 
 /**
- * A normal day of food for one person, as stated by the traveller: about
- * 800,000 toman. It is a planning assumption, not a quote, and every place
- * that uses it says so.
+ * A normal day of food for one person, as stated by the traveller: about one
+ * million toman. It is a planning assumption, not a quote, and every place
+ * that uses it says so. Activities differ per city and come from
+ * `lib/city-costs`; the food, breakfast saving and city transport do not.
  */
-export const DAILY_FOOD_TOMAN = 800_000;
+export const DAILY_FOOD_TOMAN = FOOD_PER_PERSON_PER_DAY;
 /** When the room includes breakfast, that much of the food money is saved. */
-export const DAILY_BREAKFAST_TOMAN = 180_000;
-export const DAILY_ACTIVITIES_TOMAN = 300_000;
-export const DAILY_LOCAL_TRANSPORT_TOMAN = 200_000;
+export const DAILY_BREAKFAST_TOMAN = BREAKFAST_PER_PERSON_PER_DAY;
+/** The country default; a city with its own figure overrides it. */
+export const DAILY_ACTIVITIES_TOMAN = DEFAULT_ACTIVITIES_PER_PERSON_PER_DAY;
+export const DAILY_LOCAL_TRANSPORT_TOMAN = LOCAL_TRANSPORT_PER_PERSON_PER_DAY;
 
 export type BudgetVerdict = "fits" | "tight" | "over";
 
@@ -72,30 +82,38 @@ export function estimateBudget(input: {
   days: number;
   tickets?: number;
   stay?: number;
+  /** The destination — activities are priced per city. */
+  city?: string | null;
+  nights?: number;
   /** The room's price already covers breakfast / all meals. */
   breakfastIncluded?: boolean;
   fullBoardIncluded?: boolean;
 }): BudgetPlan {
-  const travellers = Math.max(1, Math.round(input.travellers || 1));
-  const days = Math.max(1, Math.round(input.days || 1));
-  const totalBudget = Math.max(0, Math.round(input.totalBudget || 0));
-  const tickets = Math.max(0, Math.round(input.tickets || 0));
-  const stay = Math.max(0, Math.round(input.stay || 0));
-  const foodSaving =
-    (input.fullBoardIncluded ? DAILY_FOOD_TOMAN / 2 : input.breakfastIncluded ? DAILY_BREAKFAST_TOMAN : 0) * travellers * days;
-  const food = Math.max(0, DAILY_FOOD_TOMAN * travellers * days - foodSaving);
-  const activities = DAILY_ACTIVITIES_TOMAN * travellers * days;
-  const localTransport = DAILY_LOCAL_TRANSPORT_TOMAN * travellers * days;
-  const remaining = totalBudget - tickets - stay - food - activities - localTransport;
-  const share = totalBudget > 0 ? remaining / totalBudget : 0;
-  const verdict: BudgetVerdict = remaining < 0 ? "over" : share < 0.1 ? "tight" : "fits";
-  const note =
-    verdict === "fits"
-      ? `با این انتخاب، حدود ${toman(Math.max(0, remaining))} از بودجه‌ات برای خرج‌های آزاد می‌ماند.`
-      : verdict === "tight"
-        ? `این انتخاب بودجه را تا آخر پر می‌کند؛ حدود ${toman(Math.max(0, remaining))} جای مانور می‌ماند.`
-        : `این انتخاب حدود ${toman(Math.abs(remaining))} از بودجه بیشتر است؛ گزینهٔ ارزان‌تری پیشنهاد می‌کنیم.`;
-  return { totalBudget, travellers, days, tickets, stay, food, activities, localTransport, remaining, verdict, note };
+  // One engine for the whole site: this is the same table every page prints.
+  const breakdown = tripCostBreakdown({
+    totalBudget: input.totalBudget,
+    travellers: input.travellers,
+    days: input.days,
+    nights: input.nights,
+    city: input.city,
+    tickets: input.tickets,
+    stay: input.stay,
+    breakfastIncluded: input.breakfastIncluded,
+    fullBoardIncluded: input.fullBoardIncluded,
+  });
+  return {
+    totalBudget: breakdown.totalBudget,
+    travellers: breakdown.travellers,
+    days: breakdown.days,
+    tickets: breakdown.tickets,
+    stay: breakdown.stay,
+    food: breakdown.food,
+    activities: breakdown.activities,
+    localTransport: breakdown.localTransport,
+    remaining: breakdown.remaining,
+    verdict: breakdown.verdict,
+    note: breakdown.note,
+  };
 }
 
 function toman(value: number): string {
@@ -210,11 +228,13 @@ export function roomAffordability(input: {
   const food = Math.max(0, DAILY_FOOD_TOMAN * travellers * nights - savings);
   const headroom = Math.round(input.roomBudget - input.roomTotal);
   const ratio = input.roomBudget > 0 ? input.roomTotal / input.roomBudget : 2;
+  const dailyFood = new Intl.NumberFormat("fa-IR").format(DAILY_FOOD_TOMAN);
+  const breakfast = new Intl.NumberFormat("fa-IR").format(DAILY_BREAKFAST_TOMAN);
   const foodNote = input.fullBoardIncluded
-    ? `غذای هر نفر هر روز ۸۰۰ هزار تومان حساب شد و چون غذا در قیمت اقامتگاه هست، نصفش کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
+    ? `غذای هر نفر هر روز ${dailyFood} تومان حساب شد و چون غذا در قیمت اقامتگاه هست، نصفش کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
     : input.breakfastIncluded
-      ? `صبحانه در قیمت هست، پس از ۸۰۰ هزار تومان غذای هر نفر هر روز، ۱۸۰ هزار تومان کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
-      : `غذا برای ${travellers} نفر و ${nights} شب ${toman(food)} حساب شده (۸۰۰ هزار تومان هر نفر هر روز).`;
+      ? `صبحانه در قیمت هست، پس از ${dailyFood} تومان غذای هر نفر هر روز، ${breakfast} تومان کم شد (${toman(food)} برای ${travellers} نفر و ${nights} شب).`
+      : `غذا برای ${travellers} نفر و ${nights} شب ${toman(food)} حساب شده (${dailyFood} تومان هر نفر هر روز).`;
   if (headroom >= 0 && ratio <= 0.8) {
     return {
       fits: true,

@@ -940,7 +940,12 @@ function ItineraryContent() {
                     }}
                   />
                 ) : null}
-                <TripChecklist departureDate={travelData.departureDate} />
+                <TripChecklist
+                  departureDate={travelData.departureDate}
+                  destination={travelData.destination}
+                  origin={travelData.origin}
+                  days={travelData.days}
+                />
                 <OfflineKeeper warmUrls={offlineImages} />
 
                 {data.unused.length ? (

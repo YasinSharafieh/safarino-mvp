@@ -46,6 +46,9 @@ import {
   CloudSun,
   Footprints,
   Building2,
+  Mic,
+  Square,
+  Wand2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
@@ -199,7 +202,11 @@ export default function TravelQuiz() {
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [chosen, setChosen] = useState<string>("");
   /** The second door: describe the trip in your own words instead of answering. */
-  const [mode, setMode] = useState<"quiz" | "text">("quiz");
+  const [mode, setMode] = useState<"quiz" | "text" | "voice">("quiz");
+  /** Voice input: the browser listens, we only paste the words it heard. */
+  const [listening, setListening] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
+  const recognitionRef = useRef<{ stop: () => void; abort: () => void } | null>(null);
   const [description, setDescription] = useState("");
   const [textNote, setTextNote] = useState("");
   const [described, setDescribed] = useState<{ summary: string; words: string[]; days: number | null } | null>(null);
@@ -264,8 +271,10 @@ export default function TravelQuiz() {
         };
       });
     }
-    return suggestCities(result, { limit: 4, budgetMillions, travellers: peopleCount });
-  }, [analysis, budgetMillions, peopleCount, result]);
+    // Six cities, ranked by the taste read from their own words — the quiz and
+    // the written/voice description go through the very same engine.
+    return suggestCities(result, { limit: 6, budgetMillions, travellers: peopleCount, matchedWords: described?.words || [] });
+  }, [analysis, budgetMillions, described, peopleCount, result]);
   const progress = resultVisible ? 100 : Math.min(99, ((step + 1) / (totalQuestions + 1)) * 100);
 
   const goNext = () => {
@@ -304,6 +313,58 @@ export default function TravelQuiz() {
     setAnalysis(null);
     setDirection(-1);
     setRound((value) => value + 1);
+  };
+
+  type RecognitionLike = {
+    lang: string;
+    continuous: boolean;
+    interimResults: boolean;
+    start: () => void;
+    stop: () => void;
+    abort: () => void;
+    onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
+    onerror: ((event: { error?: string }) => void) | null;
+    onend: (() => void) | null;
+  };
+
+  /** Real listening, in the browser; the words land in the same box the typing mode uses. */
+  const startVoice = () => {
+    const scope = window as unknown as { SpeechRecognition?: new () => RecognitionLike; webkitSpeechRecognition?: new () => RecognitionLike };
+    const Constructor = scope.SpeechRecognition || scope.webkitSpeechRecognition;
+    if (!Constructor) {
+      setVoiceNote("مرورگر تو ضبط صدا را پشتیبانی نمی‌کند؛ همان متن را در حالت «خودم می‌نویسم» بنویس.");
+      return;
+    }
+    try {
+      const recognition = new Constructor();
+      recognition.lang = "fa-IR";
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.onresult = (event) => {
+        let heard = "";
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          heard += ` ${event.results[index][0]?.transcript || ""}`;
+        }
+        if (heard.trim()) setDescription((current) => `${current} ${heard}`.trim().slice(0, 400));
+      };
+      recognition.onerror = (event) => {
+        setVoiceNote(event.error === "not-allowed" ? "اجازهٔ میکروفن داده نشد؛ از حالت نوشتن استفاده کن." : "صدا را نشنیدم؛ یک بار دیگر امتحان کن.");
+        setListening(false);
+      };
+      recognition.onend = () => setListening(false);
+      recognition.start();
+      recognitionRef.current = recognition;
+      setVoiceNote("");
+      setListening(true);
+    } catch {
+      setVoiceNote("شروع شنیدن ممکن نشد؛ همان متن را بنویس.");
+    }
+  };
+
+  const stopVoice = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setListening(false);
   };
 
   /** Reads the traveller's own words; never invents a preference that is not there. */
@@ -424,30 +485,77 @@ export default function TravelQuiz() {
             ) : null}
           </div>
 
-          <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-            <button
-              type="button"
-              onClick={() => setMode("quiz")}
-              aria-pressed={mode === "quiz"}
-              className={`rounded-xl px-3 py-2.5 text-[11px] font-extrabold transition ${
-                mode === "quiz" ? "bg-cyan-400/20 text-cyan-100 shadow-glow" : "text-slate-400 hover:text-white"
-              }`}
-            >
-              چند سؤال کوتاه
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("text")}
-              aria-pressed={mode === "text"}
-              className={`rounded-xl px-3 py-2.5 text-[11px] font-extrabold transition ${
-                mode === "text" ? "bg-teal-400/20 text-teal-100 shadow-warm" : "text-slate-400 hover:text-white"
-              }`}
-            >
-              خودم می‌نویسم
-            </button>
+          {/* سه راه ورود: سؤال کوتاه، نوشتن با کلمات خودت، یا گفتن با صدا. */}
+          <div className="mb-3 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5 sm:grid-cols-3">
+            {[
+              {
+                id: "quiz" as const,
+                title: "چند سؤال کوتاه",
+                subtitle: "۱۲ سؤال تازه، هر بار متفاوت",
+                icon: <Sparkles className="h-3.5 w-3.5" />,
+                active: "bg-cyan-400/20 text-cyan-100 shadow-glow",
+              },
+              {
+                id: "text" as const,
+                title: "خودم می‌نویسم",
+                subtitle: "حال‌وهوای سفر را با کلمات خودت بنویس",
+                icon: <Wand2 className="h-3.5 w-3.5" />,
+                active: "bg-teal-400/20 text-teal-100 shadow-warm",
+              },
+              {
+                id: "voice" as const,
+                title: "با صدا می‌گویم",
+                subtitle: "دستیار صوتی می‌شنود و همان متن را می‌سازد",
+                icon: <Mic className="h-3.5 w-3.5" />,
+                active: "bg-violet-400/20 text-violet-100 shadow-glow",
+              },
+            ].map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => setMode(entry.id)}
+                aria-pressed={mode === entry.id}
+                className={`rounded-xl px-3 py-2.5 text-right transition ${mode === entry.id ? entry.active : "text-slate-400 hover:text-white"}`}
+              >
+                <span className="flex items-center gap-1.5 text-[11px] font-extrabold">
+                  {entry.icon}
+                  {entry.title}
+                </span>
+                <span className="mt-0.5 block text-[9px] font-medium leading-5 opacity-80">{entry.subtitle}</span>
+              </button>
+            ))}
           </div>
 
-          {mode === "text" && !described ? (
+          {mode === "voice" && !described ? (
+            <div className="glass mb-3 p-4 sm:p-6">
+              <h2 className="text-sm font-black text-white">با صدایت بگو چه سفری می‌خواهی</h2>
+              <p className="mt-1.5 text-[10.5px] leading-6 text-slate-400">
+                مثلاً: «چهار روز کنار دریا، با همسرم، حدود بیست میلیون». مرورگر خودت گوش می‌دهد؛ هیچ صدایی جایی فرستاده نمی‌شود.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => (listening ? stopVoice() : startVoice())}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black transition ${
+                    listening ? "bg-rose-500 text-white" : "bg-violet-500 text-white hover:bg-violet-400"
+                  }`}
+                >
+                  {listening ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                  {listening ? "بس است، تمام" : "شروع شنیدن"}
+                </button>
+                {description ? (
+                  <button type="button" onClick={applyDescription} className="btn-primary !px-4 !py-2.5 text-[11px]">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    پیشنهاد مقصد را ببین
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-3 min-h-[3rem] rounded-xl border border-white/10 bg-slate-950/50 p-3 text-[11.5px] leading-7 text-white">
+                {description || (listening ? "گوش می‌دهم…" : "چیزی که می‌گویی همین‌جا نوشته می‌شود.")}
+              </p>
+              {voiceNote ? <p className="mt-2 text-[10px] leading-6 text-amber-200">{voiceNote}</p> : null}
+            </div>
+          ) : mode === "text" && !described ? (
             <div className="glass mb-3 p-4 sm:p-6">
               <h2 className="text-sm font-black text-white">حال‌وهوای سفرت را بنویس</h2>
               <p className="mt-1.5 text-[10.5px] leading-6 text-slate-400">
@@ -500,10 +608,12 @@ export default function TravelQuiz() {
             </div>
 
             <AnimatePresence mode="wait" custom={direction}>
-              {mode === "text" && !described ? (
+              {(mode === "text" || mode === "voice") && !described ? (
                 <motion.div key="text-mode" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
                   <p className="text-[11px] leading-7 text-slate-400">
-                    متن بالا را بنویس و «پیشنهاد مقصد را ببین» را بزن؛ یا از دکمهٔ «چند سؤال کوتاه» استفاده کن.
+                    {mode === "voice"
+                      ? "دکمهٔ «شروع شنیدن» را بزن و سفرت را بگو؛ بعد «پیشنهاد مقصد را ببین»."
+                      : "متن بالا را بنویس و «پیشنهاد مقصد را ببین» را بزن؛ یا از دکمهٔ «چند سؤال کوتاه» استفاده کن."}
                   </p>
                 </motion.div>
               ) : !ready || !question ? (

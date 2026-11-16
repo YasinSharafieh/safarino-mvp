@@ -141,7 +141,7 @@ ${cityList}
 /** The local engine, used when the model is unavailable or the budget is out. */
 export function localAnalysis(questions: QuizQuestion[], answers: QuizAnswers, context: { budgetMillions: number | null; travellers: number; origin: string }): AiAnalysis {
   const result = scoreAnswers(questions, answers);
-  const suggestions = suggestCities(result, { limit: 4, exclude: [context.origin], budgetMillions: context.budgetMillions, travellers: context.travellers });
+  const suggestions = suggestCities(result, { limit: 6, exclude: [context.origin], budgetMillions: context.budgetMillions, travellers: context.travellers, matchedWords: (context as { matchedWords?: string[] }).matchedWords || [] });
   return {
     headline: result.headline,
     summary: result.summary,

@@ -53,12 +53,16 @@ export default function AccommodationCard({
   const isSelected = selectedId === offer.id;
   const isRecommended = Boolean(recommendedId) && group.offers.some((item) => item.id === recommendedId);
   const meals = mealsIncluded(offer);
+  // The offers arrive already priced for this party by the search layer, so
+  // the card only prints the arithmetic instead of multiplying twice.
   const price = stayPrice({
     priceTotalToman: offer.priceTotalToman,
     pricePerNightToman: offer.pricePerNightToman,
     people,
+    guests: people,
     nights,
     kind: offer.kind,
+    basis: offer.kind === "stay" ? "unit" : "final",
   });
 
   return (
@@ -98,13 +102,13 @@ export default function AccommodationCard({
             {offer.priceBeforeDiscountToman && <span className="block text-[10px] text-slate-500 line-through">{formatToman(offer.priceBeforeDiscountToman)}</span>}
             <b className="text-lg font-black text-cyan-200">{formatToman(price.total)}</b>
             <span className="mt-1 block text-[10px] text-slate-500">
-              {price.perUnit ? `قیمت کل ${formatNumber(price.nights)} شب برای کل اقامتگاه` : `قیمت کل ${formatNumber(price.people)} نفر برای ${formatNumber(price.nights)} شب`}
+              {price.perUnit
+                ? `قیمت کل ${formatNumber(price.nights)} شب برای کل اقامتگاه`
+                : `${price.roomLabel} · قیمت کل ${formatNumber(price.nights)} شب برای ${formatNumber(price.people)} نفر`}
               {offer.priceIncludesVat === true ? " · با مالیات" : offer.priceIncludesVat === false ? " · پیش از مالیات نهایی" : ""}
             </span>
             <span className="mt-1 block rounded-lg border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1 text-[9.5px] leading-5 text-cyan-100/90">
-              {price.perUnit
-                ? price.formula
-                : `هر نفر هر شب ${formatToman(price.perPersonPerNight)} × ${formatNumber(price.people)} نفر × ${formatNumber(price.nights)} شب = ${formatToman(price.perPersonPerNight * price.people * price.nights)}`}
+              {price.formula}
             </span>
             {!price.consistent && (
               <span className="mt-1 block text-[9px] leading-5 text-amber-300/90">

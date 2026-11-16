@@ -458,7 +458,14 @@ export type CitySuggestion = {
  */
 export function suggestCities(
   result: QuizResult,
-  options: { limit?: number; exclude?: string[]; budgetMillions?: number | null; travellers?: number } = {},
+  options: {
+    limit?: number;
+    exclude?: string[];
+    budgetMillions?: number | null;
+    travellers?: number;
+    /** The words from the traveller's own sentence that decided the taste. */
+    matchedWords?: string[];
+  } = {},
 ): CitySuggestion[] {
   const exclude = new Set(options.exclude || []);
   const topMoods = result.moods.slice(0, 3);
@@ -476,11 +483,17 @@ export function suggestCities(
 
   return scored
     .filter((entry) => entry.score > 0)
-    .slice(0, Math.max(1, Math.min(6, options.limit ?? 4)))
+    .slice(0, Math.max(1, Math.min(8, options.limit ?? 6)))
     .map(({ city, score }) => {
       const matched = city.moods.filter((mood) => topMoods.some((entry) => entry.mood === mood));
+      // Name the traveller's own words when we have them: it is the difference
+      // between «این شهر به سلیقه‌ات می‌خورد» and «چون نوشتی دریا و کافه».
+      const words = (options.matchedWords || []).slice(0, 3);
+      const quote = words.length ? ` از نوشته‌ات «${words.join("، ")}» را خواندم` : "";
       const reason = matched.length
-        ? `${matched.map((mood) => MOOD_WORDS[mood]).join(" و ")} — همان چیزی که انتخاب کردی.`
+        ? `${matched.map((mood) => MOOD_WORDS[mood]).join(" و ")} — همان چیزی که انتخاب کردی${quote ? `؛${quote}` : ""}. ${
+            city.highlights?.[0] ? `مثلاً ${city.highlights[0]}.` : ""
+          }`.replace(/\s+/g, " ").trim()
         : city.tagline;
       return {
         name: city.name,
@@ -569,14 +582,48 @@ export function budgetFromDaily(dailyToman: number | null, days: number | null, 
 /* ------------------------------------------------------- free-text path */
 
 /** Words a traveller actually uses, each mapped to one of the seven tastes. */
-const MOOD_WORDS_IN_TEXT: { mood: DiscoverMood; words: string[] }[] = [
-  { mood: "تاریخی", words: ["تاریخ", "تاریخی", "قدیم", "بنای", "مسجد", "کاروانسرا", "بازار قدیم", "میراث", "معماری", "موزه"] },
-  { mood: "زیارتی", words: ["زیارت", "امام", "حرم", "مذهبی", "ارامش", "آرامش", "دعا"] },
-  { mood: "طبیعت", words: ["طبیعت", "جنگل", "آبشار", "سبز", "پیاده‌روی", "پیاده روی", "روستا", "چشمه", "گردش"] },
-  { mood: "ساحلی", words: ["دریا", "ساحل", "شنا", "جزیره", "ماهی", "قایق", "آفتاب"] },
-  { mood: "شهری", words: ["شهر", "کافه", "خرید", "پاساژ", "غذا", "شب‌گرد", "شبگرد", "رستوران", "بازار"] },
-  { mood: "کوهستانی", words: ["کوه", "سرما", "برف", "ارتفاع", "پیست", "اسکی", "ییلاق", "دماوند"] },
-  { mood: "کویری", words: ["کویر", "شب", "ستاره", "آسمان", "شن", "شتر", "خورشید", "گرم"] },
+/**
+ * The taste lexicon. A word that names the taste on its own («کویر», «زیارت»)
+ * counts double; a word that merely leans that way («آرام», «خوب») counts once.
+ * The list is deliberately long, because a traveller writes like a person, not
+ * like a form: «دلم می‌خواد فقط راه برم و چای بخورم» should not come back empty.
+ */
+const MOOD_WORDS_IN_TEXT: { mood: DiscoverMood; words: string[]; strong?: string[] }[] = [
+  {
+    mood: "تاریخی",
+    words: ["تاریخ", "تاریخی", "قدیم", "قدیمی", "بنای", "بناها", "مسجد", "کاروانسرا", "بازار قدیم", "میراث", "معماری", "موزه", "کتیبه", "باستانی", "صفوی", "قاجار", "قلعه", "ارگ", "کاخ", "تخت جمشید", "نقش جهان"],
+    strong: ["تاریخ", "باستانی", "صفوی", "قلعه", "موزه", "معماری"],
+  },
+  {
+    mood: "زیارتی",
+    words: ["زیارت", "امام", "حرم", "مذهبی", "ارامش", "آرامش", "دعا", "مقبره", "زیارتنامه", "امامزاده"],
+    strong: ["زیارت", "حرم", "مذهبی"],
+  },
+  {
+    mood: "طبیعت",
+    words: ["طبیعت", "جنگل", "آبشار", "ابشار", "سبز", "پیاده‌روی", "پیاده روی", "روستا", "چشمه", "گردش", "درخت", "مرتع", "دشت", "پرنده", "گل", "باران", "مه", "چای", "کوهپایه", "تله‌کابین", "تله کابین"],
+    strong: ["طبیعت", "جنگل", "آبشار", "روستا", "چشمه"],
+  },
+  {
+    mood: "ساحلی",
+    words: ["دریا", "ساحل", "شنا", "جزیره", "ماهی", "قایق", "آفتاب", "خوراک ماهی", "بندر", "اسکله", "موج", "خلیج", "اقیانوس", "غواصی", "جت اسکی"],
+    strong: ["دریا", "ساحل", "جزیره", "بندر"],
+  },
+  {
+    mood: "شهری",
+    words: ["شهر", "کافه", "خرید", "پاساژ", "غذا", "شب‌گرد", "شبگرد", "رستوران", "بازار", "فست‌فود", "پیتزا", "قهوه", "زندگی شبانه", "مترو", "سینما", "گالری", "خرید لباس"],
+    strong: ["کافه", "خرید", "شبگرد", "رستوران", "زندگی شبانه"],
+  },
+  {
+    mood: "کوهستانی",
+    words: ["کوه", "کوهستان", "سرما", "سرد", "برف", "ارتفاع", "پیست", "اسکی", "ییلاق", "دماوند", "سبلان", "قله", "کوهنوردی", "چادر", "هوای خنک"],
+    strong: ["کوه", "برف", "اسکی", "قله", "کوهنوردی"],
+  },
+  {
+    mood: "کویری",
+    words: ["کویر", "شب", "ستاره", "آسمان", "شن", "شتر", "خورشید", "گرم", "شب‌های کویر", "نجوم", "رصد", "کاروان", "آسمان شب", "سکوت", "دور از شلوغی"],
+    strong: ["کویر", "ستاره", "شتر", "رصد", "شب‌های کویر"],
+  },
 ];
 
 /** Numbers a traveller writes for «چند روز» and «چند میلیون». */
@@ -612,12 +659,19 @@ export function describeTrip(text: string): DescribeResult | null {
 
   const scores = new Map<DiscoverMood, number>();
   const matchedWords: string[] = [];
+  const matchedByMood = new Map<DiscoverMood, string[]>();
   for (const entry of MOOD_WORDS_IN_TEXT) {
+    const strong = new Set(entry.strong || []);
     for (const word of entry.words) {
-      if (folded.includes(word.replace(/\u200c/g, " "))) {
-        scores.set(entry.mood, (scores.get(entry.mood) || 0) + 1);
-        if (!matchedWords.includes(word)) matchedWords.push(word);
-      }
+      if (!folded.includes(word.replace(/\u200c/g, " "))) continue;
+      // A word that names the taste outweighs one that merely leans that way.
+      scores.set(entry.mood, (scores.get(entry.mood) || 0) + (strong.has(word) ? 2 : 1));
+      // «پیاده‌روی» and «پیاده روی» are the same word to a reader.
+      const plain = (value: string) => value.replace(/\u200c/g, " ").replace(/\s+/g, " ").trim();
+      if (!matchedWords.some((existing) => plain(existing) === plain(word))) matchedWords.push(word);
+      const list = matchedByMood.get(entry.mood) || [];
+      if (!list.includes(word)) list.push(word);
+      matchedByMood.set(entry.mood, list);
     }
   }
   if (!scores.size) return null;
@@ -636,7 +690,7 @@ export function describeTrip(text: string): DescribeResult | null {
     result: {
       moods: ranked,
       headline,
-      summary: `از نوشته‌ات این‌ها را خواندم: ${matchedWords.slice(0, 6).join("، ")}. سلیقه‌ات بیشتر به ${top.join(" و ")} می‌خورد؛ شهرهای پیشنهادی بر همین اساس مرتب شده‌اند${
+      summary: `از نوشته‌ات این‌ها را خواندم: ${matchedWords.slice(0, 8).join("، ")}. سلیقه‌ات بیشتر به ${top.join(" و ")} می‌خورد؛ شهرهای پیشنهادی بر همین اساس مرتب شده‌اند${
         millions ? ` و بودجهٔ حدود ${new Intl.NumberFormat("fa-IR").format(millions)} میلیون تومان در نظر گرفته می‌شود` : ""
       }.`,
       dailyToman,

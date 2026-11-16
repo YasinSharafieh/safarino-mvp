@@ -40,6 +40,34 @@ export type ChecklistState = {
 };
 
 export const CHECKLIST_STORAGE_KEY = "safarino-checklist-v1";
+
+/**
+ * Every trip has its own list. The key carries the trip's own signature
+ * (origin → destination, the date and the length), so ticks from last summer's
+ * trip never appear on this one — and each trip's notes are kept for when the
+ * traveller comes back to it.
+ */
+export type TripSignatureInput = {
+  origin?: string | null;
+  destination?: string | null;
+  departureDate?: string | null;
+  days?: number | null;
+  travellers?: number | null;
+};
+
+export function tripSignature(trip: TripSignatureInput): string {
+  const part = (value: string | null | undefined) =>
+    String(value || "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 24);
+  return [part(trip.origin), part(trip.destination), part(trip.departureDate), String(Math.max(0, Math.round(Number(trip.days) || 0)))].join("_") || "no-trip";
+}
+
+export function checklistKeyFor(trip?: TripSignatureInput | string): string {
+  const signature = typeof trip === "string" ? trip : trip ? tripSignature(trip) : "no-trip";
+  return `${CHECKLIST_STORAGE_KEY}:${signature}`;
+}
 export const CHECKLIST_EVENT = "safarino-checklist-changed";
 export const MAX_CUSTOM_ITEMS = 40;
 
@@ -60,8 +88,8 @@ export const DEFAULT_CHECKLIST: ChecklistItem[] = [
   { id: "sunscreen", title: "کرم ضدآفتاب و کلاه", group: "packing", daysBefore: 1 },
   { id: "umbrella", title: "چتر یا بارانی", group: "packing", daysBefore: 1, note: "اگر احتمال باران در پیش‌بینی هست." },
   { id: "snacks", title: "تنقلات و آب برای راه", group: "packing", daysBefore: 0 },
-  { id: "home-power", title: "بستن شیر گاز و آب برق", group: "before-leaving", daysBefore: 0 },
-  { id: "home-plants", title: "سپردن کلید و رسیدگی به خانه/گیاهان", group: "before-leaving", daysBefore: 1 },
+  { id: "home-power", title: "بستن شیر گاز، آب و برق", group: "before-leaving", daysBefore: 0 },
+  { id: "home-plants", title: "سپردن کلید و رسیدگی به خانه و گیاهان", group: "before-leaving", daysBefore: 1 },
   { id: "home-trash", title: "خالی کردن یخچال از چیزهای فاسدشدنی", group: "before-leaving", daysBefore: 0 },
   { id: "phone-charge", title: "شارژ کامل گوشی قبل از حرکت", group: "before-leaving", daysBefore: 0 },
 ];
@@ -108,11 +136,11 @@ export function sanitizeState(input: unknown): ChecklistState {
 
 type StorageLike = { getItem(key: string): string | null; setItem(key: string, value: string): void } | null | undefined;
 
-export function readChecklist(storage?: StorageLike): ChecklistState {
+export function readChecklist(storage?: StorageLike, trip?: TripSignatureInput | string): ChecklistState {
   const store = storage === undefined && typeof window !== "undefined" ? window.localStorage : storage;
   if (!store) return { done: [], custom: [] };
   try {
-    const raw = store.getItem(CHECKLIST_STORAGE_KEY);
+    const raw = store.getItem(checklistKeyFor(trip));
     if (!raw) return { done: [], custom: [] };
     return sanitizeState(JSON.parse(raw));
   } catch {
@@ -121,12 +149,12 @@ export function readChecklist(storage?: StorageLike): ChecklistState {
 }
 
 /** Saves quietly: a blocked storage must never break the page. */
-export function saveChecklist(state: ChecklistState, storage?: StorageLike): boolean {
+export function saveChecklist(state: ChecklistState, storage?: StorageLike, trip?: TripSignatureInput | string): boolean {
   const store = storage === undefined && typeof window !== "undefined" ? window.localStorage : storage;
   if (!store) return false;
   try {
     const clean = sanitizeState(state);
-    store.setItem(CHECKLIST_STORAGE_KEY, JSON.stringify({ ...clean, updatedAt: new Date().toISOString() }));
+    store.setItem(checklistKeyFor(trip), JSON.stringify({ ...clean, updatedAt: new Date().toISOString() }));
     return true;
   } catch {
     return false;

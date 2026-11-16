@@ -7,7 +7,8 @@ import { useTravel } from "@/app/context/TravelContext";
 import { chosenTransport } from "@/lib/transport-selection";
 import { COMPANION_EVENT, companionGauge, companionTips, type CompanionContext, type CompanionTip } from "@/lib/companion";
 import { ASK_EXAMPLES, type AskFacts } from "@/lib/companion-ask";
-import { estimateBudget } from "@/lib/budget-fit";
+import { CITY_PROFILES } from "@/lib/city-profiles";
+import { tripCostBreakdown } from "@/lib/trip-costs";
 
 /**
  * «همسفر سفرینو» — the floating orb.
@@ -157,13 +158,16 @@ export default function TripCompanion() {
   const askFacts = useMemo<AskFacts>(() => {
     const budgetToman = Math.max(0, Math.round((Number(travelData.budget) || 0) * 1_000_000));
     const days = Math.max(1, Number(travelData.days) || 1);
-    const estimate = estimateBudget({
+    const estimate = tripCostBreakdown({
       totalBudget: budgetToman,
       travellers: people,
       days,
+      nights: Math.max(1, days - 1),
+      city: travelData.destination || "",
       tickets: transport?.cost || 0,
       stay: stayCost,
     });
+    const cityProfile = CITY_PROFILES.find((profile) => profile.name === travelData.destination) || null;
     return {
       origin: travelData.origin || "—",
       destination: travelData.destination || "—",
@@ -179,6 +183,15 @@ export default function TripCompanion() {
       remainingToman: estimate.remaining,
       departureDate: travelData.departureDate || null,
       placeNames: [],
+      destinationProfile: cityProfile
+        ? {
+            tagline: cityProfile.tagline,
+            highlights: cityProfile.highlights,
+            bestFor: cityProfile.bestFor,
+            bestSeason: cityProfile.bestSeason,
+            province: cityProfile.province,
+          }
+        : null,
       weather: (weather || []).map((day) => ({
         label: ["آسمان صاف", "کمی ابری", "ابری", "باران", "برف", "رعد و برق"][day.code >= 95 ? 5 : day.code >= 71 ? 4 : day.code >= 51 ? 3 : day.code >= 3 ? 2 : day.code >= 1 ? 1 : 0],
         minC: day.minC,
@@ -277,6 +290,15 @@ export default function TripCompanion() {
             </div>
 
             <div className="max-h-[58vh] space-y-2 overflow-y-auto p-3">
+              {/* The greeting: who this is, and what it can help with. */}
+              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-2.5">
+                <p className="text-[10.5px] leading-6 text-cyan-50">
+                  من دستیار سفرینو هستم؛ چطور کمکتون کنم؟
+                </p>
+                <p className="mt-1 text-[9.5px] leading-5 text-slate-300">
+                  هم حساب‌وکتاب همین سفر را دارم و هم می‌توانم از خودِ {travelData.destination || "مقصد"} بگویم: غذا، آداب، دیدنی‌ها و بهترین فصل سفر.
+                </p>
+              </div>
               {/* «از همسفر بپرس» — a real question, answered from the trip's own numbers. */}
               <form
                 className="rounded-2xl border border-violet-400/25 bg-violet-400/[0.07] p-2.5"
@@ -293,7 +315,7 @@ export default function TripCompanion() {
                   <input
                     value={question}
                     onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="مثلاً: با این بودجه بیشتر کجا رو ببینم؟"
+                    placeholder="مثلاً: در اصفهان چه غذایی را از دست ندهم؟"
                     aria-label="سؤال از همسفر سفرینو"
                     disabled={asksLeft <= 0}
                     className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1.5 text-[10px] text-white outline-none placeholder:text-slate-600 focus:border-violet-400/50 disabled:opacity-50"
@@ -330,7 +352,7 @@ export default function TripCompanion() {
                   <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/50 p-2">
                     <p className="text-[10px] leading-6 text-slate-200">{answer.text}</p>
                     <p className="mt-1 text-[8px] text-slate-500">
-                      {answer.source === "ai" ? "با هوش مصنوعی، فقط بر پایهٔ اعداد سفر تو" : "از حساب‌های خود سفر تو"}
+                      {answer.source === "ai" ? "با هوش مصنوعی؛ از اعداد همین سفر و دانش عمومی مقصد" : "از حساب‌ها و اطلاعات واقعی همین سفر"}
                       {answer.note ? ` · ${answer.note}` : ""}
                     </p>
                   </div>
