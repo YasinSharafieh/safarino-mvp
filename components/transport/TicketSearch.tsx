@@ -110,6 +110,19 @@ const SORTS: { id: SortKey; label: string }[] = [
   { id: "seats", label: "بیشترین صندلی" },
 ];
 
+/** «۷ ساعت و ۲۰ دقیقه» — measured from the two times the provider gave. */
+function journeyLength(departure: string, arrival: string | null): string {
+  if (!departure || !arrival) return "";
+  const from = Date.parse(departure);
+  const to = Date.parse(arrival);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return "";
+  const minutes = Math.round((to - from) / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${fa.format(rest)} دقیقه`;
+  return rest ? `${fa.format(hours)} ساعت و ${fa.format(rest)} دقیقه` : `${fa.format(hours)} ساعت`;
+}
+
 const normalise = (value: string) =>
   value.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ");
 
@@ -169,9 +182,20 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       const data = (await response.json()) as SearchResponse;
       if (!response.ok || !data.success) throw new Error(data.error || "جست‌وجو انجام نشد");
       const label = (offer: LiveOffer): LiveOffer => {
-        const operator = (offer.title || "").trim() || (mode === "plane" ? "پرواز" : mode === "train" ? "قطار" : "اتوبوس");
-        const service = (offer.subtitle || "").trim();
-        return { ...offer, title: service && !service.includes(operator) ? `${operator} · ${service}` : operator };
+        const raw = offer as LiveOffer & { operator?: string; serviceLabel?: string };
+        const operator =
+          (offer.title || "").trim() ||
+          (raw.operator || "").trim() ||
+          (mode === "plane" ? "پرواز" : mode === "train" ? "قطار" : "اتوبوس");
+        const service = (offer.subtitle || raw.serviceLabel || "").trim();
+        // The company stays the headline; the service (train number, cabin,
+        // bus class) is kept as its own line so nothing is invented.
+        return {
+          ...offer,
+          title: operator,
+          subtitle: service && service !== operator ? service : "",
+          logoUrl: offer.logoUrl || null,
+        };
       };
       const outbound = (data.offers || []).map(label);
       const returning = (data.returningOffers || []).map(label);
@@ -626,6 +650,9 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                   <span className="block text-[9px] text-slate-500">حرکت</span>
                   <b className="block text-[11.5px] leading-6 text-white">{formatProviderDateTime(offer.departure)}</b>
                   {offer.arrival ? <span className="block text-[9px] text-slate-500">رسیدن: {formatProviderDateTime(offer.arrival)}</span> : null}
+                  {journeyLength(offer.departure, offer.arrival) ? (
+                    <span className="mt-0.5 block text-[9px] font-bold text-cyan-300/80">مدت سفر: {journeyLength(offer.departure, offer.arrival)}</span>
+                  ) : null}
                 </div>
                 <div className="text-left">
                   <b className="block text-[13px] font-black text-turquoise-200">{money(offer.priceToman)}</b>

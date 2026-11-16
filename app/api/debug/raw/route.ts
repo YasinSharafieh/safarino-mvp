@@ -21,14 +21,16 @@ export async function GET(request: NextRequest) {
       out.count = rows.length;
       out.first = rows[0];
       out.second = rows[1];
+    } else if (mode === "bus724") {
+      const { searchSafar724Buses } = await import("@/lib/safar724-bus");
+      const result = await searchSafar724Buses("تهران", "مشهد", date);
+      out.offers = result.offers.slice(0, 2);
+      out.status = result.status;
     } else if (mode === "bus") {
-      const started = (await alibabaRequest("v2/bus/available", {
-        body: { departureDate: date, origin: "THR", destination: "MHD", passengerCount: 2, ticketType: "Family" },
-      })) as Record<string, unknown>;
-      out.startKeys = Object.keys(started || {});
-      const result = (await alibabaRequest(`v2/bus/available/${started?.requestId}`)) as Record<string, unknown>;
+      const query = new URLSearchParams({ orginCityCode: "THR", destinationCityCode: "MHD", requestDate: date, passengerCount: "2", serviceType: "Bus" });
+      const result = (await alibabaRequest(`v2/bus/available?${query.toString()}`)) as Record<string, unknown>;
       out.resultKeys = Object.keys(result || {});
-      const rows = Array.isArray(result?.departing) ? result.departing : [];
+      const rows = Array.isArray(result?.availableList) ? result.availableList : [];
       out.count = rows.length;
       out.first = rows[0];
     } else {

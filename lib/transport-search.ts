@@ -88,6 +88,7 @@ function fromAlibabaFlights(rows: unknown): TransportOffer[] {
       provider: "alibaba",
       mode: "plane",
       operator: airline,
+      logoUrl: row.logoUrl ? String(row.logoUrl) : null,
       serviceLabel: flightNumber,
       departure,
       arrival: row.arrival ? String(row.arrival) : null,
@@ -119,6 +120,7 @@ function fromAlibabaGround(rows: unknown, mode: "train" | "bus", bookingUrl: str
       provider: "alibaba",
       mode,
       operator: String(row.title || (mode === "train" ? "قطار" : "اتوبوس")),
+      logoUrl: row.logoUrl ? String(row.logoUrl) : null,
       serviceLabel: String(row.subtitle || ""),
       departure,
       arrival: row.arrival ? String(row.arrival) : null,
@@ -226,11 +228,26 @@ async function crawlTransport(input: TransportSearchInput): Promise<TransportSea
     destination,
     date,
     ...(returnDate ? { returnDate } : {}),
-    offers: merged.offers,
-    returningOffers: mergedReturning.offers,
+    offers: merged.offers.map(readableOffer),
+    returningOffers: mergedReturning.offers.map(readableOffer),
     duplicateCount: merged.removed,
     providerStatuses: statuses.sort((a, b) => a.provider.localeCompare(b.provider)),
     fetchedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * One shape for everybody: every consumer (the ticket list, the plan, the
+ * printed book) gets `title`, `subtitle` and `logoUrl` next to the internal
+ * names, so no page can end up showing a bare «قطار» instead of the company.
+ */
+function readableOffer(offer: TransportOffer): TransportOffer & { title: string; subtitle: string; logoUrl: string | null } {
+  return {
+    ...offer,
+    operator: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
+    title: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
+    subtitle: offer.serviceLabel || "",
+    logoUrl: offer.logoUrl || null,
   };
 }
 

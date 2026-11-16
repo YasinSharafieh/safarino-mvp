@@ -10,6 +10,8 @@ export type TransportOffer = {
   mode: TransportMode;
   /** Company / airline / operator name. */
   operator: string;
+  /** The company's own logo (provider CDN), so the card can show who is flying/driving. */
+  logoUrl?: string | null;
   /** Service number or class shown next to the operator. */
   serviceLabel: string;
   departure: string;
