@@ -171,3 +171,41 @@ export function synchronizeBudget(input: BudgetInput): {
   const remaining = totalBudget - transport - accommodation - food - activities - localTransport;
   return { totalBudget, transport, accommodation, food, activities, localTransport, remaining };
 }
+
+/**
+ * The one sentence about money on the plan page.
+ *
+ * It is built here, from the same five numbers the table prints, so a model can
+ * never write «۷۵ میلیون برای غذا باقی می‌ماند» when the site itself says
+ * otherwise. If the model's own sentence contains any number, it is dropped.
+ */
+export function budgetSentence(analysis: {
+  totalBudget: number;
+  transport: number;
+  accommodation: number;
+  food: number;
+  activities: number;
+  localTransport: number;
+  remaining: number;
+  travellers?: number;
+  days?: number;
+}): string {
+  const fa = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
+  const rows =
+    analysis.transport + analysis.accommodation + analysis.food + analysis.activities + analysis.localTransport;
+  const head = `از بودجهٔ ${fa(analysis.totalBudget)} تومان، بلیت ${fa(analysis.transport)}، اقامت ${fa(
+    analysis.accommodation,
+  )}، غذا ${fa(analysis.food)}، گشت‌وگذار ${fa(analysis.activities)} و رفت‌وآمد شهری ${fa(
+    analysis.localTransport,
+  )} تومان است؛ جمع این پنج ردیف ${fa(rows)} تومان می‌شود`;
+  return analysis.remaining >= 0
+    ? `${head} و ${fa(analysis.remaining)} تومان برای خرج آزاد می‌ماند.`
+    : `${head}؛ یعنی ${fa(Math.abs(analysis.remaining))} تومان از بودجه بیشتر شده و باید یک انتخاب ارزان‌تر بکنی.`;
+}
+
+/** A model sentence is only kept when it contains no numbers at all. */
+export function withoutNumbers(sentence: string | undefined, fallback = ""): string {
+  const text = (sentence || "").trim();
+  if (!text || /[0-9\u06F0-\u06F9\u0660-\u0669]/.test(text)) return fallback;
+  return text.slice(0, 240);
+}

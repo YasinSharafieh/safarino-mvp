@@ -10,6 +10,8 @@ import {
   assembleItinerary,
   sanitizePois,
   synchronizeBudget,
+  budgetSentence,
+  withoutNumbers,
   type PlanDay,
   type PlanPoi,
 } from "../../../lib/plan-itinerary";
@@ -203,7 +205,12 @@ function normalizePlan(raw: unknown, input: TravelInput) {
     plan: {
       budgetAnalysis: {
         ...budgetAnalysis,
-        summary: cleanText(budget.summary, "هزینه‌ها متناسب با بودجه و انتخاب‌های واقعی شما برنامه‌ریزی شده است.", 600),
+        // The money sentence is computed from our own five rows; the model's
+        // version is kept only when it contains no number that could be wrong.
+        summary: `${budgetSentence(budgetAnalysis)} ${withoutNumbers(
+          cleanText(budget.summary, "", 600),
+          "این نسخه از انتخاب‌های واقعی خودت ساخته شده است.",
+        )}`.trim(),
       },
       days: itinerary.days,
       recommendations: {

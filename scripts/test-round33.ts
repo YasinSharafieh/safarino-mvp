@@ -189,3 +189,12 @@ check("the next trip starts clean", readChecklist(memory, tripB).done.length ===
 
 console.log(failures ? `\n❌ ${failures} بررسی شکست خورد` : "\n✅ round 33: budget, rooms, timings, text and per-trip lists all pass");
 process.exit(failures ? 1 : 0);
+
+console.log("۵ — جملهٔ پول روی صفحهٔ برنامه از خودمان است، نه از مدل");
+import { budgetSentence, withoutNumbers, synchronizeBudget } from "../lib/plan-itinerary";
+const sync = synchronizeBudget({ totalBudget: 80_000_000, transportCost: 1_953_000, accommodationCost: 3_036_000, aiFood: 0, aiActivities: 0, travellers: 2, days: 3, city: "کیش" });
+const sentence = budgetSentence(sync);
+check("the sentence adds all five rows", sentence.includes("۱۲۰٬۰۰۰") || sentence.includes("۱٬۲۰۰٬۰۰۰"));
+check("the sentence states the leftover", sentence.includes(new Intl.NumberFormat("fa-IR").format(Math.abs(sync.remaining))));
+check("a model sentence with numbers is thrown away", withoutNumbers("حدود ۷۵ میلیون برای غذا باقی می‌ماند", "خودمان") === "خودمان");
+check("a model sentence without numbers is kept", withoutNumbers("چیدمان نزدیک به اقامتگاه است", "خودمان").includes("اقامتگاه"));
