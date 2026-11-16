@@ -33,6 +33,9 @@ import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
 import { formatJalaliDate } from "@/lib/jalali";
 import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import { DAILY_FOOD_TOMAN } from "@/lib/budget-fit";
+import BudgetGauge from "@/components/BudgetGauge";
+import { budgetGauge } from "@/lib/budget-gauge";
+import { pingCompanion } from "@/components/TripCompanion";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 
@@ -325,6 +328,38 @@ function TransportPageContent() {
   /** The same food money every other step sets aside. */
   const foodForTrip = DAILY_FOOD_TOMAN * passengers * days;
   const forStay = budgetDifference - foodForTrip;
+
+  /**
+   * The dial at the top of the choice: the same arithmetic as the lines around
+   * it, plus — when the page really knows one — the cheapest alternative that
+   * already came back from the ticket sources.
+   */
+  const gaugeAlternative = useMemo(() => {
+    if (!activeSelection) return null;
+    const others = (Object.entries(cheapest) as [TicketMode, number | null | undefined][])
+      .filter(([ticketMode, price]) => ticketMode !== activeSelection.vehicleId && typeof price === "number" && price > 0 && price < activeSelection.cost)
+      .map(([ticketMode, price]) => ({ mode: ticketMode as string, priceToman: price as number }))
+      .sort((a, b) => a.priceToman - b.priceToman);
+    return others[0] || null;
+  }, [activeSelection, cheapest]);
+
+  const gauge = useMemo(
+    () =>
+      budgetGauge({
+        totalMillions: travelData.budget,
+        transportToman: activeSelection?.cost || 0,
+        travellers: passengers,
+        days,
+        cheaperAlternative: gaugeAlternative,
+      }),
+    [activeSelection, days, gaugeAlternative, passengers, travelData.budget],
+  );
+
+  // A red dial is exactly the moment the orb should speak up.
+  useEffect(() => {
+    if (!activeSelection || gauge.zone !== "over") return;
+    pingCompanion("budget-over");
+  }, [activeSelection, gauge.zone]);
 
   /* ------------------------------------------- keep the choice in the context */
   useEffect(() => {
@@ -664,6 +699,9 @@ function TransportPageContent() {
                     </span>
                   ) : null}
                 </div>
+              </div>
+              <div className="w-full lg:max-w-[420px]">
+                <BudgetGauge gauge={gauge} compact />
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <a href="/accommodation" className="btn-primary !px-4 !py-2.5 text-[11px]">

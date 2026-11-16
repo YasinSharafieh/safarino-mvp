@@ -11,6 +11,7 @@ import { useTravel } from "../../context/TravelContext";
 import { orderedTravelCities } from "@/lib/start-flow";
 import { formatJalaliDate } from "@/lib/jalali";
 import SiteHeader from "@/components/SiteHeader";
+import VoiceTripButton from "@/components/VoiceTripButton";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -192,7 +193,30 @@ export default function StartCitiesPage() {
             هر شهر ایران در این فهرست هست. بر اساس همین شهرها، بلیت، مسیر و اقامتگاه جست‌وجو می‌شود.
           </p>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4">
+            <VoiceTripButton
+              variant="compact"
+              onApplied={(trip) => {
+                // The sentence fills this very form, so nothing is lost and the
+                // traveller can still correct any field before continuing.
+                if (trip.origin) setOrigin(trip.origin);
+                if (trip.destination) setDestination(trip.destination);
+                if (trip.budgetMillions) setBudget(Math.max(1, Math.min(500, Math.round(trip.budgetMillions))));
+                if (trip.days) {
+                  const depart = trip.departureDate || departureDate || todayIso();
+                  setDepartureDate(depart);
+                  setReturnDate(addDays(depart, Math.max(1, trip.days)));
+                  setRoundTrip(true);
+                }
+                if (trip.travelers) setTravelers(Math.min(9, Math.max(1, trip.travelers)));
+                if (trip.children !== null && trip.children !== undefined) setChildren(Math.max(0, trip.children));
+                if (trip.mode) setVehicle(trip.mode);
+                setError("");
+              }}
+            />
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <CityCombobox
               label="مبدأ"
               value={origin}

@@ -3,6 +3,7 @@ import { siteUrl } from "@/lib/site";
 import type { ReactNode } from "react";
 import { TravelProvider } from "./context/TravelContext";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
+import TripCompanion from "@/components/TripCompanion";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -71,7 +72,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">
         <ServiceWorkerRegistrar />
-        <TravelProvider>{children}</TravelProvider>
+        <TravelProvider>
+          {children}
+          {/* The orb lives outside every page, so it follows the traveller everywhere. */}
+          <TripCompanion />
+        </TravelProvider>
       </body>
     </html>
   );

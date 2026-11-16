@@ -51,6 +51,7 @@ import type { LucideIcon } from "lucide-react";
 import TravelSteps from "@/components/TravelSteps";
 import { useTravel } from "../context/TravelContext";
 import SiteHeader from "@/components/SiteHeader";
+import ArchetypeCard from "@/components/ArchetypeCard";
 import {
   describeTrip,
   drawQuestions,
@@ -823,6 +824,16 @@ export default function TravelQuiz() {
                     </span>
                     <h2 className="gradient-text mt-4 text-xl font-black sm:text-2xl">{analysis?.headline || result.headline}</h2>
                     <p className="mx-auto mt-2.5 max-w-xl text-[11px] leading-7 text-slate-300 sm:text-xs">{analysis?.summary || result.summary}</p>
+                    <div className="mt-4 text-right">
+                      <ArchetypeCard
+                        moods={result.moods.slice(0, 3).map((entry) => entry.mood)}
+                        budgetMillions={budgetMillions}
+                        people={peopleCount}
+                        days={Math.max(1, days || 3)}
+                        children={kids}
+                        mode={preferredTransportMode(questions, answers) || preferredModeFromText(description)}
+                      />
+                    </div>
                     {analysing ? (
                       <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[9.5px] text-cyan-100">
                         <LoaderCircle className="h-3 w-3 animate-spin" />

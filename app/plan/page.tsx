@@ -45,6 +45,8 @@ import { FAVORITES_EVENT, favoriteIds } from "@/lib/favorites";
 import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import type { PlaceCardData } from "@/components/PlaceCard";
 import SiteHeader from "@/components/SiteHeader";
+import ArchetypeCard from "@/components/ArchetypeCard";
+import SmartPacking from "@/components/SmartPacking";
 import NextStepBar from "@/components/NextStepBar";
 import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
 import { readPlanPlaces, togglePlanPlace, clearPlanPlaces, type PlanPlace } from "@/lib/plan-places";
@@ -1306,6 +1308,17 @@ export default function PlanPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div><span className="chip print:hidden">تایم‌لاین زنده</span><h2 className="mt-3 text-2xl font-black text-white">برنامه ساعت‌به‌ساعت سفر</h2></div>
               <span className="text-xs text-slate-500">{formatNumber(plan.days.length)} روز برنامه‌ریزی‌شده</span>
+            </div>
+
+            <div className="mt-4 print:hidden">
+              <ArchetypeCard
+                moods={taste.moods}
+                budgetMillions={Number(travelData.budget) || 0}
+                people={peopleCount}
+                days={dayCount}
+                children={Number(travelData.children) || 0}
+                mode={String((travelData.transport as Record<string, unknown> | null)?.vehicleId || travelData.preferredMode || "")}
+              />
             </div>
 
             <div

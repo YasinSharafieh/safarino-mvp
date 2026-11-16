@@ -40,6 +40,7 @@ import { ITINERARY_OFFLINE_KEY, ITINERARY_STORAGE_KEY } from "@/lib/itinerary-st
 import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
+import SmartPacking from "@/components/SmartPacking";
 import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import { chosenTransport } from "@/lib/transport-selection";
@@ -907,6 +908,16 @@ function ItineraryContent() {
 
                 <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
                 {sharePayload ? <ShareTrip trip={sharePayload} /> : null}
+                {city ? (
+                  <SmartPacking
+                    destination={city}
+                    days={Math.max(1, data.days.length)}
+                    startDate={travelData.departureDate || undefined}
+                    children={Number(travelData.children) || 0}
+                    mode={String((travelData.transport as Record<string, unknown> | null)?.vehicleId || travelData.preferredMode || "")}
+                    moods={Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : []}
+                  />
+                ) : null}
                 <TripChecklist departureDate={travelData.departureDate} />
                 <OfflineKeeper warmUrls={offlineImages} />
 

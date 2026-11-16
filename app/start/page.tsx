@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Compass, MapPin, Sparkles, Wand2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
+import VoiceTripButton from "@/components/VoiceTripButton";
 
 export const metadata: Metadata = {
   title: "شروع برنامه‌ریزی سفر",
@@ -36,7 +37,11 @@ export default function StartPage() {
         </p>
       </section>
 
-      <section className="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-2">
+      <section className="mx-auto mt-8 max-w-4xl">
+        <VoiceTripButton variant="hero" />
+      </section>
+
+      <section className="mx-auto mt-3 grid max-w-4xl gap-3 sm:grid-cols-2">
         <Link
           href="/start/cities"
           className="glass group relative overflow-hidden p-5 transition hover:border-cyan-400/40 hover:brightness-110"

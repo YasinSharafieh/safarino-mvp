@@ -85,6 +85,9 @@ import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 import { bestStay, estimateBudget } from "@/lib/budget-fit";
 import { chosenTransport } from "@/lib/transport-selection";
+import BudgetGauge from "@/components/BudgetGauge";
+import { budgetGauge } from "@/lib/budget-gauge";
+import { pingCompanion } from "@/components/TripCompanion";
 
 /** Every ordering a traveller reasonably asks for, in one place. */
 export type StaySort = "cheapest" | "priciest" | "rating" | "luxury" | "reviews";
@@ -170,6 +173,27 @@ export default function AccommodationPage() {
       }),
     [nights, totalBudget, transportCost, travelData.children, travelData.days, travelData.infants, travelData.travelers],
   );
+
+  /**
+   * The dial, using the very same numbers printed under it: the chosen ticket,
+   * the chosen stay (when one is chosen) and the food money set aside for the
+   * whole trip.
+   */
+  const gauge = useMemo(
+    () =>
+      budgetGauge({
+        totalMillions: travelData.budget,
+        transportToman: transportCost,
+        accommodationToman: accommodationCost,
+        travellers: Math.max(1, travelData.travelers + travelData.children + travelData.infants),
+        days: Math.max(1, Number(travelData.days) || nights || 1),
+      }),
+    [accommodationCost, nights, totalBudget, transportCost, travelData.budget, travelData.children, travelData.days, travelData.infants, travelData.travelers],
+  );
+
+  useEffect(() => {
+    if (gauge.zone === "over") pingCompanion("budget-over");
+  }, [gauge.zone]);
 
   useEffect(() => {
     if (!isHydrated || initialized.current) return;
@@ -470,6 +494,9 @@ export default function AccommodationPage() {
                   ].map(([label, value, tone]) => (
                     <div key={String(label)} className="rounded-xl bg-white/[0.035] p-3"><span className="block text-[10px] text-slate-500">{label}</span><b className={`mt-1 block text-xs ${String(tone) || "text-white"}`}>{formatToman(Number(value))}</b></div>
                   ))}
+                </div>
+                <div className="mt-3">
+                  <BudgetGauge gauge={gauge} title="کیلومترشمار بودجهٔ سفر" />
                 </div>
                 <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10.5px] leading-6 text-slate-300">
                   بودجهٔ سفر که خودت گفتی <b className="text-cyan-200">{formatToman(totalBudget)}</b> است؛
