@@ -46,6 +46,8 @@ import { openNeshanNavigation } from "@/lib/neshan-deeplink";
 import type { PlaceCardData } from "@/components/PlaceCard";
 import SiteHeader from "@/components/SiteHeader";
 import ArchetypeCard from "@/components/ArchetypeCard";
+import CrisisPlanCard from "@/components/CrisisPlanCard";
+import AgentDebate from "@/components/AgentDebate";
 import SmartPacking from "@/components/SmartPacking";
 import NextStepBar from "@/components/NextStepBar";
 import TimelineSchematic, { type SchematicStep } from "@/components/TimelineSchematic";
@@ -1310,6 +1312,21 @@ export default function PlanPage() {
               <span className="text-xs text-slate-500">{formatNumber(plan.days.length)} روز برنامه‌ریزی‌شده</span>
             </div>
 
+            {curateLoading ? (
+              <AgentDebate
+                input={{
+                  destination,
+                  budgetMillions: Number(travelData.budget) || 0,
+                  days: dayCount,
+                  travellers: peopleCount,
+                  children: Number(travelData.children) || 0,
+                  transportToman: 0,
+                  stayToman: 0,
+                  mode: String((travelData.transport as Record<string, unknown> | null)?.vehicleId || travelData.preferredMode || ""),
+                  placeCount: (chosenPois.length ? chosenPois : suggestionPool).length,
+                }}
+              />
+            ) : null}
             <div className="mt-4 print:hidden">
               <ArchetypeCard
                 moods={taste.moods}
@@ -1402,6 +1419,24 @@ export default function PlanPage() {
                 طرح‌وارهٔ روز {formatNumber(selectedDay?.day ?? 1)}
               </p>
               <TimelineSchematic steps={daySteps} />
+
+              <CrisisPlanCard
+                destination={destination}
+                startDate={travelData.departureDate || undefined}
+                days={plan.days.map((day) => ({
+                  day: day.day,
+                  title: day.title,
+                  stops: day.items
+                    .filter((item) => item.type === "sightseeing" || item.type === "food")
+                    .map((item) => ({ time: item.time, title: item.title, type: item.type, category: item.poiCategory || null })),
+                }))}
+                places={(nearestPois.length ? nearestPois : enrichedPois).map((poi) => ({
+                  id: poi.id,
+                  name: poi.name,
+                  category: poi.category,
+                  km: typeof poi.fromStayKm === "number" ? poi.fromStayKm : poi.distanceKm,
+                }))}
+              />
             </div>
 
             <AnimatePresence mode="wait">

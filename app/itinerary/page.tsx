@@ -41,6 +41,7 @@ import BudgetBreakdown from "@/components/BudgetBreakdown";
 import ShareTrip from "@/components/ShareTrip";
 import TripChecklist from "@/components/TripChecklist";
 import SmartPacking from "@/components/SmartPacking";
+import StoryExport from "@/components/StoryExport";
 import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import { chosenTransport } from "@/lib/transport-selection";
@@ -916,6 +917,27 @@ function ItineraryContent() {
                     children={Number(travelData.children) || 0}
                     mode={String((travelData.transport as Record<string, unknown> | null)?.vehicleId || travelData.preferredMode || "")}
                     moods={Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : []}
+                  />
+                ) : null}
+                {data ? (
+                  <StoryExport
+                    input={{
+                      destination: data.city,
+                      origin: travelData.origin || "—",
+                      days: Math.max(1, data.days.length),
+                      travellers: Math.max(1, travelData.travelers + travelData.children),
+                      totalToman: budgetPlan.lines.filter((line) => line.id === "transport" || line.id === "stay").reduce((sum, line) => sum + (line.amount || 0), 0),
+                      budgetToman: budgetPlan.budget || 0,
+                      transportLabel: chosenTransport(travelData.transport)?.modeLabel || travelData.preferredMode || "",
+                      stayName: String((travelData.accommodation as Record<string, unknown> | null)?.name || "") || "",
+                      archetypeName: travelData.tripStyle || undefined,
+                      topPlaces: data.days.flatMap((day) => day.stops.map((stop) => stop.place.name)).slice(0, 6),
+                      days_: data.days.map((day) => ({
+                        day: day.day,
+                        title: `روز ${day.day}`,
+                        stops: day.stops.map((stop) => ({ time: stop.startTime, title: stop.place.name })),
+                      })),
+                    }}
                   />
                 ) : null}
                 <TripChecklist departureDate={travelData.departureDate} />

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { TravelProvider } from "./context/TravelContext";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import TripCompanion from "@/components/TripCompanion";
+import AmbientTheme from "@/components/AmbientTheme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <TravelProvider>
           {children}
           {/* The orb lives outside every page, so it follows the traveller everywhere. */}
+          <AmbientTheme />
           <TripCompanion />
         </TravelProvider>
       </body>

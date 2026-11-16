@@ -25,6 +25,8 @@ import { useTravel } from "@/app/context/TravelContext";
 import { detectBrowserCity, readSavedOrigin, saveOrigin } from "@/lib/visitor-city";
 import { orderedTravelCities } from "@/lib/start-flow";
 import CityCombobox from "@/components/CityCombobox";
+import { curatePackages, shelfSummary, TIER_LABEL, type CuratedPackage, type PackageTier } from "@/lib/package-curator";
+import { Plane as PlaneIcon, Sparkles, TrainFront as TrainIcon, Bus as BusIcon } from "lucide-react";
 
 const money = (value: number) => new Intl.NumberFormat("fa-IR").format(Math.round(value));
 const compact = (value: number) =>
@@ -122,6 +124,7 @@ export default function HomeDeals() {
     // The section must never hang: if the providers are slow, say so plainly.
     const timer = window.setTimeout(() => controller.abort(), 62_000);
     const params = new URLSearchParams();
+    params.set("limit", "6");
     if (originHint) params.set("from", originHint);
     // Only a press of «به‌روزرسانی» asks for a fresh crawl; the first paint of
     // the page stays fast and uses the saved copy when it is still warm.
@@ -154,6 +157,72 @@ export default function HomeDeals() {
   }, [reloadKey, originHint, refreshToken]);
 
   const packages: TripPackage[] = data?.packages || [];
+
+  /**
+   * The shelf is re-read for this traveller: a tier measured against their money,
+   * one card per vehicle, one card per price level — and a different mix on every
+   * press of «به‌روزرسانی».
+   */
+  const [mixSeed, setMixSeed] = useState(0);
+  const [modeFilter, setModeFilter] = useState<"any" | "plane" | "train" | "bus">("any");
+  const [tierFilter, setTierFilter] = useState<"all" | PackageTier>("all");
+  const [smart, setSmart] = useState<{ items: CuratedPackage[]; summary: string; source: "ai" | "local"; note?: string } | null>(null);
+  const [smartLoading, setSmartLoading] = useState(false);
+
+  const curated = useMemo(
+    () =>
+      curatePackages(packages, {
+        budgetMillions,
+        travellers: Math.max(1, travelData.travelers || 1),
+        days: Math.max(1, Number(travelData.days) || 2),
+        mode: modeFilter,
+        taste: Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : [],
+        seed: mixSeed,
+      }),
+    [budgetMillions, mixSeed, modeFilter, packages, travelData.days, travelData.tasteMoods, travelData.travelers],
+  );
+
+  /** The AI sentences, when one arrived, are attached by id — never reordered blindly. */
+  const shelf = useMemo<CuratedPackage[]>(() => {
+    const base = smart?.items?.length ? smart.items : curated;
+    const filtered = tierFilter === "all" ? base : base.filter((pkg) => pkg.tier === tierFilter);
+    return filtered.length ? filtered : base;
+  }, [curated, smart, tierFilter]);
+
+  const summaryLine = smart?.summary || shelfSummary(shelf, {
+    budgetMillions,
+    travellers: Math.max(1, travelData.travelers || 1),
+    days: Math.max(1, Number(travelData.days) || 2),
+  });
+
+  const askSmart = async () => {
+    if (!packages.length || smartLoading) return;
+    setSmartLoading(true);
+    try {
+      const response = await fetch("/api/deals/smart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({
+          packages,
+          budgetMillions,
+          travellers: Math.max(1, travelData.travelers || 1),
+          days: Math.max(1, Number(travelData.days) || 2),
+          mode: modeFilter,
+          taste: Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : [],
+          seed: mixSeed,
+        }),
+      });
+      const payload = (await response.json()) as { success?: boolean; items?: CuratedPackage[]; summary?: string; source?: "ai" | "local"; note?: string };
+      if (payload?.success && payload.items?.length) {
+        setSmart({ items: payload.items, summary: payload.summary || "", source: payload.source || "local", note: payload.note });
+      }
+    } catch {
+      // The computed shelf is already on screen.
+    } finally {
+      setSmartLoading(false);
+    }
+  };
   const origin = data?.origin || originHint || "تهران";
   const originCities = useMemo(() => orderedTravelCities(), []);
 
@@ -227,7 +296,20 @@ export default function HomeDeals() {
           </label>
           <button
             type="button"
-            onClick={() => setRefreshToken((value) => value + 1)}
+            onClick={() => void askSmart()}
+            disabled={smartLoading || !packages.length}
+            className="btn-primary !px-3.5 !py-2 text-[11px] disabled:opacity-50"
+          >
+            {smartLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            چیدن هوشمند
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMixSeed((value) => value + 1);
+              setSmart(null);
+              setRefreshToken((value) => value + 1);
+            }}
             disabled={loading}
             className="btn-ghost !px-3.5 !py-2 text-[11px] disabled:opacity-50"
           >
@@ -236,6 +318,64 @@ export default function HomeDeals() {
           </button>
         </div>
       </div>
+
+      {packages.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {([
+            { id: "any", label: "همه", Icon: null },
+            { id: "plane", label: "هواپیما", Icon: PlaneIcon },
+            { id: "train", label: "قطار", Icon: TrainIcon },
+            { id: "bus", label: "اتوبوس", Icon: BusIcon },
+          ] as const).map((option) => {
+            const active = modeFilter === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  setModeFilter(option.id);
+                  setSmart(null);
+                }}
+                aria-pressed={active}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold transition ${
+                  active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                }`}
+              >
+                {option.Icon ? <option.Icon className="h-3 w-3" /> : null}
+                {option.label}
+              </button>
+            );
+          })}
+          <span className="mx-1 h-4 w-px bg-white/10" />
+          {(["all", "economy", "balanced", "premium"] as const).map((tier) => {
+            const active = tierFilter === tier;
+            return (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => setTierFilter(tier)}
+                aria-pressed={active}
+                className={`rounded-full border px-2.5 py-1 text-[10px] font-bold transition ${
+                  active ? "border-fuchsia-300/50 bg-fuchsia-300/15 text-fuchsia-100" : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                }`}
+              >
+                {tier === "all" ? "همهٔ سطح‌ها" : TIER_LABEL[tier]}
+              </button>
+            );
+          })}
+          <span className="mr-auto text-[9px] text-slate-500">
+            {smart?.source === "ai" ? "توضیح‌ها با هوش مصنوعی، بر پایهٔ همین قیمت‌های واقعی" : "سطح هر بسته با بودجهٔ خودت سنجیده شده"}
+          </span>
+        </div>
+      ) : null}
+
+      {summaryLine ? (
+        <p className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.05] px-3 py-2 text-[10px] leading-6 text-cyan-100">
+          <Sparkles className="ml-1 inline h-3 w-3" />
+          {summaryLine}
+          {smart?.note ? <span className="mt-0.5 block text-[9px] text-slate-400">{smart.note}</span> : null}
+        </p>
+      ) : null}
 
       {originEditing ? (
         <div className="glass mt-4 border border-cyan-400/25 p-4">
@@ -318,7 +458,16 @@ export default function HomeDeals() {
       {packages.length ? (
         <>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {budgetPlans.map(({ pkg, plan }, index) => {
+            {shelf.map((pkg, index) => {
+              const plan =
+                budgetPlans.find((entry) => entry.pkg.id === pkg.id)?.plan ||
+                estimateBudget({
+                  totalBudget: Math.max(0, budgetMillions * 1_000_000),
+                  travellers: Math.max(1, pkg.travellers),
+                  days: Math.max(1, pkg.days),
+                  tickets: pkg.ticketTotalToman,
+                  stay: pkg.stayTotalToman,
+                });
               const ModeIcon = MODE_ICON[pkg.ticket.mode] ?? TrainFront;
               const isPick = pick?.pkg.id === pkg.id;
               return (
@@ -340,8 +489,19 @@ export default function HomeDeals() {
                       <ModeIcon className="h-3 w-3" />
                       {pkg.ticket.modeLabel}
                     </span>
-                    <span className="absolute left-2.5 top-2.5 rounded-full bg-cyan-400/90 px-2 py-0.5 text-[9px] font-black text-slate-950">
-                      {money(pkg.days)} روزه
+                    <span className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
+                      <span className="rounded-full bg-cyan-400/90 px-2 py-0.5 text-[9px] font-black text-slate-950">{money(pkg.days)} روزه</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                          pkg.tier === "economy"
+                            ? "bg-emerald-400/90 text-slate-950"
+                            : pkg.tier === "premium"
+                              ? "bg-amber-300/90 text-slate-950"
+                              : "bg-violet-300/90 text-slate-950"
+                        }`}
+                      >
+                        {pkg.tierLabel} · {money(pkg.fitPct)}٪ تناسب
+                      </span>
                     </span>
                   </div>
 
@@ -375,7 +535,11 @@ export default function HomeDeals() {
                       </p>
                     </div>
 
-                    <p className={`mt-3 rounded-xl border p-2 text-[9px] leading-5 ${plan.verdict === "over" ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : plan.verdict === "tight" ? "border-turquoise-400/25 bg-turquoise-400/10 text-turquoise-200" : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"}`}>
+                    <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-[9px] leading-5 text-slate-300">
+                      {pkg.aiWhy || pkg.reason}
+                    </p>
+
+                    <p className={`mt-2 rounded-xl border p-2 text-[9px] leading-5 ${plan.verdict === "over" ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : plan.verdict === "tight" ? "border-turquoise-400/25 bg-turquoise-400/10 text-turquoise-200" : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"}`}>
                       {plan.verdict === "over"
                         ? `${compact(Math.abs(plan.remaining) * 10)} میلیون بیشتر از بودجه‌ات؛ با غذا و خرج روزانه حساب شده.`
                         : `با غذا و خرج روزانه، ${money(Math.max(0, plan.remaining))} تومان از بودجه‌ات می‌ماند.`}

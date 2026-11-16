@@ -86,6 +86,7 @@ import NextStepBar from "@/components/NextStepBar";
 import { bestStay, estimateBudget } from "@/lib/budget-fit";
 import { chosenTransport } from "@/lib/transport-selection";
 import BudgetGauge from "@/components/BudgetGauge";
+import { robinPlan, type RobinOffer } from "@/lib/budget-robin";
 import { budgetGauge } from "@/lib/budget-gauge";
 import { pingCompanion } from "@/components/TripCompanion";
 
@@ -194,6 +195,36 @@ export default function AccommodationPage() {
   useEffect(() => {
     if (gauge.zone === "over") pingCompanion("budget-over");
   }, [gauge.zone]);
+
+  /**
+   * «بودجهٔ رابین‌هود»: the money the ticket did not spend is offered back on the
+   * room — only among the real offers already on this page.
+   */
+  const robinOffers = useMemo<RobinOffer[]>(
+    () =>
+      groups
+        .flatMap((group) => group.offers)
+        .filter((offer) => Number.isFinite(offer.priceTotalToman) && offer.priceTotalToman > 0)
+        .map((offer) => ({ id: offer.id, name: offer.name, typeLabel: offer.typeLabel, priceToman: offer.priceTotalToman, rating: offer.rating || null })),
+    [groups],
+  );
+
+  const robin = useMemo(() => {
+    if (!robinOffers.length) return null;
+    return robinPlan({
+      budgetToman: totalBudget,
+      transportToman: transportCost,
+      foodToman: stayBudget.food,
+      currentStayToman: accommodationCost,
+      offers: robinOffers,
+    });
+  }, [accommodationCost, robinOffers, stayBudget.food, totalBudget, transportCost]);
+
+  const applyRobin = () => {
+    if (!robin) return;
+    const offer = groups.flatMap((group) => group.offers).find((item) => item.id === robin.offerId);
+    if (offer) selectOffer(offer);
+  };
 
   useEffect(() => {
     if (!isHydrated || initialized.current) return;
@@ -498,6 +529,19 @@ export default function AccommodationPage() {
                 <div className="mt-3">
                   <BudgetGauge gauge={gauge} title="کیلومترشمار بودجهٔ سفر" />
                 </div>
+                {robin ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-fuchsia-400/25 bg-fuchsia-400/[0.07] px-3 py-2">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-fuchsia-400/15 text-[11px]">🤝</span>
+                    <p className="min-w-0 flex-1 text-[10px] leading-6 text-fuchsia-100">{robin.text}</p>
+                    <button
+                      type="button"
+                      onClick={applyRobin}
+                      className="rounded-full border border-fuchsia-300/40 bg-fuchsia-300/15 px-2.5 py-1 text-[9.5px] font-bold text-fuchsia-100 transition hover:bg-fuchsia-300/25"
+                    >
+                      همین را انتخاب کن
+                    </button>
+                  </div>
+                ) : null}
                 <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10.5px] leading-6 text-slate-300">
                   بودجهٔ سفر که خودت گفتی <b className="text-cyan-200">{formatToman(totalBudget)}</b> است؛
                   بعد از بلیت، <b className={stayBudget.remaining > 0 ? "text-emerald-300" : "text-rose-300"}>{formatToman(Math.max(0, stayBudget.remaining))}</b> برای اقامت مانده

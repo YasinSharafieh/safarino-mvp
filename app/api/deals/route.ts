@@ -48,7 +48,10 @@ export async function GET(request: NextRequest) {
   // the saved copy, so the numbers (and the destinations) really move.
   const force = ["1", "true", "yes"].includes((request.nextUrl.searchParams.get("fresh") || "").toLowerCase());
   try {
-    const result = await loadTripPackages({ origin, originSource: source, travellers, limit: 4, force });
+    // A slightly larger shelf, so the vehicle/tier filters on the page still have
+    // something real to choose from after they run.
+    const limit = Math.min(6, Math.max(2, Number(request.nextUrl.searchParams.get("limit")) || 4));
+    const result = await loadTripPackages({ origin, originSource: source, travellers, limit, force });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json(

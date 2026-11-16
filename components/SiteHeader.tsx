@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Compass, Home, Sparkles } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import OriginSwitch from "@/components/OriginSwitch";
 
 type Props = {
   /** Extra buttons for the page (they sit next to the theme switch). */
@@ -31,6 +32,7 @@ export default function SiteHeader({ actions, minimal = false }: Props) {
       </a>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        <OriginSwitch />
         {!minimal ? (
           <>
             <a href="/discover" className="btn-ghost !px-2.5 !py-2 text-[11px]">
