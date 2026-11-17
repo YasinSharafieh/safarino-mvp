@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AiBudgetError } from "../../../../lib/ai-budget";
 import {
-  questionsPrompt,
-  sanitizeQuestions,
+  applyRewrites,
+  rewritePrompt,
   drawQuestions,
-  QUIZ_TOPICS,
   type AiQuestion,
 } from "../../../../lib/quiz-ai";
 import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
@@ -15,22 +14,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * How the set is written now.
- *
- * A single call asking for twelve four-option questions with weights is longer
- * than the cheap models' output ceiling (the chain allows 900 tokens), so the
- * JSON was cut off mid-array, the parse failed, and the question bank answered
- * every single time. Three small calls in parallel — four subjects each, inside
- * the ceiling — write the whole set in the time of one call, and the result is
- * cached so the next traveller sees it instantly.
+ * A written set is reused for a while, so the traveller after this one gets the
+ * same fresh wording with no wait — and the $10 budget is not spent rewording
+ * the same twelve subjects for every visitor.
  */
-const CALLS = [
-  { count: 4, topics: QUIZ_TOPICS.slice(0, 4) },
-  { count: 4, topics: QUIZ_TOPICS.slice(4, 8) },
-  { count: 4, topics: QUIZ_TOPICS.slice(8, 12) },
-] as const;
-
-/** How long a written set is reused before another one is asked for. */
 const SET_TTL_SECONDS = 3 * 60 * 60;
 
 /**
@@ -40,18 +27,6 @@ const SET_TTL_SECONDS = 3 * 60 * 60;
  * before the result.
  */
 const WANTED = 12;
-
-function extractJson(content: string): unknown {
-  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
-    throw new Error("AI response was not valid JSON");
-  }
-}
 
 /** Fills a short model-written set from the local bank, never repeating one. */
 function topUp(written: AiQuestion[], wanted: number, seen: string[] = []): AiQuestion[] {
@@ -99,46 +74,30 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-async function askModel(
-  prompt: string,
-  seen: string[] = [],
-  timeoutMs = 8_000,
-): Promise<AiQuestion[]> {
-  // «ساختن سؤال» — creativity matters more than price here, but the cheapest
-  // good model still wins; the local bank stays as the floor.
-  const parsed = (await askJson({
+/**
+ * «لحن تازه برای سؤال‌های واقعی» — one short call.
+ *
+ * The model does not invent questions any more: it is handed the twelve real
+ * ones and asked to say each differently. That answer is a handful of short
+ * sentences, so it arrives in a couple of seconds instead of the twenty-plus a
+ * full set with weights took — and the options, the weights and the scoring
+ * stay exactly the ones Safarino can stand behind.
+ */
+async function reword(base: AiQuestion[], origin: string, travellers: number, timeoutMs: number): Promise<AiQuestion[]> {
+  const parsed = await askJson({
     task: "quiz",
     title: "Safarino Quiz",
     maxTokens: 900,
     timeoutMs,
     system:
-      "تو یک مشاور سفر ایرانی هستی که سلیقهٔ مسافر را با سؤال‌های کوتاه و طبیعی می‌شناسد. فقط JSON معتبر به فارسی تولید می‌کنی و هیچ شهر یا جاذبه‌ای از خودت نمی‌سازی.",
-    prompt,
-  })) as Record<string, unknown>;
-  return sanitizeQuestions(parsed?.questions ?? parsed, 6).filter((question) => !seen.includes(question.prompt));
-}
-
-/** All three calls at once; whichever answer, its questions are kept. */
-async function writeSet(origin: string, travellers: number, version: string, seen: string[], timeoutMs: number) {
-  const batches = await Promise.all(
-    CALLS.map((call) =>
-      askModel(
-        questionsPrompt({ origin, travellers, version, avoidPrompts: seen, count: call.count, topics: call.topics }),
-        seen,
-        timeoutMs,
-      ).catch(() => [] as AiQuestion[]),
-    ),
-  );
-  const keys = new Set<string>();
-  const prompts = new Set<string>();
-  const written: AiQuestion[] = [];
-  for (const question of batches.flat()) {
-    if (keys.has(question.key) || prompts.has(question.prompt)) continue;
-    keys.add(question.key);
-    prompts.add(question.prompt);
-    written.push(question);
-  }
-  return written;
+      "تو یک مشاور سفر ایرانی هستی که سؤال‌های سلیقه را با لحنی گرم، کوتاه و محاوره‌ای بازنویسی می‌کند. فقط JSON معتبر به فارسی می‌نویسی و هیچ سؤال، گزینه یا شهر تازه‌ای نمی‌سازی.",
+    prompt: rewritePrompt({
+      questions: base.map((question) => ({ key: question.key, prompt: question.prompt, aside: question.aside })),
+      origin,
+      travellers,
+    }),
+  });
+  return applyRewrites(base, parsed);
 }
 
 /**
@@ -167,71 +126,46 @@ export async function POST(request: NextRequest) {
   });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const bank = topUp([], WANTED, seen);
   if (!apiKey) {
-    return NextResponse.json({ success: true, ...fallback(), note: "بدون سرویس هوش مصنوعی، سؤال‌ها از بانک داخلی انتخاب شدند." });
+    return NextResponse.json({ success: true, questions: bank, source: "local", note: "بدون سرویس هوش مصنوعی، سؤال‌ها از بانک داخلی انتخاب شدند." });
   }
 
-  /**
-   * A written set is reused for a few hours: the store keeps the model's work,
-   * so the traveller after this one gets the same fresh questions with no wait
-   * and the $10 budget is not spent writing the same twelve subjects again.
-   */
-  const cacheKey = `safarino:quiz-set:v3:${origin.replace(/\s+/g, "-")}:${travellers}`;
+  // Keyed by the route a traveller is on, not by their token: everybody flying
+  // out of the same city with the same party sees the same freshly worded set
+  // for a few hours, which is what keeps the wait and the budget down.
+  const cacheKey = `safarino:quiz-set:v4:${origin.replace(/\s+/g, "-") || "any"}:${travellers}`;
   const cached = await getProviderCache<{ questions: AiQuestion[] }>(cacheKey);
   const cachedQuestions = Array.isArray(cached?.questions) ? cached!.questions : [];
   if (cachedQuestions.length >= WANTED) {
-    return NextResponse.json({
-      success: true,
-      questions: cachedQuestions,
-      source: "ai",
-      cached: true,
-      meta: { model: chainFor("quiz").models[0], writtenByModel: cachedQuestions.length, generatedAt: null },
-    });
+    return NextResponse.json({ success: true, questions: cachedQuestions, source: "ai", cached: true });
   }
 
-  const chain = chainFor("quiz");
   const startedAt = Date.now();
-
-  /*
-   * Three small parallel calls, never past the deadline. Before this, one big
-   * call was cut off by the token ceiling — so the model's questions never
-   * reached a traveller — and the wait measured ۴۳ seconds on the live site.
-   */
   try {
-    const written = await withDeadline(
-      writeSet(origin, travellers, token, seen, DEADLINE_MS - 1_500),
-      DEADLINE_MS,
-    );
-    if (!written.length) throw new Error("No usable question in the answer");
-    const questions = topUp(written, WANTED, seen);
-    // Only a set that is mostly model-written is worth keeping; a set that is
-    // one stray question plus eleven from the bank is not a cache entry.
-    if (written.length >= 6) {
-      await setProviderCache(cacheKey, { questions }, SET_TTL_SECONDS);
-    }
+    const questions = await withDeadline(reword(bank, origin, travellers, DEADLINE_MS - 1_500), DEADLINE_MS);
+    const changed = questions.filter((question, index) => question.prompt !== bank[index]?.prompt).length;
+    if (!changed) throw new Error("Nothing was reworded");
+    await setProviderCache(cacheKey, { questions }, SET_TTL_SECONDS);
     return NextResponse.json({
       success: true,
       questions,
       source: "ai",
-      meta: {
-        model: chain.models[0],
-        writtenByModel: written.length,
-        generatedAt: new Date().toISOString(),
-        ms: Date.now() - startedAt,
-      },
+      meta: { model: chainFor("quiz").models[0], reworded: changed, generatedAt: new Date().toISOString(), ms: Date.now() - startedAt },
     });
   } catch (caught) {
     if (caught instanceof AiBudgetError) {
-      // The $10 must last: stop asking the model, use the real question bank.
       return NextResponse.json({
         success: true,
-        ...fallback(),
+        questions: bank,
+        source: "local",
         note: "سهم هوش مصنوعی این ماه تمام شده؛ سؤال‌ها از بانک داخلی سفرینو انتخاب شدند و همهٔ گزینه‌ها واقعی‌اند.",
       });
     }
     return NextResponse.json({
       success: true,
-      ...fallback(),
+      questions: bank,
+      source: "local",
       note:
         caught instanceof Error && caught.message === "QUIZ_DEADLINE"
           ? "سؤال‌ها دیر آماده می‌شدند؛ برای اینکه معطل نمانی، از بانک سؤال خود سفرینو انتخاب شدند."

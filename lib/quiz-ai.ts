@@ -53,7 +53,7 @@ export function sanitizeQuestions(raw: unknown, limit = 10): AiQuestion[] {
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const row = entry as Record<string, unknown>;
-    const key = text(row.key, 24).replace(/[^a-z_]/gi, "");
+    const key = text(row.key, 24).replace(/[^a-z0-9_]/gi, "");
     const prompt = text(row.prompt, 140);
     const aside = text(row.aside, 160);
     const options = Array.isArray(row.options) ? row.options : [];
@@ -87,6 +87,65 @@ export function sanitizeQuestions(raw: unknown, limit = 10): AiQuestion[] {
     if (questions.length >= limit) break;
   }
   return questions;
+}
+
+/**
+ * Rewording, not inventing.
+ *
+ * The twelve questions, their four options and their weights already exist in
+ * the real bank — that is what makes the result correct. Writing twelve fresh
+ * questions *with* weights, though, is a long answer: the cheap models produce
+ * it at about three seconds per question, which is why a written set never
+ * arrived in time. So the model is given the twelve questions and asked only to
+ * say each one differently, in the traveller's own tone — a short answer that
+ * comes back in a couple of seconds, changes with every visit, and can never
+ * break the scoring because the keys, options and weights stay Safarino's own.
+ */
+export function rewritePrompt(input: {
+  questions: { key: string; prompt: string; aside: string }[];
+  origin: string;
+  travellers: number;
+}): string {
+  const list = input.questions
+    .map((question, index) => `${index + 1}. کلید ${question.key} — «${question.prompt}» (${question.aside})`)
+    .join("\n");
+  return `این سؤال‌های آزمون سلیقهٔ سفر است. همان‌ها را با لحنی تازه، کوتاه، محاوره‌ای و طبیعی بازنویسی کن؛ نه موضوع را عوض کن، نه گزینه‌ای اضافه کن، و هیچ سؤال تازه‌ای نساز.
+مبدأ احتمالی ${input.origin || "نامشخص"}؛ ${input.travellers} نفر.
+${list}
+
+فقط JSON معتبر بده، بدون متن اضافه، در این ساختار (کلید هر سؤال همان کلید بالا بماند):
+{"questions":[{"key":"همان کلید","prompt":"سؤال بازنویسی‌شده","aside":"یک جملهٔ کوتاه مقدمه"}]}`;
+}
+
+/**
+ * Puts the model's wording on the real questions: a key that does not exist in
+ * the bank is thrown away, a short or empty sentence is ignored, and the options
+ * and weights are never taken from the answer.
+ */
+export function applyRewrites(base: AiQuestion[], raw: unknown): AiQuestion[] {
+  const list = Array.isArray((raw as Record<string, unknown>)?.questions)
+    ? ((raw as Record<string, unknown>).questions as unknown[])
+    : Array.isArray(raw)
+      ? (raw as unknown[])
+      : [];
+  const byKey = new Map<string, { prompt: string; aside: string }>();
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue;
+    const row = entry as Record<string, unknown>;
+    const key = text(row.key, 24).replace(/[^a-z0-9_]/gi, "");
+    const prompt = text(row.prompt, 140);
+    const aside = text(row.aside, 160);
+    if (!key || prompt.length < 8) continue;
+    byKey.set(key, { prompt, aside });
+  }
+  let rewritten = 0;
+  const questions = base.map((question) => {
+    const written = byKey.get(question.key);
+    if (!written) return question;
+    rewritten += 1;
+    return { ...question, prompt: written.prompt, aside: written.aside || question.aside };
+  });
+  return rewritten >= 4 ? questions : base;
 }
 
 /**

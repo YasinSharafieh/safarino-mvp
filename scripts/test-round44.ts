@@ -14,7 +14,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseTripSentence, localProposal, acceptProposal } from "../lib/one-click";
-import { questionsPrompt, QUIZ_TOPICS, sanitizeQuestions } from "../lib/quiz-ai";
+import { rewritePrompt, applyRewrites, QUIZ_TOPICS } from "../lib/quiz-ai";
+import { drawQuestions } from "../lib/start-flow";
 import { resolveIranianCity, transportCityCode } from "../lib/iran-cities";
 
 let failures = 0;
@@ -45,30 +46,29 @@ check("جست‌وجوی بلیت کد را در یک جا می‌سازد", tra
 check("هر سه وسیله با کد فرستاده می‌شوند", (transportLib.match(/origin: providerInput\.origin/g) || []).length >= 3);
 check("لینک اطلاعات بلیت با کد ساخته می‌شود", transportLib.includes('infoUrl(legacy, "plane", providerInput)'));
 
-// ── 2) The question set is written inside the models' real ceiling ───────────
+// ── 2) Questions are reworded, never re-invented ─────────────────────────────
 const quizRoute = read("app/api/quiz/questions/route.ts");
-check("درخواست‌ها به سه بخش کوچک شکسته شده‌اند", /const CALLS = \[/.test(quizRoute) && (quizRoute.match(/count: 4/g) || []).length === 3);
-check("هر درخواست زیر سقف ۹۰۰ توکن است", quizRoute.includes("maxTokens: 900"));
-check("سؤال دوازده موضوع را پوشش می‌دهد", QUIZ_TOPICS.length === 12);
-check("موضوع‌ها بین سه درخواست تقسیم شده‌اند", QUIZ_TOPICS.slice(0, 4).every((topic) => QUIZ_TOPICS.includes(topic)));
+const bank = drawQuestions(() => 0.42, 12);
+check("بانک داخلی دوازده سؤال واقعی دارد", bank.length === 12, `${bank.length}`);
+check("درخواست به مدل کوتاه و تک‌مرحله‌ای است", quizRoute.includes("rewritePrompt(") && !quizRoute.includes("CALLS"));
 
-const fourQuestions = questionsPrompt({ origin: "تهران", travellers: 2, version: "v1", avoidPrompts: [], count: 4, topics: QUIZ_TOPICS.slice(0, 4) });
-check("پرامپت تعداد خواسته‌شده را می‌گوید", fourQuestions.includes("۴ سؤال"));
-check("پرامپت فقط موضوع‌های همان بخش را می‌خواهد", fourQuestions.includes("با چه کسی سفر می‌کند") && !fourQuestions.includes("چقدر شلوغی را می‌پسندد"));
-check("پرامپت پیش‌فرض همان دوازده سؤال است", questionsPrompt({ origin: "", travellers: 1, version: "v", avoidPrompts: [] }).includes("۱۲ سؤال"));
-check("پاسخ کوتاه مدل پذیرفته می‌شود", sanitizeQuestions([
-    {
-      key: "a",
-      prompt: "با کی می‌ری؟",
-      options: [
-        { id: "a", label: "تنها", weights: { "شهری": 1 } },
-        { id: "b", label: "خانواده", weights: { "طبیعت": 1 } },
-        { id: "c", label: "دوستان", weights: { "شهری": 2 } },
-        { id: "d", label: "همکار", weights: { "تاریخی": 1 } },
-      ],
-    },
-  ], 6).length === 1);
-check("مجموعهٔ نوشته‌شده کش می‌شود تا نفر بعدی معطل نماند", quizRoute.includes("getProviderCache") && quizRoute.includes("setProviderCache(cacheKey"));
+const reworded = applyRewrites(bank, {
+  questions: bank.slice(0, 9).map((question) => ({ key: question.key, prompt: `یک شکل تازه برای پرسیدن: ${question.prompt}`, aside: "یک جملهٔ مقدمه" })),
+});
+check("لحن تازه روی همان سؤال‌ها می‌نشیند", reworded.filter((question, index) => question.prompt !== bank[index].prompt).length === 9);
+check("گزینه‌ها دست‌نخورده می‌مانند", reworded.every((question, index) => question.options.length === bank[index].options.length));
+check("کلید ناشناخته پذیرفته نمی‌شود", applyRewrites(bank, { questions: [{ key: "ghost_key", prompt: "سؤالی که وجود ندارد", aside: "" }] }).every((question, index) => question.prompt === bank[index].prompt));
+check("پاسخ خیلی کوتاه جدی گرفته نمی‌شود", applyRewrites(bank, { questions: [{ key: bank[0].key, prompt: "چی؟", aside: "" }] })[0].prompt === bank[0].prompt);
+const halfRewritten = applyRewrites(bank, {
+  questions: bank.slice(0, 6).map((question) => ({ key: question.key, prompt: `با لحنی کاملاً تازه: ${question.prompt}`, aside: "" })),
+});
+check("لحن مدل با کلید واقعی می‌نشیند", halfRewritten[2].prompt.includes("لحنی کاملاً تازه"));
+
+const rewriteText = rewritePrompt({ questions: [{ key: "party", prompt: "با کی می‌ری؟", aside: "همراه" }], origin: "تهران", travellers: 2 });
+check("پرامپت بازنویسی کلید را می‌دهد", rewriteText.includes("party") && rewriteText.includes("با کی می‌ری؟"));
+check("پرامپت بازنویسی ساختن سؤال تازه را ممنوع می‌کند", rewriteText.includes("هیچ سؤال تازه‌ای نساز"));
+check("سؤال دوازده موضوع را پوشش می‌دهد", QUIZ_TOPICS.length === 12);
+check("مجموعهٔ بازنویسی‌شده کش می‌شود تا نفر بعدی معطل نماند", quizRoute.includes("getProviderCache") && quizRoute.includes("setProviderCache(cacheKey"));
 
 // ── 3) One sentence: Persian numbers and cities that end in «از» ─────────────
 const spoken = parseTripSentence("سه روز شیراز با قطار برای دو نفر با بیست میلیون");
