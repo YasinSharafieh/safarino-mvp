@@ -93,7 +93,6 @@ import { chosenTransport } from "@/lib/transport-selection";
 import BudgetGauge from "@/components/BudgetGauge";
 import { robinPlan, type RobinOffer } from "@/lib/budget-robin";
 import { budgetGauge } from "@/lib/budget-gauge";
-import { pingCompanion } from "@/components/TripCompanion";
 
 /** Every ordering a traveller reasonably asks for, in one place. */
 export type StaySort = "cheapest" | "priciest" | "rating" | "luxury" | "reviews";
@@ -229,9 +228,6 @@ export default function AccommodationPage() {
     [accommodationCost, destination, nights, totalBudget, transportCost, travelData.budget, travelData.children, travelData.days, travelData.infants, travelData.travelers],
   );
 
-  useEffect(() => {
-    if (gauge.zone === "over") pingCompanion("budget-over");
-  }, [gauge.zone]);
 
   /**
    * «بودجهٔ رابین‌هود»: the money the ticket did not spend is offered back on the

@@ -36,7 +36,6 @@ import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
 import BudgetBar from "@/components/BudgetBar";
 import { budgetGauge } from "@/lib/budget-gauge";
-import { pingCompanion } from "@/components/TripCompanion";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 
@@ -372,11 +371,9 @@ function TransportPageContent() {
     [activeSelection, days, gaugeAlternative, passengers, travelData.budget, travelData.destination],
   );
 
-  // A red dial is exactly the moment the orb should speak up.
-  useEffect(() => {
-    if (!activeSelection || gauge.zone !== "over") return;
-    pingCompanion("budget-over");
-  }, [activeSelection, gauge.zone]);
+  // When the chosen ticket does not fit the total budget, the bar above speaks
+  // — with the exact shortfall and a one-tap fix. The orb stays quiet so the
+  // traveller is not told the same thing twice.
 
   /* ------------------------------------------- keep the choice in the context */
   useEffect(() => {
@@ -594,7 +591,6 @@ function TransportPageContent() {
               mode={mode}
               onChoose={chooseMode}
               budgetMillions={travelData.budget}
-              onBudget={(value) => setTravelData((current) => ({ ...current, budget: value }))}
               hints={hints}
             />
           </div>

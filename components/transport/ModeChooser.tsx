@@ -54,18 +54,16 @@ type Props = {
   mode: TravelMode | null;
   onChoose: (mode: TravelMode) => void;
   budgetMillions: number;
-  onBudget: (millions: number) => void;
   hints: Partial<Record<TravelMode, string>>;
 };
 
-const BUDGETS = [5, 10, 20, 40];
 
 /**
  * Step two of every trip, asked before any search: «با چی می‌روی و چقدر بودجه
  * داری؟». Only the chosen mode is opened afterwards, so the page never mixes a
  * train ticket list with a car calculator.
  */
-export default function ModeChooser({ mode, onChoose, budgetMillions, onBudget, hints }: Props) {
+export default function ModeChooser({ mode, onChoose, budgetMillions: _budgetMillions, hints }: Props) {
   const fa = new Intl.NumberFormat("fa-IR");
 
   return (
@@ -77,42 +75,6 @@ export default function ModeChooser({ mode, onChoose, budgetMillions, onBudget, 
           <p className="mt-1.5 text-[11px] leading-6 text-slate-400">
             یکی را انتخاب کن؛ بعد فقط همان بخش باز می‌شود — بلیت یا محاسبهٔ کامل ماشین.
           </p>
-        </div>
-        <div>
-          <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
-            <Wallet className="h-3.5 w-3.5 text-cyan-300" />
-            بودجهٔ کل سفر (همهٔ نفرات)
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {BUDGETS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => onBudget(value)}
-                aria-pressed={budgetMillions === value}
-                className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition ${
-                  budgetMillions === value
-                    ? "border-cyan-300/50 bg-cyan-300/12 text-cyan-100"
-                    : "border-white/10 bg-white/[0.03] text-slate-400 hover:text-white"
-                }`}
-              >
-                {fa.format(value)} میلیون
-              </button>
-            ))}
-            <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-950/40 px-2 py-1">
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={budgetMillions}
-                onChange={(event) => onBudget(Math.max(1, Math.min(500, Number(event.target.value) || 1)))}
-                aria-label="بودجهٔ سفر به میلیون تومان"
-                className="w-11 bg-transparent text-center text-[10px] font-bold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                dir="ltr"
-              />
-              <span className="whitespace-nowrap text-[8.5px] text-slate-500">میلیون</span>
-            </label>
-          </div>
         </div>
       </div>
 
