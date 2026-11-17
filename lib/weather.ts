@@ -356,9 +356,23 @@ export type DayToMatch = { dayNumber: number; categories: string[] };
  * on the clearest date. Returns the suggested order of day numbers and a short
  * reason, so the traveller decides — nothing is changed behind their back.
  */
+/** 2026-11-20 → «۲۹ آبان» — a date a traveller can read, not an ISO string. */
+function faDateLabel(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  try {
+    return new Intl.DateTimeFormat("fa-IR", { month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
+  } catch {
+    return "";
+  }
+}
+
 export function suggestDayOrder(days: DayToMatch[], weather: WeatherDay[]): { order: number[]; reason: string; changed: boolean } {
   if (!days.length || days.length !== weather.length) {
-    return { order: days.map((day) => day.dayNumber), reason: "", changed: false };
+    // Only the days both sides know are compared; an empty sentence on screen
+    // («reason: ""») is worse than an honest suggestion about the days we have.
+    const covered = Math.min(days.length, weather.length);
+    if (!covered) return { order: days.map((day) => day.dayNumber), reason: "", changed: false };
+    return suggestDayOrder(days.slice(0, covered), weather.slice(0, covered));
   }
   const outdoorOf = (day: DayToMatch) =>
     day.categories.length ? day.categories.reduce((sum, category) => sum + outdoorWeight(category), 0) / day.categories.length : 0.4;
@@ -368,7 +382,7 @@ export function suggestDayOrder(days: DayToMatch[], weather: WeatherDay[]): { or
   const order = datesByScore.map((_, index) => daysByOutdoor[index].dayNumber);
 
   const changed = order.some((dayNumber, index) => dayNumber !== days[index].dayNumber);
-  const bestDate = weather[order.indexOf(days[0].dayNumber)]?.date || "";
+  const bestDate = faDateLabel(weather[order.indexOf(days[0].dayNumber)]?.date || "");
   const reason = changed
     ? `پیشنهاد می‌کنیم روزهای پرگردش در فضای باز روی صاف‌ترین روزها بیفتند؛ به این ترتیب بهترین روز برای بیرون بودن «${bestDate}» است. اگر دوست ندارید، ترتیب فعلی هم درست است.`
     : "ترتیب فعلی روزها با هوای همان روزها جور است؛ پیشنهاد ویژه‌ای برای جابه‌جایی نیست.";
