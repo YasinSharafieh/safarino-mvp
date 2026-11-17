@@ -2,7 +2,6 @@
 
 import SnapshotKeeper from "@/components/SnapshotKeeper";
 import ThemeToggle from "@/components/ThemeToggle";
-import AmbientTheme from "@/components/AmbientTheme";
 import HomeDeals from "@/components/HomeDeals";
 import HomeReviews from "@/components/HomeReviews";
 
@@ -189,7 +188,6 @@ export default function HomePage() {
           </ul>
 
           <div className="flex items-center gap-2">
-            <span className="hidden sm:block"><AmbientTheme /></span>
             <ThemeToggle />
             <a href="/start" className="btn-primary hidden !px-5 !py-2.5 text-xs lg:inline-flex">
               شروع برنامه‌ریزی

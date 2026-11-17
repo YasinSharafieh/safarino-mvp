@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import CompanionAdvice from "@/components/CompanionAdvice";
 import {
   Bus,
   CalendarDays,
@@ -312,6 +313,26 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   }, [travelData.departureDate]);
 
   const legOffers = activeLeg === "return" ? returnOffers : offers;
+
+  /**
+   * The real options this list offers, for the companion's advice: one price
+   * per option, already for the whole party, so its sentence can compare them
+   * with the trip's own money.
+   */
+  const adviceOptions = legOffers
+    .map((offer: LiveOffer) => {
+      const total = totalFor(offer);
+      if (total === null) return null;
+      return {
+        id: offer.id,
+        title: offer.title,
+        priceToman: Math.round(total),
+        detail: [offer.title, formatProviderDateTime(offer.departure) || "", offer.seatsLeft ? `${offer.seatsLeft} صندلی` : ""]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    })
+    .filter((option): option is { id: string; title: string; priceToman: number; detail: string } => Boolean(option));
   const needle = normalise(query.trim());
 
   const visible = useMemo(() => {
@@ -599,6 +620,21 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       ) : null}
 
       <div className="divide-y divide-white/5">
+        {/* همسفر: یک انتخاب واقعی از میان همین بلیت‌ها، با بودجهٔ همین سفر */}
+        {adviceOptions.length ? (
+          <div className="p-3.5">
+            <CompanionAdvice
+              stage="transport"
+              options={adviceOptions}
+              ticketToman={0}
+              stayToman={Number(travelData.accommodation?.cost) || 0}
+              onPick={(id) => {
+                const picked = legOffers.find((offer) => offer.id === id);
+                if (picked) choose(picked);
+              }}
+            />
+          </div>
+        ) : null}
         {recommendation.option ? (
           <div className={`border-b p-3.5 ${recommendation.fits ? "border-emerald-400/20 bg-emerald-400/[0.05]" : "border-turquoise-400/25 bg-turquoise-400/[0.05]"}`}>
             <p className="text-[10.5px] leading-6 text-slate-300">

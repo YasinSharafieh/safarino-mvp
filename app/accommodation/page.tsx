@@ -85,6 +85,8 @@ import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
 import { bestStay } from "@/lib/budget-fit";
 import TripCostTable from "@/components/TripCostTable";
+import BudgetBar from "@/components/BudgetBar";
+import CompanionAdvice from "@/components/CompanionAdvice";
 import { ticketStayCheck } from "@/lib/ticket-timing";
 import { costTableFootnote, tripCostBreakdown } from "@/lib/trip-costs";
 import { chosenTransport } from "@/lib/transport-selection";
@@ -536,10 +538,14 @@ export default function AccommodationPage() {
                   <h1 className="mt-4 text-2xl font-black leading-tight text-white sm:text-4xl">جایی برای <span className="gradient-text">استراحت و خاطره‌سازی</span></h1>
                   <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-6 text-slate-400"><MapPin className="h-4 w-4 text-cyan-300" />مقصد: {city || travelData.destination || "انتخاب نشده"}{nights > 0 && ` · اقامت ${formatNumber(nights)} شب`} · {formatNumber(travelData.travelers + travelData.children + travelData.infants)} مسافر</p>
                 </div>
-                <label className="glass-soft block w-full p-4 lg:max-w-xs">
-                  <span className="flex items-center justify-between gap-3 text-xs text-slate-300"><span>بودجهٔ کل سفر</span><b className="text-cyan-200">{formatCompact(totalBudget)}</b></span>
-                  <input dir="ltr" type="range" min="5000000" max="100000000" step="1000000" value={totalBudget} onChange={(event) => setTravelData((current) => ({ ...current, budget: Number(event.target.value) / 1_000_000 }))} className="mt-4 w-full cursor-pointer accent-cyan-400" aria-label="بودجه کل سفر" />
-                </label>
+                <div className="w-full lg:max-w-sm">
+                  <BudgetBar
+                    itemToman={accommodationCost}
+                    itemLabel={selected ? `اقامت ${String(selected.name ?? "")}` : "این اقامتگاه"}
+                    ticketToman={transportCost}
+                    stayToman={accommodationCost}
+                  />
+                </div>
               </div>
 
               <div className="mt-7 rounded-2xl border border-white/10 bg-night-900/50 p-4 sm:p-5">
@@ -595,6 +601,29 @@ export default function AccommodationPage() {
               </div>
             </div>
           </motion.section>
+
+          {/* The companion's own pick, made over the real rooms on this page. */}
+          {groups.length ? (
+            <div className="mt-6">
+              <CompanionAdvice
+                stage="accommodation"
+                ticketToman={transportCost}
+                stayToman={0}
+                options={groups.slice(0, 14).map((group) => ({
+                  id: group.offers[0].id,
+                  title: group.offers[0].name,
+                  priceToman: group.offers[0].priceTotalToman,
+                  detail: [group.offers[0].typeLabel, group.offers[0].rating ? `امتیاز ${group.offers[0].rating}` : "", `${nights || 1} شب`]
+                    .filter(Boolean)
+                    .join(" · "),
+                }))}
+                onPick={(id) => {
+                  const offer = groups.flatMap((group) => group.offers).find((item) => item.id === id);
+                  if (offer) selectOffer(offer);
+                }}
+              />
+            </div>
+          ) : null}
 
           <section className="mt-8 text-center">
             <h2 className="text-xl font-black text-white sm:text-2xl">برای اقامت در این سفر چه برنامه‌ای داری؟</h2>

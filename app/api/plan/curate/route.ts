@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { siteUrl } from "@/lib/site";
-import { AiBudgetError, reserveAiBudget, settleAiBudget, usageCostMicros } from "@/lib/ai-budget";
+import { AiBudgetError } from "@/lib/ai-budget";
 import { getProviderCache, setProviderCache } from "@/lib/provider-cache";
 import {
   curatePrompt,
@@ -9,14 +8,12 @@ import {
   type Curation,
   type CurateInput,
 } from "@/lib/plan-ai";
+import { askJson } from "@/lib/ai-openrouter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
-const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
 const MAX_OUTPUT_TOKENS = 900;
 const CACHE_SECONDS = 43_200;
 
@@ -75,51 +72,17 @@ function extractJson(content: string): unknown {
   }
 }
 
-async function askModel(prompt: string, apiKey: string): Promise<{ raw: unknown; costMicros: number }> {
-  let lastError: unknown = null;
-  for (const model of [MODEL, FALLBACK_MODEL]) {
-    const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
-    let actual = 0;
-    try {
-      const response = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": siteUrl(),
-          "X-Title": "Safarino AI Curator",
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.35,
-          max_tokens: MAX_OUTPUT_TOKENS,
-          response_format: { type: "json_object" },
-          usage: { include: true },
-          messages: [
-            {
-              role: "system",
-              content:
-                "تو برنامه‌ریز سفر ایرانی هستی. فقط از جاذبه‌هایی که به تو داده شده استفاده می‌کنی، هیچ مکانی نمی‌سازی و هیچ قیمت یا ساعت کاری‌ای جعل نمی‌کنی. فقط JSON معتبر می‌نویسی.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(40_000),
-      });
-      if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
-      const payload = await response.json();
-      actual = usageCostMicros(model, payload?.usage);
-      const content = payload?.choices?.[0]?.message?.content;
-      if (typeof content !== "string") throw new Error("empty response");
-      return { raw: extractJson(content), costMicros: actual };
-    } catch (error) {
-      lastError = error;
-    } finally {
-      await settleAiBudget(reservation, actual);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("AI curation failed");
+async function askModel(prompt: string): Promise<{ raw: unknown }> {
+  // «چیدن برنامه» — structured ordering, cheap model first, strict token cap.
+  const raw = await askJson({
+    task: "plan",
+    title: "Safarino AI Curator",
+    maxTokens: MAX_OUTPUT_TOKENS,
+    system:
+      "تو برنامه‌ریز سفر ایرانی هستی. فقط از جاذبه‌هایی که به تو داده شده استفاده می‌کنی، هیچ مکانی نمی‌سازی و هیچ قیمت یا ساعت کاری‌ای جعل نمی‌کنی. فقط JSON معتبر می‌نویسی.",
+    prompt,
+  });
+  return { raw };
 }
 
 export async function POST(request: NextRequest) {
@@ -155,7 +118,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { raw } = await askModel(curatePrompt(input), apiKey);
+    const { raw } = await askModel(curatePrompt(input));
     const curation = sanitizeCuration(raw, input);
     if (curation.source === "ai") await setProviderCache(cacheKey, curation, CACHE_SECONDS);
     return NextResponse.json({ success: true, ...curation }, { headers: { "Cache-Control": "no-store" } });

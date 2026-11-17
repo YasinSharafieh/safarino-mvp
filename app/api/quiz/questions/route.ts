@@ -1,24 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { siteUrl } from "../../../../lib/site";
-import {
-  AiBudgetError,
-  reserveAiBudget,
-  settleAiBudget,
-  usageCostMicros,
-} from "../../../../lib/ai-budget";
+import { AiBudgetError } from "../../../../lib/ai-budget";
 import {
   questionsPrompt,
   sanitizeQuestions,
   drawQuestions,
   type AiQuestion,
 } from "../../../../lib/quiz-ai";
+import { chainFor } from "@/lib/ai-models";
+import { askJson } from "@/lib/ai-openrouter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
-const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
 // Ten four-option questions in Persian are long; a short cap truncates the
 // JSON and the whole set is lost, so the answer gets room to finish.
 const MAX_OUTPUT_TOKENS = 4800;
@@ -65,52 +58,23 @@ function topUp(written: AiQuestion[], wanted: number, seen: string[] = []): AiQu
   return out;
 }
 
-async function askModel(model: string, prompt: string, apiKey: string, seen: string[] = []) {
-  const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
-  let actualMicros = 0;
-  try {
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": siteUrl(),
-        "X-Title": "Safarino Quiz",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.85,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        response_format: { type: "json_object" },
-        usage: { include: true },
-        messages: [
-          {
-            role: "system",
-            content:
-              "تو یک مشاور سفر ایرانی هستی که سلیقهٔ مسافر را با سؤال‌های کوتاه و طبیعی می‌شناسد. فقط JSON معتبر به فارسی تولید می‌کنی و هیچ شهر یا جاذبه‌ای از خودت نمی‌سازی.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
-    const payload = await response.json();
-    actualMicros = usageCostMicros(model, payload?.usage);
-    const content = payload?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
-    const parsed = extractJson(content) as Record<string, unknown>;
-    const written = sanitizeQuestions(parsed?.questions ?? parsed, WANTED);
-    if (!written.length) throw new Error("No usable question in the answer");
-    // A model may write eight good questions and two broken ones. The good ones
-    // are kept and the local bank tops the set up to ten — the traveller always
-    // gets ten questions, and none of them is repeated.
-    const questions = topUp(written, WANTED, seen);
-    return { questions, model, costMicros: actualMicros, written: written.length };
-  } finally {
-    await settleAiBudget(reservation, actualMicros);
-  }
+async function askModel(prompt: string, seen: string[] = []) {
+  // «ساختن سؤال» — creativity matters more than price here, but the cheapest
+  // good model still wins; the local bank stays as the floor.
+  const parsed = (await askJson({
+    task: "quiz",
+    title: "Safarino Quiz",
+    maxTokens: MAX_OUTPUT_TOKENS,
+    system:
+      "تو یک مشاور سفر ایرانی هستی که سلیقهٔ مسافر را با سؤال‌های کوتاه و طبیعی می‌شناسد. فقط JSON معتبر به فارسی تولید می‌کنی و هیچ شهر یا جاذبه‌ای از خودت نمی‌سازی.",
+    prompt,
+  })) as Record<string, unknown>;
+  const written = sanitizeQuestions(parsed?.questions ?? parsed, WANTED);
+  if (!written.length) throw new Error("No usable question in the answer");
+  // A model may write eight good questions and two broken ones. The good ones
+  // are kept and the local bank tops the set up to ten — the traveller always
+  // gets ten questions, and none of them is repeated.
+  return { questions: topUp(written, WANTED, seen), written: written.length };
 }
 
 /**
@@ -144,11 +108,11 @@ export async function POST(request: NextRequest) {
   }
 
   const prompt = questionsPrompt({ origin, travellers, version: token, avoidPrompts: seen });
-  const models = Array.from(new Set([PRIMARY_MODEL, FALLBACK_MODEL]));
+  const chain = chainFor("quiz");
 
-  for (const model of models) {
+  for (const model of chain.models) {
     try {
-      const result = await askModel(model, prompt, apiKey, seen);
+      const result = await askModel(prompt, seen);
       return NextResponse.json({
         success: true,
         questions: result.questions,
@@ -157,7 +121,6 @@ export async function POST(request: NextRequest) {
           model,
           writtenByModel: result.written,
           generatedAt: new Date().toISOString(),
-          costUsd: result.costMicros / 1_000_000,
         },
       });
     } catch (caught) {

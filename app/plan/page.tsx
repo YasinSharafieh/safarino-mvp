@@ -57,6 +57,7 @@ import { chosenTransport, transportHeadline } from "@/lib/transport-selection";
 import { tripCostBreakdown, costTableFootnote } from "@/lib/trip-costs";
 import { ticketStayCheck } from "@/lib/ticket-timing";
 import TripCostTable from "@/components/TripCostTable";
+import BudgetBar from "@/components/BudgetBar";
 import { findCity } from "@/lib/discover";
 
 // The schedule lives in lib/plan-schedule so the tests can build it too.
@@ -994,7 +995,16 @@ export default function PlanPage() {
             </div>
           </section>
 
-          <section className="glass mt-8 grid gap-3 p-4 print:hidden sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-8 print:hidden">
+            <BudgetBar
+              itemToman={0}
+              itemLabel="برنامهٔ این سفر"
+              ticketToman={plan.budgetAnalysis.transport}
+              stayToman={plan.budgetAnalysis.accommodation}
+            />
+          </div>
+
+          <section className="glass mt-4 grid gap-3 p-4 print:hidden sm:grid-cols-2 lg:grid-cols-5">
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مبدأ</span><input value={origin} onChange={(event) => setOrigin(event.target.value)} className="field !py-2.5" /></label>
             <label><span className="mb-1.5 block text-[10px] text-slate-500">مقصد</span><input value={destination} onChange={(event) => setDestination(event.target.value)} className="field !py-2.5" /></label>
             <div>

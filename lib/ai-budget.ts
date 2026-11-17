@@ -1,3 +1,5 @@
+import { AI_MODELS } from "./ai-models";
+
 const MICROS_PER_DOLLAR = 1_000_000;
 const DAILY_KEY_PREFIX = "safarino:ai:daily:";
 const TOTAL_KEY = "safarino:ai:total-v1";
@@ -18,10 +20,13 @@ export type BudgetReservation = {
   micros: number;
 };
 
-const MODEL_PRICING: Record<string, ModelPricing> = {
-  "google/gemini-2.5-flash-lite": { inputPerMillion: 0.1, outputPerMillion: 0.4 },
-  "mistralai/ministral-8b-2512": { inputPerMillion: 0.15, outputPerMillion: 0.15 },
-};
+/**
+ * Prices come from `lib/ai-models`, the one table where every enabled model is
+ * declared — so a new model can never be used without its verified price.
+ */
+const MODEL_PRICING: Record<string, ModelPricing> = Object.fromEntries(
+  Object.values(AI_MODELS).map((spec) => [spec.id, { inputPerMillion: spec.inputPerMillion, outputPerMillion: spec.outputPerMillion }]),
+);
 
 export class AiBudgetError extends Error {
   constructor(

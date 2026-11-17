@@ -34,6 +34,7 @@ import { formatJalaliDate } from "@/lib/jalali";
 import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
+import BudgetBar from "@/components/BudgetBar";
 import { budgetGauge } from "@/lib/budget-gauge";
 import { pingCompanion } from "@/components/TripCompanion";
 import SiteHeader from "@/components/SiteHeader";
@@ -583,6 +584,12 @@ function TransportPageContent() {
 
           {/* ------------------------------------------------ mode + budget */}
           <div className="mt-5">
+            <BudgetBar
+              className="mb-4"
+              itemToman={activeSelection?.cost || 0}
+              itemLabel={activeSelection ? `بلیت ${selectedName}` : "بلیت این سفر"}
+              ticketToman={activeSelection?.cost || 0}
+            />
             <ModeChooser
               mode={mode}
               onChoose={chooseMode}

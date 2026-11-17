@@ -45,7 +45,9 @@ export default function TripCompanion() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<{ text: string; source: "ai" | "local"; note?: string } | null>(null);
   const [asking, setAsking] = useState(false);
-  const [asksLeft, setAsksLeft] = useState(8);
+  const [asksLeft, setAsksLeft] = useState(999);
+  /** A short, self-retiring line next to the orb — never a panel over the page. */
+  const [bubble, setBubble] = useState("");
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   const transport = useMemo(() => chosenTransport(travelData.transport), [travelData.transport]);
@@ -118,17 +120,28 @@ export default function TripCompanion() {
   const gauge = useMemo(() => companionGauge(context), [context]);
   const urgent = tips.find((tip) => tip.tone === "alert" || tip.tone === "warn") || tips[0];
 
-  // A page can ask the orb to speak about something specific.
+  /**
+   * A page can ask the orb to *say* something — but it never takes the screen.
+   * The traveller is choosing a ticket; a panel opening on top of the list is
+   * exactly the behaviour that made the site feel noisy. So the orb only lifts
+   * a small bubble beside itself, and the panel opens when they tap it.
+   */
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ tipId?: string }>).detail;
-      setOpen(true);
+      setBubble(detail?.tipId || "auto");
       setHidden(false);
-      if (detail?.tipId) setTipAsking(detail.tipId);
     };
     window.addEventListener(COMPANION_EVENT, handler);
+    // The bubble retires on its own so it never becomes permanent furniture.
     return () => window.removeEventListener(COMPANION_EVENT, handler);
   }, []);
+
+  useEffect(() => {
+    if (!bubble) return;
+    const timer = window.setTimeout(() => setBubble(""), 14_000);
+    return () => window.clearTimeout(timer);
+  }, [bubble]);
 
   const askAi = useCallback(
     async (tipId: string) => {
@@ -207,9 +220,9 @@ export default function TripCompanion() {
     try {
       const key = `safarino:asks:${new Date().toISOString().slice(0, 10)}`;
       const used = Number(window.localStorage.getItem(key) || 0);
-      setAsksLeft(Math.max(0, 8 - used));
+      setAsksLeft(Math.max(0, 20 - used));
     } catch {
-      setAsksLeft(8);
+      setAsksLeft(20);
     }
   }, []);
 
@@ -233,7 +246,7 @@ export default function TripCompanion() {
             const key = `safarino:asks:${new Date().toISOString().slice(0, 10)}`;
             const used = Number(window.localStorage.getItem(key) || 0) + 1;
             window.localStorage.setItem(key, String(used));
-            setAsksLeft(Math.max(0, 8 - used));
+            setAsksLeft(Math.max(0, 20 - used));
           } catch {
             // The answer is already on screen.
           }
@@ -309,7 +322,7 @@ export default function TripCompanion() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <b className="text-[10.5px] font-black text-violet-100">از همسفر بپرس</b>
-                  <span className="text-[8.5px] text-violet-200/60">{new Intl.NumberFormat("fa-IR").format(asksLeft)} سؤال امروز</span>
+                  <span className="text-[8.5px] text-violet-200/60">هر چند تا بخواهی بپرس</span>
                 </div>
                 <div className="mt-1.5 flex gap-1.5">
                   <input
@@ -317,22 +330,18 @@ export default function TripCompanion() {
                     onChange={(event) => setQuestion(event.target.value)}
                     placeholder="مثلاً: در اصفهان چه غذایی را از دست ندهم؟"
                     aria-label="سؤال از همسفر سفرینو"
-                    disabled={asksLeft <= 0}
                     className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1.5 text-[10px] text-white outline-none placeholder:text-slate-600 focus:border-violet-400/50 disabled:opacity-50"
                   />
                   <button
                     type="submit"
-                    disabled={asking || question.trim().length < 3 || asksLeft <= 0}
+                    disabled={asking || question.trim().length < 3}
                     aria-label="بفرست"
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-500 text-white transition hover:bg-violet-400 disabled:opacity-50"
                   >
                     {asking ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                {asksLeft <= 0 ? (
-                  <p className="mt-1 text-[8.5px] text-amber-200/80">سهم پرسش‌های امروز تمام شد؛ فردا دوباره باز می‌شود.</p>
-                ) : (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                <div className="mt-1.5 flex flex-wrap gap-1">
                     {ASK_EXAMPLES.slice(0, 3).map((example) => (
                       <button
                         key={example}
@@ -346,8 +355,7 @@ export default function TripCompanion() {
                         {example}
                       </button>
                     ))}
-                  </div>
-                )}
+                </div>
                 {answer ? (
                   <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/50 p-2">
                     <p className="text-[10px] leading-6 text-slate-200">{answer.text}</p>
@@ -398,6 +406,34 @@ export default function TripCompanion() {
               </p>
             </div>
           </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {/* A short suggestion beside the orb — the traveller can ignore it and
+          nothing is covered. The full panel only opens on a tap. */}
+      <AnimatePresence>
+        {bubble && !open ? (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.97 }}
+            onClick={() => {
+              setOpen(true);
+              setBubble("");
+            }}
+            className="mb-2 block w-[min(78vw,270px)] rounded-2xl border border-violet-300/30 bg-[#160c2c]/95 p-2.5 text-right shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur"
+            aria-label="پیشنهاد همسفر"
+          >
+            <span className="flex items-center gap-1.5 text-[10px] font-black text-violet-100">
+              <Sparkles className="h-3 w-3" />
+              {urgent?.title || "یک نکته برای این سفر"}
+            </span>
+            <span className="mt-1 block text-[9.5px] leading-5 text-slate-300">
+              {(urgent?.body || "بودجه و انتخاب‌هایت را با هم می‌سنجم؛ بزن تا بگویم.").slice(0, 130)}…
+            </span>
+            <span className="mt-1 block text-[8.5px] font-bold text-cyan-200">بزن تا کامل توضیح بدهم →</span>
+          </motion.button>
         ) : null}
       </AnimatePresence>
 

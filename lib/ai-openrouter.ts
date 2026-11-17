@@ -9,10 +9,9 @@
 
 import { siteUrl } from "./site";
 import { reserveAiBudget, settleAiBudget, usageCostMicros } from "./ai-budget";
+import { chainFor, modelSpec, type AiTask } from "./ai-models";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
-const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
 
 export type AskJsonOptions = {
   system: string;
@@ -21,6 +20,14 @@ export type AskJsonOptions = {
   temperature?: number;
   title?: string;
   timeoutMs?: number;
+  /**
+   * Which job this is. The task decides the model chain and the token ceiling,
+   * so a cheap question never pays for an expensive model and a hard call is
+   * never answered by the smallest one.
+   */
+  task?: AiTask;
+  /** A photo the model has to read (a ticket, a receipt). Base64, no data: prefix. */
+  image?: { dataUrl: string; mime?: string };
 };
 
 export function extractJson(content: string): unknown {
@@ -39,10 +46,16 @@ export function extractJson(content: string): unknown {
 export async function askJson(options: AskJsonOptions): Promise<unknown> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
-  const maxTokens = options.maxTokens ?? 700;
+  const chain = chainFor(options.task || "chat");
+  const maxTokens = Math.min(options.maxTokens ?? chain.maxTokens, chain.maxTokens);
+  const temperature = options.temperature ?? chain.temperature;
+  const models = options.image
+    ? chain.models.filter((id) => modelSpec(id)?.vision)
+    : chain.models;
+  const attemptModels = models.length ? models : ["google/gemini-2.5-flash-lite"];
   let lastError: unknown = null;
 
-  for (const model of [MODEL, FALLBACK_MODEL]) {
+  for (const model of attemptModels) {
     const reservation = await reserveAiBudget(model, options.prompt, maxTokens);
     let actual = 0;
     try {
@@ -56,13 +69,21 @@ export async function askJson(options: AskJsonOptions): Promise<unknown> {
         },
         body: JSON.stringify({
           model,
-          temperature: options.temperature ?? 0.4,
+          temperature,
           max_tokens: maxTokens,
           response_format: { type: "json_object" },
           usage: { include: true },
           messages: [
             { role: "system", content: options.system },
-            { role: "user", content: options.prompt },
+            {
+              role: "user",
+              content: options.image
+                ? [
+                    { type: "text", text: options.prompt },
+                    { type: "image_url", image_url: { url: options.image.dataUrl } },
+                  ]
+                : options.prompt,
+            },
           ],
         }),
         cache: "no-store",

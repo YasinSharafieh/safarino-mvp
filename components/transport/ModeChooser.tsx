@@ -81,7 +81,7 @@ export default function ModeChooser({ mode, onChoose, budgetMillions, onBudget, 
         <div>
           <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
             <Wallet className="h-3.5 w-3.5 text-cyan-300" />
-            بودجهٔ سفر برای هر نفر
+            بودجهٔ کل سفر (همهٔ نفرات)
           </span>
           <div className="flex flex-wrap gap-1.5">
             {BUDGETS.map((value) => (

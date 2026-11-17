@@ -187,6 +187,39 @@ saveChecklist({ done: ["id-card"], custom: [] }, memory, tripA);
 check("a tick stays inside its own trip", readChecklist(memory, tripA).done.includes("id-card"));
 check("the next trip starts clean", readChecklist(memory, tripB).done.length === 0);
 
+console.log("۳۳ — بودجهٔ کلی، آلارم کمبود و مدل‌های هر وظیفه");
+import { affordabilityOf, budgetChange, clampBudgetMillions } from "../lib/budget-control";
+import { TASK_CHAINS, chainFor, estimateTaskCostUsd } from "../lib/ai-models";
+import { adviceLocally } from "../lib/ai-advice";
+
+check("the budget cannot go below the floor", clampBudgetMillions(1) === 5);
+check("the budget cannot run away", clampBudgetMillions(900) === 500);
+check("a change is described with real amounts", budgetChange(40, 60).message.includes("۲۰٬۰۰۰٬۰۰۰"));
+const tight = affordabilityOf({ totalBudgetToman: 20_000_000, travellers: 3, days: 3, city: "کیش", itemToman: 9_000_000, itemLabel: "بلیت هواپیما" });
+check("a ticket that does not fit is called out", tight.fits === false && tight.tone === "over");
+check("and the shortfall is a real number", tight.shortfallToman > 0, String(tight.shortfallToman));
+check("and the budget that would fix it is offered", tight.neededBudgetMillions >= 20);
+check("the alarm sentence names the party size", tight.detail.includes("۳ نفر"));
+const roomy = affordabilityOf({ totalBudgetToman: 120_000_000, travellers: 2, days: 3, city: "کیش", itemToman: 4_000_000, itemLabel: "بلیت هواپیما" });
+check("the same ticket fits a bigger budget", roomy.fits === true && roomy.tone === "fits");
+
+check("every task has a model chain", (Object.keys(TASK_CHAINS) as string[]).every((task) => chainFor(task as never).models.length >= 2));
+check("the cheap model handles small talk", chainFor("chat").models[0].includes("flash-lite"));
+check("the better prose model writes the day guide", chainFor("write").models[0].includes("llama-3.3-70b"));
+check("the vision task only allows vision models", chainFor("vision").models[0].includes("gemini-2.5-flash-lite"));
+check("one chat call costs far less than a cent", estimateTaskCostUsd("chat", 1600) < 0.01);
+
+const adviceOptions = [
+  { id: "a", title: "اتوبوس", priceToman: 2_400_000 },
+  { id: "b", title: "قطار", priceToman: 4_800_000 },
+  { id: "c", title: "هواپیما", priceToman: 12_000_000 },
+];
+const poorFacts = { stage: "transport" as const, origin: "تهران", destination: "مشهد", days: 3, travellers: 2, children: 0, budgetToman: 18_000_000, committedToman: 0, dailyToman: 9_000_000 };
+const richFacts = { ...poorFacts, budgetToman: 90_000_000 };
+check("a tight budget gets the cheaper option", adviceLocally(poorFacts, adviceOptions).optionId === "a");
+check("a generous budget is not forced onto the cheapest", adviceLocally(richFacts, adviceOptions).optionId !== "a", adviceLocally(richFacts, adviceOptions).optionId || "none");
+check("when nothing fits, the cheapest is named with the gap", adviceLocally({ ...poorFacts, budgetToman: 10_000_000 }, adviceOptions).tone === "over");
+
 console.log(failures ? `\n❌ ${failures} بررسی شکست خورد` : "\n✅ round 33: budget, rooms, timings, text and per-trip lists all pass");
 process.exit(failures ? 1 : 0);
 
@@ -198,3 +231,4 @@ check("the sentence adds all five rows", sentence.includes("۱۲۰٬۰۰۰") || 
 check("the sentence states the leftover", sentence.includes(new Intl.NumberFormat("fa-IR").format(Math.abs(sync.remaining))));
 check("a model sentence with numbers is thrown away", withoutNumbers("حدود ۷۵ میلیون برای غذا باقی می‌ماند", "خودمان") === "خودمان");
 check("a model sentence without numbers is kept", withoutNumbers("چیدمان نزدیک به اقامتگاه است", "خودمان").includes("اقامتگاه"));
+

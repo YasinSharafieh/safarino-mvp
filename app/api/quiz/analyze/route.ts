@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { siteUrl } from "../../../../lib/site";
-import {
-  AiBudgetError,
-  reserveAiBudget,
-  settleAiBudget,
-  usageCostMicros,
-} from "../../../../lib/ai-budget";
+import { AiBudgetError } from "../../../../lib/ai-budget";
 import {
   analysisPrompt,
   localAnalysis,
@@ -13,13 +7,12 @@ import {
   type AiAnalysis,
 } from "../../../../lib/quiz-ai";
 import { drawQuestions, type QuizAnswers, type QuizQuestion } from "../../../../lib/start-flow";
+import { chainFor } from "@/lib/ai-models";
+import { askJson } from "@/lib/ai-openrouter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
-const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL || "mistralai/ministral-8b-2512";
 const MAX_OUTPUT_TOKENS = 1200;
 
 function extractJson(content: string): unknown {
@@ -64,45 +57,17 @@ function questionsFromClient(raw: unknown): QuizQuestion[] {
   return out.slice(0, 20);
 }
 
-async function askModel(model: string, prompt: string, apiKey: string) {
-  const reservation = await reserveAiBudget(model, prompt, MAX_OUTPUT_TOKENS);
-  let actualMicros = 0;
-  try {
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": siteUrl(),
-        "X-Title": "Safarino Quiz Analysis",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.5,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        response_format: { type: "json_object" },
-        usage: { include: true },
-        messages: [
-          {
-            role: "system",
-            content:
-              "تو یک مشاور سفر ایرانی هستی. فقط از فهرست شهرهای داده‌شده انتخاب می‌کنی، قیمت و جاذبه از خودت نمی‌سازی، و فقط JSON معتبر می‌دهی.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(35_000),
-    });
-    if (!response.ok) throw new Error(`OpenRouter ${model} returned ${response.status}`);
-    const payload = await response.json();
-    actualMicros = usageCostMicros(model, payload?.usage);
-    const content = payload?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") throw new Error("OpenRouter returned an empty response");
-    return { raw: extractJson(content), model, costMicros: actualMicros };
-  } finally {
-    await settleAiBudget(reservation, actualMicros);
-  }
+async function askModel(prompt: string) {
+  // «پیشنهاد با دلیل» — a small structured answer that must never invent a city.
+  const raw = await askJson({
+    task: "suggest",
+    title: "Safarino Quiz Analysis",
+    maxTokens: MAX_OUTPUT_TOKENS,
+    system:
+      "تو یک مشاور سفر ایرانی هستی. فقط از فهرست شهرهای داده‌شده انتخاب می‌کنی، قیمت و جاذبه از خودت نمی‌سازی، و فقط JSON معتبر می‌دهی.",
+    prompt,
+  });
+  return { raw };
 }
 
 /**
@@ -157,16 +122,16 @@ export async function POST(request: NextRequest) {
     }));
 
   const prompt = analysisPrompt({ origin, travellers, budgetMillions, days, freeText, answers: answered });
-  const models = Array.from(new Set([PRIMARY_MODEL, FALLBACK_MODEL]));
+  const chain = chainFor("suggest");
 
-  for (const model of models) {
+  for (const model of chain.models) {
     try {
-      const result = await askModel(model, prompt, apiKey);
+      const result = await askModel(prompt);
       const analysis = sanitizeAnalysis(result.raw, { budgetMillions, travellers, origin, fallback });
       return NextResponse.json({
         success: true,
         analysis,
-        meta: { model, generatedAt: new Date().toISOString(), costUsd: result.costMicros / 1_000_000 },
+        meta: { model, generatedAt: new Date().toISOString() },
       });
     } catch (caught) {
       if (caught instanceof AiBudgetError) {
