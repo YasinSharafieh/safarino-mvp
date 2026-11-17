@@ -150,13 +150,17 @@ export function parseTripSentence(input: string): ParsedTrip {
  * sentence revealed. A model may only answer with a name from this list.
  */
 export function candidateCities(moods: string[], limit = 8): DiscoverCity[] {
+  // With no taste to go on, the curated, most-visited cities come first — a
+  // family that typed nothing about taste should not be sent to a random short
+  // name just because it sorts first.
+  if (!moods.length) return DISCOVER_CITIES.slice(0, limit);
   const scored = DISCOVER_CITIES.map((city) => {
     const hits = city.moods.filter((mood) => moods.includes(mood)).length;
     const bestForHits = city.bestFor.filter((item) => moods.some((mood) => item.includes(mood))).length;
     return { city, score: hits * 2 + bestForHits };
   }).sort((a, b) => b.score - a.score || a.city.name.length - b.city.name.length);
   const positive = scored.filter((entry) => entry.score > 0);
-  return (positive.length ? positive : scored).slice(0, limit).map((entry) => entry.city);
+  return (positive.length ? positive : DISCOVER_CITIES.map((city) => ({ city, score: 0 }))).slice(0, limit).map((entry) => entry.city);
 }
 
 export function destinationPrompt(parsed: ParsedTrip, candidates: DiscoverCity[]): string {
@@ -185,15 +189,19 @@ export type OneClickPlan = {
 };
 
 export function localProposal(parsed: ParsedTrip, fallbackOrigin: string): OneClickPlan {
-  const candidates = candidateCities(parsed.moods);
-  const chosen = candidates[0];
+  const origin = parsed.origin || fallbackOrigin || "تهران";
+  // A trip to the city you are already in is not a suggestion.
+  const candidates = candidateCities(parsed.moods).filter((city) => city.name !== origin);
+  const pool = candidates.length ? candidates : candidateCities(parsed.moods, 12).filter((city) => city.name !== origin);
+  const chosen = pool[0] || candidateCities(parsed.moods)[0];
   const assumed: string[] = [];
   if (!parsed.days) assumed.push("مدت را ۳ روز گذاشتم.");
   if (!parsed.travelers) assumed.push("تعداد نفرات را ۲ نفر گذاشتم.");
   if (!parsed.budgetMillions) assumed.push("بودجه را ۲۰ میلیون تومان گذاشتم.");
+  if (!parsed.destination) assumed.push(`مقصد را از میان شهرهای واقعی «${chosen.name}» گذاشتم.`);
   const budget = Math.min(MAX_BUDGET_MILLIONS, Math.max(MIN_BUDGET_MILLIONS, parsed.budgetMillions || 20));
   return {
-    origin: parsed.origin || fallbackOrigin || "تهران",
+    origin,
     destination: parsed.destination || chosen.name,
     days: Math.max(1, Math.min(21, parsed.days || chosen.suggestedDays || 3)),
     travelers: Math.max(1, Math.min(12, parsed.travelers || 2)),

@@ -248,6 +248,7 @@ check("the taste words are read", withCity.moods.includes("ساحلی"));
 
 const proposal = localProposal(parseTripSentence("۱۰ روز، ۸۰ میلیون، از مشهد"), "تهران");
 check("a missing city comes from the real list", candidateCities([]).some((city) => city.name === proposal.destination));
+check("the suggestion is never the origin city itself", proposal.destination !== proposal.origin);
 check("nothing is left empty", proposal.days >= 1 && proposal.travelers >= 1 && proposal.budgetMillions >= 5);
 const accepted = acceptProposal({ destination: "پاریس", days: 4, reason: "شهر خوبی است برای گردش و تفریح" }, withCity, proposal);
 check("a destination the traveller named is never overridden", accepted.destination === proposal.destination || accepted.source === "local");
