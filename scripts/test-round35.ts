@@ -10,6 +10,7 @@
 import { normalizeDigits, numbersIn, collectTruth, verifyAnswer, verifyNames } from "../lib/ai-verify";
 import { AGENT_TOOL_NAMES, runAgentTool, type AgentFacts } from "../lib/ai-agent";
 import { chainFor, estimateTaskCostUsd } from "../lib/ai-models";
+import { normalizeTicketReading } from "../lib/ai-vision";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -75,6 +76,33 @@ check("the destination tool quotes our own profile only", placeTool.ok && placeT
 
 const ticketTool = await runAgentTool("tickets", { mode: "train" }, { ...facts, departureDate: null });
 check("without a date no ticket is invented", !ticketTool.ok && ticketTool.summary.includes("تاریخ"));
+
+const justRead = normalizeTicketReading({
+  mode: "train",
+  origin: "تهران",
+  destination: "مشهد",
+  date_iso: "2026-12-05",
+  departure_time: "8:30",
+  company: "رجا",
+  price: "۱٬۲۵۰٬۰۰۰",
+  unread: [],
+});
+check("a photo is read into real trip facts", justRead.ok && justRead.fields.origin === "تهران" && justRead.fields.date === "2026-12-05");
+check("the price is read as a number", justRead.fields.priceToman === 1_250_000, String(justRead.fields.priceToman));
+check("the time is padded to a real clock", justRead.fields.departureTime === "08:30");
+
+const jalaliRead = normalizeTicketReading({ mode: "bus", origin: "تهران", destination: "اصفهان", date_jalali: "1405-09-14" });
+check("a Jalali date on the ticket is converted exactly", jalaliRead.ok && /^\d{4}-\d{2}-\d{2}$/.test(jalaliRead.fields.date || ""), String(jalaliRead.fields.date));
+
+const wrongCity = normalizeTicketReading({ mode: "plane", origin: "تهران", destination: "پاریس", date_iso: "2026-12-05", unread: [] });
+check("a city we do not serve is refused, not accepted", wrongCity.fields.destination === null && !wrongCity.ok);
+check("and it says what could not be read", wrongCity.unread.includes("شهر مقصد"));
+
+const pastRead = normalizeTicketReading({ mode: "plane", origin: "تهران", destination: "کیش", date_iso: "2020-01-01" });
+check("a past date is not silently used", pastRead.fields.date === null);
+
+const partial = normalizeTicketReading({ company: "ماهان", price: "900000" });
+check("an unreadable ticket still returns what was real", !partial.ok && partial.fields.company === "ماهان" && partial.unread.length >= 3);
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);

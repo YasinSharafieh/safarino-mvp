@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Compass, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Camera, Compass, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { formatJalaliDate } from "@/lib/jalali";
 import { useTravel } from "@/app/context/TravelContext";
 import { chosenTransport } from "@/lib/transport-selection";
 import { COMPANION_EVENT, companionGauge, companionTips, type CompanionContext, type CompanionTip } from "@/lib/companion";
@@ -52,6 +53,22 @@ export default function TripCompanion() {
   } | null>(null);
   const [asking, setAsking] = useState(false);
   const [asksLeft, setAsksLeft] = useState(999);
+  const [ticketBusy, setTicketBusy] = useState(false);
+  const [ticketRead, setTicketRead] = useState<{
+    fields: {
+      mode: "plane" | "train" | "bus" | null;
+      origin: string | null;
+      destination: string | null;
+      date: string | null;
+      departureTime: string | null;
+      company: string | null;
+      priceToman: number | null;
+      reference: string | null;
+    };
+    unread: string[];
+    note: string;
+  } | null>(null);
+  const [ticketError, setTicketError] = useState("");
   /** A short, self-retiring line next to the orb — never a panel over the page. */
   const [bubble, setBubble] = useState("");
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -232,6 +249,70 @@ export default function TripCompanion() {
     }
   }, []);
 
+  /**
+   * A ticket photo is shrunk on the device before it is uploaded: a 4 MB phone
+   * screenshot becomes a small JPEG, which keeps the paid tokens (and the
+   * traveller's data plan) honest.
+   */
+  const readTicket = useCallback(async (file: File) => {
+    setTicketError("");
+    setTicketRead(null);
+    setTicketBusy(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(file);
+      });
+      const shrunk = await new Promise<string>((resolve) => {
+        const image = new window.Image();
+        image.onload = () => {
+          const maxSide = 1400;
+          const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+          const context = canvas.getContext("2d");
+          if (!context) {
+            resolve(dataUrl);
+            return;
+          }
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          try {
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          } catch {
+            resolve(dataUrl);
+          }
+        };
+        image.onerror = () => resolve(dataUrl);
+        image.src = dataUrl;
+      });
+      const response = await fetch("/api/companion/read-ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(35_000),
+        body: JSON.stringify({ image: shrunk }),
+      });
+      const payload = (await response.json()) as {
+        success?: boolean;
+        fields?: NonNullable<typeof ticketRead>["fields"];
+        unread?: string[];
+        note?: string;
+        error?: string;
+      };
+      if (payload.success && payload.fields) {
+        setTicketRead({ fields: payload.fields, unread: payload.unread || [], note: payload.note || "" });
+      } else {
+        setTicketError(payload.error || "این تصویر خوانده نشد.");
+      }
+    } catch {
+      setTicketError("عکس خوانده نشد؛ یک بار دیگر امتحان کن.");
+    } finally {
+      setTicketBusy(false);
+    }
+  }, []);
+
   const ask = useCallback(
     async (text: string) => {
       const clean = text.trim();
@@ -334,6 +415,87 @@ export default function TripCompanion() {
                   هم حساب‌وکتاب همین سفر را دارم و هم می‌توانم از خودِ {travelData.destination || "مقصد"} بگویم: غذا، آداب، دیدنی‌ها و بهترین فصل سفر.
                 </p>
               </div>
+              {/* «عکس بلیت را بخوان» — the companion's eyes. */}
+              <div className="rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <b className="text-[10.5px] font-black text-cyan-100">عکس بلیت را بخوان</b>
+                  <span className="text-[8.5px] text-cyan-200/60">مبدأ، مقصد و تاریخ را خودم می‌گذارم</span>
+                </div>
+                <label className="mt-1.5 flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-cyan-300/35 bg-slate-950/40 px-2 py-2 text-[9.5px] font-bold text-cyan-100 transition hover:bg-cyan-400/10">
+                  {ticketBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                  {ticketBusy ? "دارم می‌خوانم…" : "انتخاب عکس بلیت یا اسکرین‌شات"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void readTicket(file);
+                    }}
+                  />
+                </label>
+                {ticketError ? <p className="mt-1 text-[8.5px] text-rose-200">{ticketError}</p> : null}
+                {ticketRead ? (
+                  <div className="mt-1.5 rounded-lg border border-white/10 bg-slate-950/50 p-1.5">
+                    <ul className="space-y-0.5 text-[9px] text-slate-300">
+                      <li>
+                        <b className="text-slate-400">مسیر: </b>
+                        {ticketRead.fields.origin || "—"} → {ticketRead.fields.destination || "—"}
+                      </li>
+                      <li>
+                        <b className="text-slate-400">تاریخ: </b>
+                        {ticketRead.fields.date ? formatJalaliDate(ticketRead.fields.date) : "خوانده نشد"}
+                        {ticketRead.fields.departureTime ? ` · ساعت ${ticketRead.fields.departureTime}` : ""}
+                      </li>
+                      {ticketRead.fields.company ? (
+                        <li>
+                          <b className="text-slate-400">شرکت: </b>
+                          {ticketRead.fields.company}
+                        </li>
+                      ) : null}
+                      {ticketRead.fields.priceToman ? (
+                        <li>
+                          <b className="text-slate-400">مبلغ: </b>
+                          {new Intl.NumberFormat("fa-IR").format(ticketRead.fields.priceToman)} تومان
+                        </li>
+                      ) : null}
+                      {ticketRead.unread.length ? (
+                        <li className="text-amber-200/80">خوانده نشد: {ticketRead.unread.join("، ")}</li>
+                      ) : null}
+                    </ul>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        disabled={!ticketRead.fields.origin || !ticketRead.fields.destination}
+                        onClick={() => {
+                          setTravelData((current) => ({
+                            ...current,
+                            origin: ticketRead.fields.origin || current.origin,
+                            destination: ticketRead.fields.destination || current.destination,
+                            departureDate: ticketRead.fields.date || current.departureDate,
+                            preferredMode: ticketRead.fields.mode || current.preferredMode,
+                          }));
+                          setTicketRead(null);
+                          setBubble("بلیت خوانده شد؛ سفر را با همین اطلاعات پر کردم.");
+                        }}
+                        className="rounded-lg bg-cyan-500 px-2 py-1 text-[9px] font-black text-slate-950 transition hover:bg-cyan-400 disabled:opacity-40"
+                      >
+                        در سفر بگذار
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTicketRead(null)}
+                        className="rounded-lg border border-white/10 px-2 py-1 text-[9px] text-slate-300 transition hover:bg-white/[0.06]"
+                      >
+                        نه، خودم می‌نویسم
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[8px] text-slate-500">{ticketRead.note}</p>
+                  </div>
+                ) : null}
+              </div>
+
               {/* «از همسفر بپرس» — a real question, answered from the trip's own numbers. */}
               <form
                 className="rounded-2xl border border-violet-400/25 bg-violet-400/[0.07] p-2.5"
