@@ -171,7 +171,7 @@ const probes: Probe[] = [
       ],
     },
     expect: "یک پیشنهاد با شناسهٔ واقعی",
-    ok: (p, s) => s === 200 && p?.success === true && (typeof p?.advice?.text === "string" || typeof p?.advice === "string"),
+    ok: (p, s) => s === 200 && p?.success === true && Boolean(p?.advice?.optionId) && (typeof p?.advice?.reason === "string" || typeof p?.advice?.text === "string"),
   },
 ];
 
