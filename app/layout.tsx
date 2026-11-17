@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { TravelProvider } from "./context/TravelContext";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import TripCompanion from "@/components/TripCompanion";
+import TripStatus from "@/components/TripStatus";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -79,6 +80,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">
         <ServiceWorkerRegistrar />
         <TravelProvider>
+          {/* «کجای سفری؟» — one bar, on every phase, built from the shared trip. */}
+          <TripStatus />
           {children}
           {/* The orb lives outside every page, so it follows the traveller everywhere. */}
           <TripCompanion />

@@ -166,6 +166,14 @@ export const CAPABILITIES: Capability[] = [
     phases: ["start"],
   },
   {
+    id: "trip-status",
+    label: "وضعیت سفر: کجایی، چه چیزی انتخاب کرده‌ای، قدم بعدی چیست",
+    markers: ["TripStatus"],
+    phases: "all",
+    global: true,
+    note: "در layout سراسری نصب است؛ روی نسخهٔ چاپی، خوانندهٔ آفلاین و لینک اشتراکیِ کسی دیگر خودش را نشان نمی‌دهد.",
+  },
+  {
     id: "page-identity",
     label: "هر صفحه عنوان و توضیح خودش را دارد (تب، جست‌وجو، پیش‌نمایش لینک)",
     markers: ["metadata", "Metadata", "generateMetadata"],
