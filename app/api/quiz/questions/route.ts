@@ -58,13 +58,39 @@ function topUp(written: AiQuestion[], wanted: number, seen: string[] = []): AiQu
   return out;
 }
 
-async function askModel(prompt: string, seen: string[] = []) {
+/**
+ * How long a traveller may wait for written questions before the real question
+ * bank answers instead. Twelve seconds is enough for a normal answer and short
+ * enough that nobody sits in front of a spinner: the sweep on the live site
+ * measured ۴۳ seconds before this limit existed.
+ */
+const DEADLINE_MS = 12_000;
+
+/** A promise that resolves, or rejects when the clock runs out. */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("QUIZ_DEADLINE")), Math.max(500, ms));
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function askModel(prompt: string, seen: string[] = [], timeoutMs = 10_000) {
   // «ساختن سؤال» — creativity matters more than price here, but the cheapest
   // good model still wins; the local bank stays as the floor.
   const parsed = (await askJson({
     task: "quiz",
     title: "Safarino Quiz",
     maxTokens: MAX_OUTPUT_TOKENS,
+    timeoutMs,
     system:
       "تو یک مشاور سفر ایرانی هستی که سلیقهٔ مسافر را با سؤال‌های کوتاه و طبیعی می‌شناسد. فقط JSON معتبر به فارسی تولید می‌کنی و هیچ شهر یا جاذبه‌ای از خودت نمی‌سازی.",
     prompt,
@@ -109,32 +135,43 @@ export async function POST(request: NextRequest) {
 
   const prompt = questionsPrompt({ origin, travellers, version: token, avoidPrompts: seen });
   const chain = chainFor("quiz");
+  const startedAt = Date.now();
 
-  for (const model of chain.models) {
-    try {
-      const result = await askModel(prompt, seen);
+  /*
+   * One attempt, on the task's own chain (askJson already falls back between
+   * models), and never past the deadline. Before this, a slow model could hold
+   * the page for most of a minute — the questions themselves are not worth it,
+   * because the local bank is real, varied and instant.
+   */
+  try {
+    const result = await withDeadline(askModel(prompt, seen, DEADLINE_MS - 2_000), DEADLINE_MS);
+    return NextResponse.json({
+      success: true,
+      questions: result.questions,
+      source: "ai",
+      meta: {
+        model: chain.models[0],
+        writtenByModel: result.written,
+        generatedAt: new Date().toISOString(),
+        ms: Date.now() - startedAt,
+      },
+    });
+  } catch (caught) {
+    if (caught instanceof AiBudgetError) {
+      // The $10 must last: stop asking the model, use the real question bank.
       return NextResponse.json({
         success: true,
-        questions: result.questions,
-        source: "ai",
-        meta: {
-          model,
-          writtenByModel: result.written,
-          generatedAt: new Date().toISOString(),
-        },
+        ...fallback(),
+        note: "سهم هوش مصنوعی این ماه تمام شده؛ سؤال‌ها از بانک داخلی سفرینو انتخاب شدند و همهٔ گزینه‌ها واقعی‌اند.",
       });
-    } catch (caught) {
-      if (caught instanceof AiBudgetError) {
-        // The $10 must last: stop asking the model, use the real question bank.
-        return NextResponse.json({
-          success: true,
-          ...fallback(),
-          note: "سهم هوش مصنوعی این ماه تمام شده؛ سؤال‌ها از بانک داخلی سفرینو انتخاب شدند و همهٔ گزینه‌ها واقعی‌اند.",
-        });
-      }
-      // Otherwise try the fallback model, then the local bank.
     }
+    return NextResponse.json({
+      success: true,
+      ...fallback(),
+      note:
+        caught instanceof Error && caught.message === "QUIZ_DEADLINE"
+          ? "سؤال‌ها دیر آماده می‌شدند؛ برای اینکه معطل نمانی، از بانک سؤال خود سفرینو انتخاب شدند."
+          : undefined,
+    });
   }
-
-  return NextResponse.json({ success: true, ...fallback() });
 }

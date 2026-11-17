@@ -53,7 +53,6 @@ export default function TripCompanion() {
     action?: { kind: "budget"; millions: number; label: string } | null;
   } | null>(null);
   const [asking, setAsking] = useState(false);
-  const [asksLeft, setAsksLeft] = useState(999);
   const [ticketBusy, setTicketBusy] = useState(false);
   const [ticketRead, setTicketRead] = useState<{
     fields: {
@@ -238,17 +237,12 @@ export default function TripCompanion() {
     };
   }, [people, stayCost, transport, travelData.accommodation, travelData.budget, travelData.children, travelData.days, travelData.departureDate, travelData.destination, travelData.origin, weather]);
 
-  // A small daily allowance per browser, so one person cannot spend the shared
-  // credit by holding the button down.
-  useEffect(() => {
-    try {
-      const key = `safarino:asks:${new Date().toISOString().slice(0, 10)}`;
-      const used = Number(window.localStorage.getItem(key) || 0);
-      setAsksLeft(Math.max(0, 20 - used));
-    } catch {
-      setAsksLeft(20);
-    }
-  }, []);
+  /*
+   * There is no per-browser question limit: the owner's rule is «سؤال نامحدود»,
+   * and the real guard is the server's own AI budget (`lib/ai-budget.ts`), which
+   * caps the money rather than the traveller. A local counter used to be kept and
+   * nothing ever read it — dead machinery that could only mislead later.
+   */
 
   /**
    * A ticket photo is shrunk on the device before it is uploaded: a 4 MB phone
@@ -346,14 +340,6 @@ export default function TripCompanion() {
             steps: payload.steps || [],
             action: payload.action || null,
           });
-          try {
-            const key = `safarino:asks:${new Date().toISOString().slice(0, 10)}`;
-            const used = Number(window.localStorage.getItem(key) || 0) + 1;
-            window.localStorage.setItem(key, String(used));
-            setAsksLeft(Math.max(0, 20 - used));
-          } catch {
-            // The answer is already on screen.
-          }
         } else {
           setAnswer({ text: payload?.error || "این سؤال را نتوانستم جواب بدهم.", source: "local" });
         }
