@@ -26,7 +26,8 @@
     "test:coverage": "tsx scripts/test-coverage.ts",
     "coverage:report": "tsx scripts/coverage-report.ts > ../ماتریس-پوشش-فازها.md",
     "audit:interactions": "tsx scripts/audit-interactions.ts",
-    "audit:live": "tsx scripts/audit-live.ts"
+    "audit:live": "tsx scripts/audit-live.ts",
+    "audit:phases": "tsx scripts/audit-phases.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",
