@@ -14,6 +14,8 @@ import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, typ
 import SiteHeader from "@/components/SiteHeader";
 import { chosenTransport } from "@/lib/transport-selection";
 import { CHECKLIST_GROUPS, allItems, readChecklist, type ChecklistState } from "@/lib/checklist";
+import { faClock, faDuration, itineraryDayTiming, timingStatusLabel, tripTiming } from "@/lib/route-timing";
+import { defaultMembers, groupSummary, readGroup } from "@/lib/group-trip";
 
 type SavedItinerary = {
   success: boolean;
@@ -103,6 +105,27 @@ export default function ItineraryPrintPage() {
       }),
     ),
     budgetToman,
+  );
+
+  /** The time audit, printed: every day's start, end and whether it can happen. */
+  const timing = saved ? tripTiming(saved.days.map((day) => itineraryDayTiming(day))) : null;
+
+  /**
+   * The group, printed with the exact same split the screen shows: weights in
+   * half-units, integer toman, and parts that add up to the whole.
+   */
+  const signature = tripSignature({
+    origin: travelData.origin,
+    destination: travelData.destination,
+    departureDate: travelData.departureDate,
+    days: travelData.days,
+  });
+  const storedGroup = readGroup(signature);
+  const group = groupSummary(
+    { budget: budgetToman, planned: budgetPlan.total, spent: ledger.totalToman },
+    storedGroup.length
+      ? storedGroup
+      : defaultMembers(Number(travelData.travelers) || 1, Number(travelData.children) || 0),
   );
 
   const checklistItems = allItems(checklist);
@@ -375,6 +398,94 @@ export default function ItineraryPrintPage() {
               </table>
               <p className="mt-1 text-[10px] leading-5 text-slate-500">
                 این ردیف‌ها را خودتان در سفر ثبت کرده‌اید (یا از عکس رسید خوانده شده)؛ برای همین «واقعی» هستند و با تخمین‌های بالا قاطی نشده‌اند.
+              </p>
+            </div>
+          ) : null}
+
+          {/* The time audit, printed — so a day that cannot work is known before leaving. */}
+          {timing && timing.days.length ? (
+            <div className="mt-4 rounded-lg border border-slate-200 p-3">
+              <h3 className="text-sm font-black text-slate-900">زمان‌سنجی روزها</h3>
+              <p className="mt-1 text-[11px] text-slate-600">{timing.headline}</p>
+              <table className="mt-2 w-full text-right text-[12px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] text-slate-500">
+                    <th className="py-1 font-bold">روز</th>
+                    <th className="py-1 font-bold">شروع</th>
+                    <th className="py-1 font-bold">پایان</th>
+                    <th className="py-1 font-bold">طول روز</th>
+                    <th className="py-1 font-bold">رانندگی</th>
+                    <th className="py-1 font-bold">وضعیت</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-800">
+                  {timing.days.map((day) => (
+                    <tr key={day.day} className="border-b border-slate-100">
+                      <td className="py-1.5 font-black">روز {fa(day.day)}</td>
+                      <td className="py-1.5">{faClock(day.startMinutes)}</td>
+                      <td className="py-1.5">{faClock(day.endMinutes)}</td>
+                      <td className="py-1.5">{faDuration(day.lengthMinutes)}</td>
+                      <td className="py-1.5">{day.driveMinutes ? faDuration(day.driveMinutes) : "—"}</td>
+                      <td className={`py-1.5 font-black ${day.status === "impossible" ? "text-rose-700" : day.status === "tight" ? "text-amber-700" : day.status === "estimated" ? "text-sky-700" : "text-cyan-800"}`}>
+                        {timingStatusLabel(day.status)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {timing.days.some((day) => day.notes.length) ? (
+                <ul className="mt-2 space-y-0.5 text-[10px] leading-5 text-slate-600">
+                  {timing.days
+                    .filter((day) => day.notes.length)
+                    .slice(0, 4)
+                    .map((day) => (
+                      <li key={day.day}>
+                        <b className="text-slate-800">روز {fa(day.day)}: </b>
+                        {day.notes[0]}
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Who pays how much — the same split as the screen, on paper. */}
+          {group.members > 1 ? (
+            <div className="mt-4 break-inside-avoid rounded-lg border border-slate-200 p-3">
+              <h3 className="text-sm font-black text-slate-900">سهم هر نفر</h3>
+              <table className="mt-2 w-full text-right text-[12px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] text-slate-500">
+                    <th className="py-1 font-bold">نام</th>
+                    <th className="py-1 font-bold">سهم</th>
+                    <th className="py-1 font-bold">از بودجه</th>
+                    <th className="py-1 font-bold">خرج واقعی</th>
+                    <th className="py-1 font-bold">مانده</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-800">
+                  {group.rows.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100">
+                      <td className="py-1.5 font-bold">{row.name}</td>
+                      <td className="py-1.5">{fa(row.sharePct)}٪</td>
+                      <td className="py-1.5">{toman(row.budgetShare)}</td>
+                      <td className="py-1.5">{toman(row.spentShare)}</td>
+                      <td className={`py-1.5 font-black ${row.overShare ? "text-rose-700" : "text-cyan-800"}`}>
+                        {toman(row.remainingShare)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50">
+                    <td className="py-1.5 font-black">جمع</td>
+                    <td className="py-1.5">۱۰۰٪</td>
+                    <td className="py-1.5 font-black">{toman(group.totals.budget)}</td>
+                    <td className="py-1.5 font-black">{toman(group.totals.spent)}</td>
+                    <td className="py-1.5 font-black">{toman(group.totals.remaining)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[10px] leading-5 text-slate-500">
+                سهم‌ها به تومانِ صحیح تقسیم شده‌اند و جمعشان دقیقاً برابر کل است. برای «چه کسی به چه کسی بدهکار است» باید بدانیم هر خرج را چه کسی پرداخت کرده؛ این را حدس نمی‌زنیم.
               </p>
             </div>
           ) : null}

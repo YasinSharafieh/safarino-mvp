@@ -14,6 +14,7 @@
  */
 
 import { getProviderCache, setProviderCache } from "./provider-cache";
+import { forecastFrom, type PriceForecast } from "./price-forecast";
 
 export type PricePoint = {
   /** ISO timestamp of the reading. */
@@ -38,6 +39,11 @@ export type PriceTrend = {
   message: string;
   /** How many readings exist, so the interface can say «بر پایهٔ ۳ بار خواندن». */
   readings: number;
+  /**
+   * Where our own readings point for the next days. `null` when the history is
+   * too short to fit a line — the interface then simply shows no forecast.
+   */
+  forecast: PriceForecast | null;
 };
 
 const MAX_POINTS = 24;
@@ -101,6 +107,7 @@ export function trendFrom(history: PricePoint[]): PriceTrend | null {
       direction: "flat",
       message: "این اولین باری است که قیمت این مسیر خوانده می‌شود؛ از دفعهٔ بعد می‌گویم ارزان‌تر شده یا گران‌تر.",
       readings: 1,
+      forecast: null,
     };
   }
 
@@ -127,7 +134,16 @@ export function trendFrom(history: PricePoint[]): PriceTrend | null {
         ? `از ${fa.format(Math.abs(deltaToman))} تومان ارزان‌تر از قبل شده (${deltaPct}٪)؛ الان ${fa.format(latest.priceToman)} تومان.`
         : `از ${fa.format(deltaToman)} تومان گران‌تر از قبل شده (+${deltaPct}٪)؛ الان ${fa.format(latest.priceToman)} تومان.`;
 
-  return { latest, baseline, deltaToman, deltaPct, direction, message, readings: history.length };
+  return {
+    latest,
+    baseline,
+    deltaToman,
+    deltaPct,
+    direction,
+    message,
+    readings: history.length,
+    forecast: forecastFrom(history.map((point) => ({ at: point.at, priceToman: point.priceToman }))),
+  };
 }
 
 /** Reads the history without writing anything — for the page's first paint. */

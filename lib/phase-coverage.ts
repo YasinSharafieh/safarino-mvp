@@ -171,6 +171,46 @@ export const CAPABILITIES: Capability[] = [
     markers: ["CityCompare"],
     phases: ["cities"],
   },
+  {
+    id: "timing",
+    label: "زمان‌سنجی واقعی روزها (آیا این روز جا می‌شود؟)",
+    markers: ["RouteTimingCard"],
+    phases: ["plan", "itinerary"],
+    note: "در مرحلهٔ برنامه به‌صورت یک خط فشرده، در سفر کامل با جدول روزها.",
+  },
+  {
+    id: "timing-printed",
+    label: "زمان‌سنجی در نسخهٔ چاپی",
+    markers: ["timingStatusLabel"],
+    phases: ["print"],
+  },
+  {
+    id: "caption",
+    label: "کپشن استوری از دادهٔ واقعی سفر",
+    markers: ["StoryCaption"],
+    phases: ["itinerary"],
+    note: "کپشن مال صاحب سفر است؛ روی لینک اشتراکی، معرفی نوشته‌شده جایش را می‌گیرد.",
+  },
+  {
+    id: "group",
+    label: "دستیار گروه: سهم هر نفر به تومان دقیق",
+    markers: ["GroupSplit"],
+    phases: ["itinerary"],
+    note: "تقسیم پول به گروهی معنی دارد که سفر کامل شده؛ چاپ نسخهٔ خودش را دارد.",
+  },
+  {
+    id: "group-printed",
+    label: "سهم هر نفر در نسخهٔ چاپی",
+    markers: ["groupSummary"],
+    phases: ["print"],
+  },
+  {
+    id: "forecast",
+    label: "پیش‌بینی قیمت از خوانده‌های خودمان",
+    markers: ["forecast"],
+    phases: ["transport", "accommodation"],
+    note: "پیش‌بینی داخل کارت «تعقیب قیمت» می‌نشیند، پس فقط جایی هست که قیمت خوانده می‌شود.",
+  },
 ];
 
 export type CoverageRow = {

@@ -24,7 +24,7 @@
     "test:car-cost": "tsx scripts/test-car-cost.ts",
     "test:start-flow": "tsx scripts/test-start-flow.ts",
     "test:coverage": "tsx scripts/test-coverage.ts",
-    "coverage:report": "tsx scripts/coverage-report.ts"
+    "coverage:report": "tsx scripts/coverage-report.ts > ../ماتریس-پوشش-فازها.md"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

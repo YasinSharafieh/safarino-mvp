@@ -48,6 +48,10 @@ import TripReminders from "@/components/TripReminders";
 import OfflinePackCard from "@/components/OfflinePackCard";
 import BudgetBar from "@/components/BudgetBar";
 import ExpenseLedger from "@/components/ExpenseLedger";
+import RouteTimingCard from "@/components/RouteTimingCard";
+import StoryCaption from "@/components/StoryCaption";
+import GroupSplit from "@/components/GroupSplit";
+import { itineraryDayTiming } from "@/lib/route-timing";
 import { chosenTransport } from "@/lib/transport-selection";
 import {
   buildBudgetPlan,
@@ -380,6 +384,9 @@ function ItineraryContent() {
     });
   }, [assumptions, data, stay, travelData.budget, travelData.children, travelData.transport, travelData.travelers]);
 
+  /** The real time audit of every day: start, drive, finish, and what does not fit. */
+  const dayTimings = useMemo(() => (data?.days || []).map((day) => itineraryDayTiming(day)), [data]);
+
   /** Exactly what is on the screen, in the shape the link keeps. */
   /** Pictures of the planned places, so the plan looks right without network. */
   const offlineImages = useMemo(() => {
@@ -470,6 +477,18 @@ function ItineraryContent() {
         {/* The same budget control as every other step: one number for the trip. */}
         <div className="mx-auto mt-4 max-w-6xl">
           <BudgetBar compact />
+        </div>
+
+        {/* Can these days actually happen? Real clock, real measured legs. */}
+        {dayTimings.length ? (
+          <div className="mx-auto mt-3 max-w-6xl">
+            <RouteTimingCard days={dayTimings} />
+          </div>
+        ) : null}
+
+        {/* Who pays how much, in exact toman. */}
+        <div className="mx-auto mt-3 max-w-6xl">
+          <GroupSplit budgetToman={budgetPlan.budget || 0} plannedToman={budgetPlan.total || 0} />
         </div>
 
         <div className="mx-auto mt-3 grid max-w-6xl gap-3 lg:grid-cols-2">
@@ -970,6 +989,25 @@ function ItineraryContent() {
                         title: `روز ${day.day}`,
                         stops: day.stops.map((stop) => ({ time: stop.startTime, title: stop.place.name })),
                       })),
+                    }}
+                  />
+                ) : null}
+                {data ? (
+                  <StoryCaption
+                    className="mt-3"
+                    input={{
+                      destination: data.city,
+                      origin: travelData.origin || "",
+                      days: Math.max(1, data.days.length),
+                      travellers: Math.max(1, travelData.travelers + travelData.children),
+                      totalToman: budgetPlan.total || 0,
+                      budgetToman: budgetPlan.budget || 0,
+                      transportLabel: chosenTransport(travelData.transport)?.modeLabel || travelData.preferredMode || "",
+                      stayName: String((travelData.accommodation as Record<string, unknown> | null)?.name || "") || "",
+                      archetypeName: travelData.tripStyle || undefined,
+                      topPlaces: data.days.flatMap((day) => day.stops.map((stop) => stop.place.name)).slice(0, 6),
+                      km: Math.round(data.days.reduce((sum, day) => sum + day.totalKm, 0)),
+                      dateLabel: travelData.departureDate ? formatJalaliDate(travelData.departureDate) : undefined,
                     }}
                   />
                 ) : null}

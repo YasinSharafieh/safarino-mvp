@@ -9,7 +9,18 @@
  * says that too.
  */
 
-import { ArrowDownRight, ArrowUpRight, Minus, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, LineChart, Minus, TrendingUp } from "lucide-react";
+
+export type PriceForecastView = {
+  points: number;
+  spanHours: number;
+  horizonDays: number;
+  predictedToman: number;
+  deltaPct: number;
+  direction: "up" | "down" | "flat";
+  confidence: "low" | "medium" | "high";
+  message: string;
+};
 
 export type PriceTrendView = {
   latest: { at: string; priceToman: number; offers: number };
@@ -19,6 +30,8 @@ export type PriceTrendView = {
   direction: "down" | "up" | "flat";
   message: string;
   readings: number;
+  /** Where our own readings point; absent when the history is too short. */
+  forecast?: PriceForecastView | null;
 };
 
 const fa = new Intl.NumberFormat("fa-IR");
@@ -54,6 +67,12 @@ export default function PriceWatch({ trend, className = "" }: { trend: PriceTren
           </span>
         </p>
         <p className="mt-0.5 text-[9.5px] leading-5 opacity-90">{trend.message}</p>
+        {trend.forecast ? (
+          <p className="mt-1 flex items-start gap-1 rounded-lg border border-white/10 bg-black/20 px-1.5 py-1 text-[9px] leading-5 text-slate-300">
+            <LineChart className="mt-0.5 h-2.5 w-2.5 shrink-0 text-cyan-200" />
+            <span className="min-w-0">{trend.forecast.message}</span>
+          </p>
+        ) : null}
       </div>
     </div>
   );
