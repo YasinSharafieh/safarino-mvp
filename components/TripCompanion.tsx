@@ -35,7 +35,7 @@ function readStayCost(raw: unknown): number {
 }
 
 export default function TripCompanion() {
-  const { travelData, isHydrated } = useTravel();
+  const { travelData, setTravelData, isHydrated } = useTravel();
   const [open, setOpen] = useState(false);
   const [weather, setWeather] = useState<WeatherLite[] | null>(null);
   const [aiText, setAiText] = useState<Record<string, string>>({});
@@ -43,7 +43,13 @@ export default function TripCompanion() {
   const [seenCount, setSeenCount] = useState(0);
   const [hidden, setHidden] = useState(false);
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<{ text: string; source: "ai" | "local"; note?: string } | null>(null);
+  const [answer, setAnswer] = useState<{
+    text: string;
+    source: "ai" | "local";
+    note?: string;
+    steps?: { tool: string; label: string; ok: boolean; summary: string }[];
+    action?: { kind: "budget"; millions: number; label: string } | null;
+  } | null>(null);
   const [asking, setAsking] = useState(false);
   const [asksLeft, setAsksLeft] = useState(999);
   /** A short, self-retiring line next to the orb — never a panel over the page. */
@@ -233,15 +239,31 @@ export default function TripCompanion() {
       setAsking(true);
       setAnswer(null);
       try {
-        const response = await fetch("/api/companion/ask", {
+        // The agent route: it reads real tickets, real rooms and the trip's own
+        // money before answering, and tells the traveller what it actually did.
+        const response = await fetch("/api/companion/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(28_000),
+          signal: AbortSignal.timeout(40_000),
           body: JSON.stringify({ question: clean, facts: askFacts }),
         });
-        const payload = (await response.json()) as { success?: boolean; answer?: string; source?: "ai" | "local"; note?: string; error?: string };
+        const payload = (await response.json()) as {
+          success?: boolean;
+          answer?: string;
+          source?: "agent" | "local";
+          note?: string;
+          error?: string;
+          steps?: { tool: string; label: string; ok: boolean; summary: string }[];
+          action?: { kind: "budget"; millions: number; label: string } | null;
+        };
         if (payload?.success && payload.answer) {
-          setAnswer({ text: payload.answer, source: payload.source || "local", note: payload.note });
+          setAnswer({
+            text: payload.answer,
+            source: payload.source === "agent" ? "ai" : "local",
+            note: payload.note,
+            steps: payload.steps || [],
+            action: payload.action || null,
+          });
           try {
             const key = `safarino:asks:${new Date().toISOString().slice(0, 10)}`;
             const used = Number(window.localStorage.getItem(key) || 0) + 1;
@@ -359,8 +381,36 @@ export default function TripCompanion() {
                 {answer ? (
                   <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/50 p-2">
                     <p className="text-[10px] leading-6 text-slate-200">{answer.text}</p>
+                    {answer.steps?.length ? (
+                      <div className="mt-1.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-1.5">
+                        <p className="text-[8px] font-black text-cyan-200/80">چه کاری کردم</p>
+                        <ul className="mt-1 space-y-1">
+                          {answer.steps.map((step, index) => (
+                            <li key={`${step.tool}-${index}`} className="flex items-start gap-1 text-[8px] leading-4 text-slate-400">
+                              <span className={step.ok ? "mt-1 h-1 w-1 shrink-0 rounded-full bg-emerald-400" : "mt-1 h-1 w-1 shrink-0 rounded-full bg-amber-400"} />
+                              <span className="min-w-0">
+                                <b className="text-slate-300">{step.label}</b>
+                                {step.ok ? `: ${step.summary}` : ` — ${step.summary}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {answer.action?.kind === "budget" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTravelData((current) => ({ ...current, budget: answer.action ? answer.action.millions : current.budget }));
+                          setAnswer(null);
+                        }}
+                        className="mt-1.5 w-full rounded-lg bg-rose-500/90 px-2 py-1.5 text-[9px] font-black text-white transition hover:bg-rose-400"
+                      >
+                        {answer.action.label}
+                      </button>
+                    ) : null}
                     <p className="mt-1 text-[8px] text-slate-500">
-                      {answer.source === "ai" ? "با هوش مصنوعی؛ از اعداد همین سفر و دانش عمومی مقصد" : "از حساب‌ها و اطلاعات واقعی همین سفر"}
+                      {answer.source === "ai" ? "با هوش مصنوعی؛ از دادهٔ واقعی همین سفر، بازبینی‌شده پیش از نمایش" : "از حساب‌ها و اطلاعات واقعی همین سفر"}
                       {answer.note ? ` · ${answer.note}` : ""}
                     </p>
                   </div>

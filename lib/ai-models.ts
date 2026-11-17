@@ -20,7 +20,9 @@ export type AiTask =
   | "quiz" // generating fresh quiz questions
   | "vision" // reading a photo of a ticket: company, times, price
   | "reason" // the hardest calls: crisis plan, package curation, budget advice
-  | "parse"; // turning free text into structured trip facts
+  | "parse" // turning free text into structured trip facts
+  | "agent" // the companion deciding which tool to run next
+  | "review"; // the self-check that reads an answer before it is shown
 
 export type ModelSpec = {
   id: string;
@@ -104,6 +106,10 @@ export const TASK_CHAINS: Record<AiTask, { models: string[]; maxTokens: number; 
   vision: { models: ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"], maxTokens: 400, temperature: 0.2 },
   reason: { models: ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"], maxTokens: 600, temperature: 0.3 },
   parse: { models: ["mistralai/ministral-8b-2512", "google/gemini-2.5-flash-lite"], maxTokens: 300, temperature: 0.2 },
+  // A tool decision is short but must be exact, so the small fast model leads
+  // and the stronger one is only a fallback.
+  agent: { models: ["google/gemini-2.5-flash-lite", "qwen/qwen-2.5-72b-instruct"], maxTokens: 300, temperature: 0.2 },
+  review: { models: ["mistralai/ministral-8b-2512", "google/gemini-2.5-flash-lite"], maxTokens: 150, temperature: 0.1 },
 };
 
 export function modelSpec(id: string): ModelSpec | null {
@@ -152,4 +158,6 @@ export const TASK_LABEL: Record<AiTask, string> = {
   vision: "خواندن عکس بلیت",
   reason: "تصمیم سخت",
   parse: "خواندن متن آزاد",
+  agent: "تصمیم همسفر برای کار بعدی",
+  review: "بازبینی پاسخ پیش از نمایش",
 };
