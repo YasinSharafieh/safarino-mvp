@@ -60,6 +60,7 @@ import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
 import { recordTaste } from "@/lib/taste-profile";
 import WeatherReorder from "@/components/plan/WeatherReorder";
+import SpeakButton from "@/components/SpeakButton";
 import { findCity } from "@/lib/discover";
 
 // The schedule lives in lib/plan-schedule so the tests can build it too.
@@ -1546,6 +1547,11 @@ export default function PlanPage() {
                       <b className="text-[10.5px] font-black text-turquoise-100">
                         راهنمای {guideSource === "ai" ? "سفرینو (نوشتهٔ هوش مصنوعی)" : "سفرینو"}
                       </b>
+                      {/* Walking around a city with the phone in your pocket:
+                          the same paragraph, read aloud by the device itself. */}
+                      <div className="mr-auto">
+                        <SpeakButton text={`${guides[selectedDay?.day ?? 0].text} ${guides[selectedDay?.day ?? 0].tip || ""}`} />
+                      </div>
                     </div>
                     <p className="mt-2 text-[11.5px] leading-7 text-slate-200">{guides[selectedDay?.day ?? 0].text}</p>
                     {guides[selectedDay?.day ?? 0].tip ? (

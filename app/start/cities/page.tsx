@@ -11,6 +11,7 @@ import { useTravel } from "../../context/TravelContext";
 import { orderedTravelCities } from "@/lib/start-flow";
 import { formatJalaliDate } from "@/lib/jalali";
 import SiteHeader from "@/components/SiteHeader";
+import CityCompare from "@/components/CityCompare";
 import VoiceTripButton from "@/components/VoiceTripButton";
 
 function todayIso(): string {
@@ -186,7 +187,12 @@ export default function StartCitiesPage() {
 
       <SiteHeader />
 
+      {/* Two cities, real numbers, one decision — before the form. */}
       <section className="mx-auto mt-6 max-w-3xl">
+        <CityCompare />
+      </section>
+
+      <section className="mx-auto mt-4 max-w-3xl">
         <div className="glass p-4 sm:p-6">
           <h1 className="text-xl font-black text-white sm:text-2xl">مبدأ و مقصد سفر</h1>
           <p className="mt-2 text-[11px] leading-6 text-slate-400">

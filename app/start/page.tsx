@@ -4,6 +4,7 @@ import { ArrowLeft, Compass, MapPin, Sparkles, Wand2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import VoiceTripButton from "@/components/VoiceTripButton";
 import ResumeTripPrompt from "@/components/ResumeTripPrompt";
+import OneClickTrip from "@/components/OneClickTrip";
 
 export const metadata: Metadata = {
   title: "شروع برنامه‌ریزی سفر",
@@ -44,6 +45,11 @@ export default function StartPage() {
 
       <section className="mx-auto mt-8 max-w-4xl">
         <VoiceTripButton variant="hero" />
+      </section>
+
+      {/* The fastest way in: one sentence, the whole trip filled. */}
+      <section className="mx-auto mt-3 max-w-4xl">
+        <OneClickTrip />
       </section>
 
       <section className="mx-auto mt-3 grid max-w-4xl gap-3 sm:grid-cols-2">

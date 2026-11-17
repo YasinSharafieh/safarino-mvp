@@ -17,6 +17,9 @@ import { describeFindings, inspectAccommodation, inspectTransport } from "../lib
 import { applyDayOrder, outdoorsShare, planWeatherReorder } from "../lib/plan-weather";
 import { MIN_SIGNAL, tasteBonus, tasteProfile, tasteWords, type TasteEvent } from "../lib/taste-profile";
 import type { WeatherDay } from "../lib/weather";
+import { acceptProposal, candidateCities, localProposal, parseTripSentence } from "../lib/one-click";
+import { acceptVerdict, cityFacts, compareLocally } from "../lib/city-compare";
+import { sentences } from "../lib/speech";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -229,6 +232,52 @@ check("the sentence counts them", profile.summary.includes("قطار"));
 check("the profile feeds the advisor's tastes", tasteWords(profile).includes("قطار"));
 check("history can only nudge, never overrule the budget", tasteBonus(profile, { mode: "train" }) <= 0.12);
 check("a different choice gets no bonus", tasteBonus(profile, { mode: "plane" }) === 0);
+
+// ---- one sentence in, one real trip out
+const oneLine = parseTripSentence("۵ روز با بچه، ۴۰ میلیون، از تهران");
+check("the days are read from the sentence", oneLine.days === 5);
+check("the budget in millions is read", oneLine.budgetMillions === 40);
+check("the origin is a real city", oneLine.origin === "تهران");
+check("«با بچه» becomes a real child count", oneLine.children === 1 && oneLine.travelers === 2);
+check("a destination was not invented", oneLine.destination === null && oneLine.missing.includes("مقصد"));
+
+const withCity = parseTripSentence("یک هفته ساحل و آفتاب، ۶۰ میلیون، ۲ نفر، به کیش");
+check("a named destination is kept", withCity.destination === "کیش");
+check("a week becomes seven days", withCity.days === 7);
+check("the taste words are read", withCity.moods.includes("ساحلی"));
+
+const proposal = localProposal(parseTripSentence("۱۰ روز، ۸۰ میلیون، از مشهد"), "تهران");
+check("a missing city comes from the real list", candidateCities([]).some((city) => city.name === proposal.destination));
+check("nothing is left empty", proposal.days >= 1 && proposal.travelers >= 1 && proposal.budgetMillions >= 5);
+const accepted = acceptProposal({ destination: "پاریس", days: 4, reason: "شهر خوبی است برای گردش و تفریح" }, withCity, proposal);
+check("a destination the traveller named is never overridden", accepted.destination === proposal.destination || accepted.source === "local");
+const inventedCity = acceptProposal({ destination: "آتلانتیس", days: 4, reason: "برای تو مناسب است و نزدیک است" }, parseTripSentence("۴ روز، ۳۰ میلیون"), proposal);
+check("an invented city is refused", inventedCity.source === "local");
+
+// ---- two cities, one decision
+const kish = cityFacts("کیش", 2, 3);
+const qeshm = cityFacts("قشم", 2, 3);
+check("both cities have real facts", Boolean(kish && qeshm) && (kish?.highlights.length || 0) > 0);
+const beachVerdict = compareLocally(kish as NonNullable<typeof kish>, qeshm as NonNullable<typeof qeshm>, {
+  moods: ["ساحلی"],
+  budgetToman: 60_000_000,
+  travellers: 2,
+  days: 3,
+});
+check("a decision is made and named", ["a", "b", "tie"].includes(beachVerdict.winner));
+check("and it is explained with real numbers", beachVerdict.reason.includes("تومان") || beachVerdict.reason.includes("سلیقه"));
+const cheapVerdict = compareLocally(kish as NonNullable<typeof kish>, qeshm as NonNullable<typeof qeshm>, {
+  moods: [],
+  budgetToman: 5_000_000,
+  travellers: 2,
+  days: 3,
+});
+check("a tiny budget changes the reasoning", cheapVerdict.winner !== "tie" || cheapVerdict.costGap >= 0);
+const hijacked = acceptVerdict({ winner: "کیش", reason: "کیش با ۹۹۹ میلیون تومان برای تو بهتر است" }, kish as NonNullable<typeof kish>, qeshm as NonNullable<typeof qeshm>, beachVerdict, [kish?.tripDailyCost || 0]);
+check("a model sentence with an invented price is thrown away", hijacked.source === "local");
+
+// ---- the voice
+check("a paragraph is split into speakable sentences", sentences("سلام. امروز به بازار می‌رویم؟ خیلی خوب است!").length === 3);
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Camera, Compass, LoaderCircle, Send, Sparkles, X } from "lucide-react";
 import { formatJalaliDate } from "@/lib/jalali";
+import SpeakButton from "@/components/SpeakButton";
 import { useTravel } from "@/app/context/TravelContext";
 import { chosenTransport } from "@/lib/transport-selection";
 import { COMPANION_EVENT, companionGauge, companionTips, type CompanionContext, type CompanionTip } from "@/lib/companion";
@@ -543,6 +544,9 @@ export default function TripCompanion() {
                 {answer ? (
                   <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/50 p-2">
                     <p className="text-[10px] leading-6 text-slate-200">{answer.text}</p>
+                    <div className="mt-1 flex justify-end">
+                      <SpeakButton text={answer.text} label="بخوانش" />
+                    </div>
                     {answer.steps?.length ? (
                       <div className="mt-1.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-1.5">
                         <p className="text-[8px] font-black text-cyan-200/80">چه کاری کردم</p>
