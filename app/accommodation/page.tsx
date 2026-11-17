@@ -95,6 +95,7 @@ import NextStepBar from "@/components/NextStepBar";
 import { bestStay } from "@/lib/budget-fit";
 import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
+import { recordTaste } from "@/lib/taste-profile";
 import CompanionAdvice from "@/components/CompanionAdvice";
 import PriceWatch, { type PriceTrendView } from "@/components/PriceWatch";
 import { ticketStayCheck } from "@/lib/ticket-timing";
@@ -400,6 +401,7 @@ export default function AccommodationPage() {
   }
 
   function selectOffer(offer: AccommodationOffer, selectionFetchedAt = fetchedAt) {
+    recordTaste("stay", kind);
     const selection = buildAccommodationSelection(offer, {
       city, checkIn, checkOut, nights,
       adults: travelData.travelers,

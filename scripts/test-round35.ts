@@ -14,6 +14,9 @@ import { normalizeTicketReading } from "../lib/ai-vision";
 import { budgetLevels, rescueScenarios } from "../lib/budget-scenarios";
 import { trendFrom, isNoteworthy, priceWatchKey } from "../lib/price-watch";
 import { describeFindings, inspectAccommodation, inspectTransport } from "../lib/data-inspector";
+import { applyDayOrder, outdoorsShare, planWeatherReorder } from "../lib/plan-weather";
+import { MIN_SIGNAL, tasteBonus, tasteProfile, tasteWords, type TasteEvent } from "../lib/taste-profile";
+import type { WeatherDay } from "../lib/weather";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -176,6 +179,56 @@ check("and the verdict says so in Persian", describeFindings(clean).includes("س
 const stays = inspectAccommodation({ groups: [{ offers: [{ name: "", priceTotalToman: 0 }] }] });
 check("a room without a name is an error", stays.some((finding) => finding.code === "room-without-name" && finding.severity === "error"));
 check("no price at all is an error", stays.some((finding) => finding.code === "implausible-room-price"));
+
+// ---- the plan follows the real weather
+function weatherDay(overrides: Partial<WeatherDay>): WeatherDay {
+  return {
+    date: "2026-11-06",
+    code: 0,
+    label: "آسمان صاف",
+    icon: "☀️",
+    maxC: 22,
+    minC: 10,
+    rainProbability: 0,
+    rainMm: 0,
+    windKmh: 5,
+    score: 80,
+    advice: "",
+    tone: "good",
+    ...overrides,
+  };
+}
+// Day one is indoors, day two is outdoors — and the rain is forecast for day two.
+const planDays = [
+  { day: 1, title: "روز اول", items: [{ time: "۰۹:۳۰", title: "موزه", type: "sightseeing", poiCategory: "موزه و تاریخ" }] },
+  { day: 2, title: "روز دوم", items: [{ time: "۰۹:۳۰", title: "پارک", type: "sightseeing", poiCategory: "پارک و طبیعت" }] },
+];
+const rainySecond = [weatherDay({}), weatherDay({ code: 61, label: "باران", rainProbability: 90, score: 20, tone: "bad" })];
+const reorder = planWeatherReorder(planDays, rainySecond);
+check("the outdoor day is moved off the rainy date", reorder.changed && reorder.order[0] === 2);
+const alreadyFine = planWeatherReorder([planDays[1], { ...planDays[0], day: 2 }], rainySecond);
+check("when the order already fits, nothing is proposed", alreadyFine.changed === false);
+check("and the sentence names the bad day", reorder.reason.includes("باران") || reorder.reason.includes("روز ۲"));
+check("outdoor share is computed from real categories", outdoorsShare(["پارک و طبیعت"]) > 0.5);
+const swapped = applyDayOrder(planDays, [2, 1], "2026-11-06");
+check("applying an order renumbers the days", swapped[0].day === 1 && swapped[0].title === "روز دوم");
+check("and gives each day its real date", (swapped[1] as { date?: string }).date === "2026-11-07");
+check("no place is lost in the reorder", swapped.flatMap((day) => day.items).length === 2);
+
+// ---- the taste profile speaks only after real evidence
+const few: TasteEvent[] = [{ kind: "mode", value: "train", at: "2026-11-01T10:00:00Z" }];
+check("one choice is not a taste", tasteProfile(few).confident === false);
+const many: TasteEvent[] = Array.from({ length: MIN_SIGNAL }, (_, index) => ({
+  kind: "mode" as const,
+  value: "train",
+  at: `2026-11-0${index + 1}T10:00:00Z`,
+}));
+const profile = tasteProfile(many);
+check("three real choices make a pattern", profile.confident && profile.modes[0].value === "train");
+check("the sentence counts them", profile.summary.includes("قطار"));
+check("the profile feeds the advisor's tastes", tasteWords(profile).includes("قطار"));
+check("history can only nudge, never overrule the budget", tasteBonus(profile, { mode: "train" }) <= 0.12);
+check("a different choice gets no bonus", tasteBonus(profile, { mode: "plane" }) === 0);
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);

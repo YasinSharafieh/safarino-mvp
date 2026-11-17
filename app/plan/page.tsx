@@ -58,6 +58,8 @@ import { tripCostBreakdown, costTableFootnote } from "@/lib/trip-costs";
 import { ticketStayCheck } from "@/lib/ticket-timing";
 import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
+import { recordTaste } from "@/lib/taste-profile";
+import WeatherReorder from "@/components/plan/WeatherReorder";
 import { findCity } from "@/lib/discover";
 
 // The schedule lives in lib/plan-schedule so the tests can build it too.
@@ -291,7 +293,10 @@ export default function PlanPage() {
   const chosenIds = useMemo(() => new Set(chosenPlaces.map((place) => place.id)), [chosenPlaces]);
 
   const toggleChosen = (place: PlanPlace) => {
-    setChosenPlaces(togglePlanPlace(place));
+    const next = togglePlanPlace(place);
+    // Adding a place is a real taste signal; removing one is not.
+    if (next.some((entry) => entry.id === place.id) && place.category) recordTaste("poi", place.category);
+    setChosenPlaces(next);
   };
 
   useEffect(() => {
@@ -1475,6 +1480,18 @@ export default function PlanPage() {
                 منطق این چیدمان: {curationNote}
               </p>
             ) : null}
+            {/* The forecast, deciding which day goes where — only when it helps. */}
+            <WeatherReorder
+              days={plan.days}
+              startDate={travelData.departureDate || null}
+              onApply={(next) => {
+                setPlan((current) => ({ ...current, days: next as typeof current.days }));
+                setActiveDay(0);
+                setNoticeTone("success");
+                setNotice("روزها با توجه به هوای واقعی جابه‌جا شدند؛ جاذبه‌ها و ساعت‌ها همان‌ها هستند.");
+              }}
+            />
+
             <div className="mt-5 flex gap-2 overflow-x-auto pb-2 print:hidden">
               {plan.days.map((day, index) => (
                 <button key={day.day} type="button" onClick={() => setActiveDay(index)} className={`shrink-0 rounded-xl border px-5 py-2.5 text-xs font-bold transition ${activeDay === index ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-200" : "border-white/10 bg-white/5 text-slate-400 hover:text-white"}`}>روز {formatNumber(day.day)}</button>

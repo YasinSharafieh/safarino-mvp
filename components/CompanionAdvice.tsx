@@ -17,6 +17,7 @@ import { motion } from "framer-motion";
 import { LoaderCircle, Sparkles, Wand2 } from "lucide-react";
 import { useTravel } from "@/app/context/TravelContext";
 import { tripCostBreakdown } from "@/lib/trip-costs";
+import { tasteProfile, tasteWords, type TasteProfile } from "@/lib/taste-profile";
 
 export type AdviceOptionInput = { id: string; title: string; priceToman: number; detail?: string };
 
@@ -47,6 +48,17 @@ export default function CompanionAdvice({
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
+  const [tastes, setTastes] = useState<{ words: string[]; summary: string; confident: boolean }>({ words: [], summary: "", confident: false });
+
+  // The traveller's own history, read on the device and never uploaded.
+  useEffect(() => {
+    const profile: TasteProfile = tasteProfile();
+    setTastes({
+      words: tasteWords(profile, Array.isArray(travelData.tasteMoods) ? travelData.tasteMoods : []),
+      summary: profile.summary,
+      confident: profile.confident,
+    });
+  }, [travelData.tasteMoods]);
 
   const travellers = Math.max(
     1,
@@ -91,7 +103,7 @@ export default function CompanionAdvice({
           committedToman: stage === "transport" ? 0 : costs.tickets,
           dailyToman: costs.food + costs.activities + costs.localTransport,
           departureDate: travelData.departureDate || null,
-          tastes: travelData.tasteMoods || [],
+          tastes: tastes.words.length ? tastes.words : travelData.tasteMoods || [],
         },
         options: options.slice(0, 14),
       }),
@@ -147,6 +159,11 @@ export default function CompanionAdvice({
                 <Wand2 className="h-3 w-3" />
                 همین را انتخاب کن
               </button>
+            ) : null}
+            {tastes.confident ? (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[8px] text-slate-300">
+                {tastes.summary}
+              </span>
             ) : null}
             <span className="text-[8.5px] text-slate-400">
               {advice?.source === "ai"

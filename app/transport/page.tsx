@@ -35,6 +35,7 @@ import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
 import BudgetBar from "@/components/BudgetBar";
+import { recordTaste } from "@/lib/taste-profile";
 import { budgetGauge } from "@/lib/budget-gauge";
 import SiteHeader from "@/components/SiteHeader";
 import NextStepBar from "@/components/NextStepBar";
@@ -416,6 +417,8 @@ function TransportPageContent() {
   );
 
   const chooseMode = (next: TravelMode) => {
+    // A real decision, remembered in this browser only — the taste profile's food.
+    recordTaste("mode", next);
     setMode(next);
     if (next === "car" && selection.vehicleId !== "car") return;
     if (next !== "car" && selection.vehicleId === "car") return;
