@@ -586,6 +586,14 @@ function TransportPageContent() {
               itemToman={activeSelection?.cost || 0}
               itemLabel={activeSelection ? `بلیت ${selectedName}` : "بلیت این سفر"}
               ticketToman={activeSelection?.cost || 0}
+              stayToman={Number(travelData.accommodation?.cost) || 0}
+              /* A real cheaper ticket, but only one this page actually read. */
+              cheaperTicketToman={gaugeAlternative ? gaugeAlternative.priceToman * passengers : null}
+              cheaperTicketLabel={
+                gaugeAlternative
+                  ? `${gaugeAlternative.mode === "plane" ? "هواپیما" : gaugeAlternative.mode === "train" ? "قطار" : "اتوبوس"} · ${money(gaugeAlternative.priceToman)} هر نفر`
+                  : null
+              }
             />
             <ModeChooser
               mode={mode}

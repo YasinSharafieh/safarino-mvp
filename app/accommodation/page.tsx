@@ -129,6 +129,17 @@ export default function AccommodationPage() {
   const [infantAges, setInfantAges] = useState<number[]>([]);
   const [offers, setOffers] = useState<AccommodationOffer[]>([]);
   const [groups, setGroups] = useState<AccommodationGroup[]>([]);
+
+  /**
+   * The cheapest room the traveller can actually book on this page — used by the
+   * budget rescue only when it really exists, so a cheaper alternative is never
+   * an invented one.
+   */
+  const cheapestRoom = useMemo(() => {
+    const all = groups.flatMap((group) => group.offers).filter((offer) => Number(offer.priceTotalToman) > 0);
+    if (!all.length) return null;
+    return all.reduce((best, offer) => (offer.priceTotalToman < best.priceTotalToman ? offer : best), all[0]);
+  }, [groups]);
   const [providerStatuses, setProviderStatuses] = useState<ProviderSearchStatus[]>([]);
   const [found, setFound] = useState(0);
   const [offerCount, setOfferCount] = useState(0);
@@ -540,6 +551,9 @@ export default function AccommodationPage() {
                     itemLabel={selected ? `اقامت ${String(selected.name ?? "")}` : "این اقامتگاه"}
                     ticketToman={transportCost}
                     stayToman={accommodationCost}
+                    /* The cheapest real room already on this page, if any. */
+                    cheaperStayToman={cheapestRoom?.priceTotalToman || null}
+                    cheaperStayLabel={cheapestRoom ? String(cheapestRoom.name || "") : null}
                   />
                 </div>
               </div>

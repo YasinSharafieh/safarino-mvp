@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, Pencil, TriangleAlert, Wallet, X } from "lucide-react";
 import { useTravel } from "@/app/context/TravelContext";
 import { MAX_BUDGET_MILLIONS, MIN_BUDGET_MILLIONS, affordabilityOf, budgetChange, clampBudgetMillions } from "@/lib/budget-control";
+import { budgetLevels, rescueScenarios } from "@/lib/budget-scenarios";
 
 const fa = new Intl.NumberFormat("fa-IR");
 const money = (value: number) => `${fa.format(Math.round(value))} تومان`;
@@ -27,6 +28,10 @@ export default function BudgetBar({
   itemLabel = "این انتخاب",
   ticketToman = 0,
   stayToman = 0,
+  cheaperTicketToman = null,
+  cheaperTicketLabel = null,
+  cheaperStayToman = null,
+  cheaperStayLabel = null,
   compact = false,
   className = "",
 }: {
@@ -34,6 +39,11 @@ export default function BudgetBar({
   itemLabel?: string;
   ticketToman?: number;
   stayToman?: number;
+  /** A real cheaper option on this page, when one exists. */
+  cheaperTicketToman?: number | null;
+  cheaperTicketLabel?: string | null;
+  cheaperStayToman?: number | null;
+  cheaperStayLabel?: string | null;
   compact?: boolean;
   className?: string;
 }) {
@@ -41,6 +51,7 @@ export default function BudgetBar({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number>(Number(travelData.budget) || 15);
   const [notice, setNotice] = useState("");
+  const [rescueOpen, setRescueOpen] = useState(false);
 
   const totalToman = Math.max(0, Math.round((Number(travelData.budget) || 0) * 1_000_000));
   const travellers = Math.max(1, Number(travelData.travelers || 1) + Number(travelData.children || 0) + Number(travelData.infants || 0));
@@ -63,6 +74,36 @@ export default function BudgetBar({
         itemLabel,
       }),
     [days, itemLabel, itemToman, stayToman, ticketToman, totalToman, travelData.destination, travellers],
+  );
+
+  const levels = useMemo(
+    () =>
+      budgetLevels({
+        travellers,
+        days,
+        city: travelData.destination,
+        ticketToman,
+        stayToman,
+      }),
+    [days, stayToman, ticketToman, travelData.destination, travellers],
+  );
+
+  const rescue = useMemo(
+    () =>
+      rescueScenarios({
+        totalBudgetToman: totalToman,
+        travellers,
+        days,
+        nights: Math.max(1, days - 1),
+        city: travelData.destination,
+        ticketToman,
+        stayToman,
+        cheaperTicketToman,
+        cheaperTicketLabel,
+        cheaperStayToman,
+        cheaperStayLabel,
+      }),
+    [cheaperStayLabel, cheaperStayToman, cheaperTicketLabel, cheaperTicketToman, days, stayToman, ticketToman, totalToman, travelData.destination, travellers],
   );
 
   const apply = (value: number) => {
@@ -135,6 +176,26 @@ export default function BudgetBar({
                   </button>
                 ))}
               </div>
+              {/* Three sizes computed from this trip's own numbers, not guesses. */}
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                {levels.map((level) => (
+                  <button
+                    key={level.id}
+                    type="button"
+                    onClick={() => apply(level.millions)}
+                    className={`rounded-xl border px-2 py-1.5 text-right transition ${
+                      Number(travelData.budget) === level.millions
+                        ? "border-cyan-300/50 bg-cyan-300/12"
+                        : "border-white/10 bg-white/[0.03] hover:border-cyan-300/30 hover:bg-cyan-300/[0.06]"
+                    }`}
+                  >
+                    <b className="block text-[10px] font-black text-white">
+                      {level.title} · {fa.format(level.millions)} میلیون
+                    </b>
+                    <span className="mt-0.5 block text-[8.5px] leading-4 text-slate-400">{level.detail}</span>
+                  </button>
+                ))}
+              </div>
               <div className="mt-2 flex items-center gap-2">
                 <label className="flex flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2 py-1.5">
                   <span className="text-[9.5px] text-slate-400">دلخواه</span>
@@ -180,14 +241,70 @@ export default function BudgetBar({
           </b>
           <span className="mt-1 block">{fit.detail}</span>
           {fit.tone === "over" ? (
-            <button
-              type="button"
-              onClick={() => apply(fit.neededBudgetMillions)}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[9.5px] font-black text-white transition hover:bg-white/20"
-            >
-              <Check className="h-3 w-3" />
-              بودجه را به {fa.format(fit.neededBudgetMillions)} میلیون برسان
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setRescueOpen((current) => !current)}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[9.5px] font-black text-white transition hover:bg-white/20"
+                aria-expanded={rescueOpen}
+              >
+                <Check className="h-3 w-3" />
+                {rescueOpen ? "بستن راه‌ها" : "سه راه برای جا کردن بودجه"}
+              </button>
+              <AnimatePresence>
+                {rescueOpen ? (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <ul className="mt-2 space-y-1.5">
+                      {rescue.scenarios.map((scenario) => (
+                        <li key={scenario.id} className="rounded-lg border border-white/10 bg-slate-950/40 p-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <b className="block text-[10px] font-black text-white">{scenario.title}</b>
+                              <span className="mt-0.5 block text-[8.5px] leading-4 text-slate-300">{scenario.detail}</span>
+                              <span className={`mt-1 block text-[8px] ${scenario.fits ? "text-emerald-300" : "text-amber-300"}`}>
+                                {scenario.fits
+                                  ? "با این تغییر، کل سفر جا می‌شود."
+                                  : `${money(scenario.stillShortToman)} هنوز کم است.`}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (scenario.id === "raise") {
+                                  apply(scenario.budgetMillions);
+                                  return;
+                                }
+                                if (scenario.id === "shorter") {
+                                  setTravelData((current) => ({ ...current, days: Math.max(1, days - 1) }));
+                                  setNotice("یک شب از سفر کم شد و هزینه‌ها دوباره حساب شد.");
+                                  window.setTimeout(() => setNotice(""), 6000);
+                                  return;
+                                }
+                                // A cheaper option on the page: the traveller
+                                // picks it there, so the button only explains.
+                                setNotice("آن گزینه پایین همین فهرست است؛ با زدنش، همه‌چیز خودکار حساب می‌شود.");
+                                window.setTimeout(() => setNotice(""), 6000);
+                              }}
+                              className="shrink-0 rounded-lg bg-white/15 px-2 py-1 text-[9px] font-black text-white transition hover:bg-white/25"
+                            >
+                              {scenario.id === "raise" ? "اعمال" : scenario.id === "shorter" ? "کم کن" : "نشانم بده"}
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {rescue.missing.length ? (
+                      <p className="mt-1.5 text-[8px] leading-4 text-white/50">{rescue.missing.slice(0, 2).join(" ")}</p>
+                    ) : null}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </>
           ) : null}
         </div>
       ) : null}

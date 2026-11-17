@@ -11,6 +11,7 @@ import { normalizeDigits, numbersIn, collectTruth, verifyAnswer, verifyNames } f
 import { AGENT_TOOL_NAMES, runAgentTool, type AgentFacts } from "../lib/ai-agent";
 import { chainFor, estimateTaskCostUsd } from "../lib/ai-models";
 import { normalizeTicketReading } from "../lib/ai-vision";
+import { budgetLevels, rescueScenarios } from "../lib/budget-scenarios";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -103,6 +104,28 @@ check("a past date is not silently used", pastRead.fields.date === null);
 
 const partial = normalizeTicketReading({ company: "ماهان", price: "900000" });
 check("an unreadable ticket still returns what was real", !partial.ok && partial.fields.company === "ماهان" && partial.unread.length >= 3);
+
+const rescueBase = {
+  totalBudgetToman: 40_000_000,
+  travellers: 2,
+  days: 3,
+  nights: 2,
+  city: "اصفهان",
+  ticketToman: 12_000_000,
+  stayToman: 16_000_000,
+};
+const rescue = rescueScenarios(rescueBase);
+check("three real ways out are offered, plus the exact budget", rescue.scenarios.length >= 2);
+check("the last way always makes it fit", rescue.scenarios.some((scenario) => scenario.id === "raise" && scenario.fits));
+check("one night less is priced from the room's own rate", rescue.scenarios.some((scenario) => scenario.id === "shorter" && scenario.newTotalToman < 28_000_000 + 8_400_000 + 1));
+const noStay = rescueScenarios({ ...rescueBase, stayToman: 0 });
+check("without a room nothing is invented", !noStay.scenarios.some((scenario) => scenario.id === "shorter") && noStay.missing.length > 0);
+const withCheaper = rescueScenarios({ ...rescueBase, cheaperStayToman: 9_000_000, cheaperStayLabel: "هتل ارزان" });
+check("a cheaper room that really exists becomes a scenario", withCheaper.scenarios.some((scenario) => scenario.id === "cheaper_stay"));
+
+const levels = budgetLevels({ travellers: 2, days: 3, city: "اصفهان", ticketToman: 12_000_000, stayToman: 16_000_000 });
+check("three budget sizes, in order", levels[0].millions < levels[1].millions && levels[1].millions < levels[2].millions);
+check("the lean size is at least the trip's real cost", levels[0].millions * 1_000_000 >= 36_400_000);
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);
