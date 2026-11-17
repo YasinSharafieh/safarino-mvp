@@ -166,6 +166,13 @@ export const CAPABILITIES: Capability[] = [
     phases: ["start"],
   },
   {
+    id: "page-identity",
+    label: "هر صفحه عنوان و توضیح خودش را دارد (تب، جست‌وجو، پیش‌نمایش لینک)",
+    markers: ["metadata", "Metadata", "generateMetadata"],
+    phases: "all",
+    note: "صفحه‌های کلاینتی نمی‌توانند metadata صادر کنند؛ پس عنوانشان در layout همان مسیر است و قرارداد هر دو را می‌خواند.",
+  },
+  {
     id: "compare",
     label: "مقایسهٔ دو شهر",
     markers: ["CityCompare"],
@@ -232,6 +239,16 @@ export function coverageRows(readFile: (path: string) => string): CoverageRow[] 
         source = readFile(phase.file);
       } catch {
         return true;
+      }
+      /*
+       * A page's own `layout.tsx` is part of that page: a client component cannot
+       * export metadata, so its title and description live next door. Reading both
+       * keeps the contract honest without pretending the file must be one piece.
+       */
+      try {
+        source += `\n${readFile(phase.file.replace(/\/page\.tsx$/, "/layout.tsx"))}`;
+      } catch {
+        /* no sibling layout — the page carries everything itself */
       }
       return !capability.markers.some((marker) => source.includes(marker));
     });

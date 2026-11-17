@@ -461,7 +461,7 @@ function TransportPageContent() {
 
         <SiteHeader />
 
-        <TravelSteps current={2} />
+        <TravelSteps current={2} done={[1]} />
 
         <NextStepBar
           summary={

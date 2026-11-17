@@ -4,6 +4,7 @@ import SnapshotKeeper from "@/components/SnapshotKeeper";
 import ThemeToggle from "@/components/ThemeToggle";
 import HomeDeals from "@/components/HomeDeals";
 import HomeReviews from "@/components/HomeReviews";
+import { SITE_FACTS, homeStats } from "@/lib/site-facts";
 
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -42,12 +43,11 @@ const NAV_LINKS = [
 ];
 
 /** Every number here is a fact about the product, not a marketing guess. */
-const STATS = [
-  { value: "۱۵۶", label: "شهر ایران برای مبدأ و مقصد" },
-  { value: "۶", label: "منبع رزرو با جست‌وجوی زنده" },
-  { value: "۷", label: "حالت سفر در بخش کشف" },
-  { value: "۱۰۰٪", label: "قیمت‌ها از منبع اصلی" },
-];
+/**
+ * The home page's numbers come from `SITE_FACTS`, never from a typed string: if
+ * the city list grows to ۲۱۱, the front page says ۲۱۱ the same day.
+ */
+const STATS = homeStats();
 
 const BENTO_CARDS = [
   {
@@ -301,7 +301,7 @@ export default function HomePage() {
                   <span>
                     <b className="block text-[12px] font-bold text-white">مبدأ و مقصدم مشخص است</b>
                     <span className="mt-0.5 block text-[10px] leading-5 text-slate-400">
-                      شهرها را از بین ۱۵۶ شهر ایران انتخاب کن، تاریخ و مسافران را بگذار و برو به بلیت و اقامتگاه.
+                      شهرها را از بین {SITE_FACTS.citiesLabel} شهر ایران انتخاب کن، تاریخ و مسافران را بگذار و برو به بلیت و اقامتگاه.
                     </span>
                   </span>
                 </a>

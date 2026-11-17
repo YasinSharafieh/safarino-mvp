@@ -462,7 +462,7 @@ function ItineraryContent() {
         <SiteHeader />
 
         <div className="mx-auto mt-5 max-w-6xl">
-          <TravelSteps current={4} />
+          <TravelSteps current={5} done={[1, 2, 3, 4]} />
 
           <NextStepBar
             summary="برنامهٔ روزبه‌روز این سفر آماده است"
@@ -1044,11 +1044,30 @@ export default function ItineraryPage() {
   return (
     <Suspense
       fallback={
-        <main dir="rtl" className="grid min-h-screen place-items-center bg-[#120a26] text-cyan-100">
-          <span className="flex items-center gap-2 text-sm">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            در حال آماده‌سازی برنامهٔ روزبه‌روز…
-          </span>
+        /* The same idea as the city page: while the plan is being read, the page
+           says what it is and what is coming, instead of a bare spinner. */
+        <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+          <div className="pointer-events-none absolute inset-0 -z-10">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
+          </div>
+          <SiteHeader />
+          <section className="mx-auto mt-10 max-w-3xl">
+            <div className="glass p-5 sm:p-7">
+              <h1 className="text-xl font-black text-white sm:text-2xl">دفترچهٔ سفر</h1>
+              <p className="mt-2 text-[11px] leading-6 text-slate-400">
+                روزهای سفر، خرج واقعی، چک‌لیست، بستهٔ آفلاین و نسخهٔ PDF — همه در همین صفحه.
+              </p>
+              <div className="mt-5 space-y-2" aria-hidden="true">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="h-14 animate-pulse rounded-xl border border-white/10 bg-white/[0.04]" />
+                ))}
+              </div>
+              <p className="mt-4 flex items-center gap-2 text-[11px] text-cyan-100">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                در حال آماده‌سازی برنامهٔ روزبه‌روز…
+              </p>
+            </div>
+          </section>
         </main>
       }
     >

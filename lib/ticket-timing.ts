@@ -67,6 +67,13 @@ export function ticketStayCheck(input: {
   arrival?: string | null;
   checkIn?: string | null;
   checkOut?: string | null;
+  /**
+   * Whether a ticket has really been chosen. Without this, the check used to
+   * blame the ticket («ساعت رسیدن در بلیت نیست») on a page where no ticket
+   * existed yet — a warning about something that is not there. `false` means
+   * «not chosen yet», and silence is the honest answer.
+   */
+  hasTicket?: boolean;
 }): TicketStayCheck {
   const arrivalDate = tehranDay(input.arrival);
   const { clock: arrivalClock, minutes } = tehranClock(input.arrival);
@@ -120,7 +127,8 @@ export function ticketStayCheck(input: {
     }
   }
 
-  if (!input.arrival) {
+  const ticketExists = input.hasTicket ?? Boolean(input.departure || input.arrival);
+  if (ticketExists && !input.arrival) {
     issues.push({
       tone: "warn",
       title: "ساعت رسیدن در بلیت نیست",

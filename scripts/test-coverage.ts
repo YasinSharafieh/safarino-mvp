@@ -89,8 +89,21 @@ try {
 check("همسفر در layout سراسری است", layout.includes("TripCompanion"));
 check("سفر مشترک در layout سراسری است", layout.includes("TravelProvider"));
 
+/**
+ * A phase's source is the page, the components it mounts, and its own sibling
+ * layout (where a client page keeps its title and description).
+ */
+function readPhase(path: string): string {
+  const withComponents = readWithComponents(path);
+  try {
+    return `${withComponents}\n${read(path.replace(/\/page\.tsx$/, "/layout.tsx"))}`;
+  } catch {
+    return withComponents;
+  }
+}
+
 // 3. The matrix.
-const rows = coverageRows((path) => readWithComponents(path));
+const rows = coverageRows((path) => readPhase(path));
 for (const row of rows) {
   const where = row.capability.phases === "all" ? "همهٔ فازها" : row.capability.phases.join("، ");
   check(`${row.capability.label} (${where})`, row.ok, row.missing.length ? `نیست در: ${row.missing.join("، ")}` : undefined);

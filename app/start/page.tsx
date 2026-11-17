@@ -43,14 +43,33 @@ export default function StartPage() {
         </p>
       </section>
 
-      <section className="mx-auto mt-8 max-w-4xl">
-        <VoiceTripButton variant="hero" />
+      {/*
+        One door, two ways to say the same thing. Before this, the page had two
+        large blocks that both meant «tell me the trip in one sentence» — one typed,
+        one spoken — and a traveller had to guess which one to use. Now it is a
+        single step: write the sentence, or press the microphone and speak it. Both
+        go through the same reader and both show what was understood before
+        anything is written into the trip.
+      */}
+      <section className="mx-auto mt-8 max-w-4xl" aria-labelledby="one-sentence">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="one-sentence" className="flex items-center gap-1.5 text-sm font-black text-white">
+            <Sparkles className="h-4 w-4 text-cyan-300" />
+            سریع‌ترین راه: کل سفر را با یک جمله بگو
+          </h2>
+          <span className="text-[10px] text-slate-500">بنویس یا میکروفون را بزن — هر دو یک کار می‌کنند</span>
+        </div>
+        <OneClickTrip />
+        <div className="mt-2">
+          <VoiceTripButton variant="compact" />
+        </div>
       </section>
 
-      {/* The fastest way in: one sentence, the whole trip filled. */}
-      <section className="mx-auto mt-3 max-w-4xl">
-        <OneClickTrip />
-      </section>
+      <div className="mx-auto mt-6 flex max-w-4xl items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-white/10" />
+        <span className="text-[10px] font-bold text-slate-500">یا از یکی از این دو مسیر شروع کن</span>
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
 
       <section className="mx-auto mt-3 grid max-w-4xl gap-3 sm:grid-cols-2">
         <Link

@@ -14,15 +14,21 @@ export const metadata: Metadata = {
     default: "سفرینو | همسفر هوشمند سفرهای ایرانی",
     template: "%s | سفرینو",
   },
+  // The description must describe the product that exists. The site does not sell
+  // tickets or tours and takes no payment — it plans the trip and sends the
+  // traveller to the provider's own page. Saying «رزرو پرواز و تور» here contradicted
+  // the FAQ on the very same site.
   description:
-    "سفرینو پلتفرم مدرن رزرو پرواز، هتل و تورهای ایرانی است؛ سریع، شفاف و بدون واسطه. برنامه‌ریزی سفر بعدی‌تان را به سفرینو بسپارید.",
+    "سفرینو برنامه‌ریز سفر ایران است: شهر و تاریخ را می‌گویی، مسیر و فاصلهٔ واقعی، بلیت از منابع رسمی، اقامتگاه از چند منبع و هزینهٔ کل سفر را یک‌جا می‌بینی — بدون ثبت‌نام و بدون پرداخت در سفرینو.",
   keywords: [
     "سفرینو",
-    "رزرو پرواز",
-    "رزرو هتل",
-    "تور مسافرتی",
-    "سفر ارزان",
-    "آژانس مسافرتی ایرانی",
+    "برنامه‌ریز سفر ایران",
+    "برنامه سفر",
+    "بلیت قطار",
+    "بلیت هواپیما",
+    "اقامتگاه و هتل",
+    "هزینه سفر با ماشین شخصی",
+    "سفر ارزان در ایران",
   ],
   authors: [{ name: "تیم سفرینو" }],
   alternates: { canonical: "/" },
@@ -30,7 +36,7 @@ export const metadata: Metadata = {
   openGraph: {
     url: "/",
     title: "سفرینو | همسفر هوشمند سفرهای ایرانی",
-    description: "رزرو پرواز، هتل و تور با تجربه‌ای سریع، شفاف و مدرن.",
+    description: "برنامهٔ کامل سفر در ایران: مسیر و فاصلهٔ واقعی، بلیت، اقامتگاه، بودجهٔ شفاف و دفترچهٔ سفر — بدون ثبت‌نام.",
     type: "website",
     locale: "fa_IR",
     siteName: "سفرینو",
@@ -38,7 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "سفرینو | همسفر هوشمند سفرهای ایرانی",
-    description: "رزرو پرواز، هتل و تور با تجربه‌ای سریع، شفاف و مدرن.",
+    description: "برنامهٔ کامل سفر در ایران: مسیر و فاصلهٔ واقعی، بلیت، اقامتگاه، بودجهٔ شفاف و دفترچهٔ سفر — بدون ثبت‌نام.",
   },
 };
 

@@ -12,6 +12,7 @@ import { orderedTravelCities } from "@/lib/start-flow";
 import { formatJalaliDate } from "@/lib/jalali";
 import SiteHeader from "@/components/SiteHeader";
 import CityCompare from "@/components/CityCompare";
+import { SITE_FACTS } from "@/lib/site-facts";
 import VoiceTripButton from "@/components/VoiceTripButton";
 
 function todayIso(): string {
@@ -163,13 +164,36 @@ export default function StartCitiesPage() {
     router.push("/transport");
   };
 
+  /*
+   * While the device's own copy of the trip is being read, the page still says
+   * what it is: a heading, the promise and a skeleton of the form. A bare spinner
+   * on a public page tells a first-time visitor nothing (and tells a search engine
+   * even less).
+   */
   if (!isHydrated) {
     return (
-      <main dir="rtl" className="grid min-h-screen place-items-center bg-[#120a26] text-cyan-100">
-        <span className="flex items-center gap-2 text-sm">
-          <LoaderCircle className="h-4 w-4 animate-spin" />
-          در حال آماده‌سازی…
-        </span>
+      <main dir="rtl" className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#2c1256_0%,#120a26_60%)]" />
+        </div>
+        <SiteHeader />
+        <section className="mx-auto mt-10 max-w-3xl">
+          <div className="glass p-5 sm:p-7">
+            <h1 className="text-xl font-black text-white sm:text-2xl">مبدأ و مقصد سفر</h1>
+            <p className="mt-2 text-[11px] leading-6 text-slate-400">
+              {SITE_FACTS.citiesLabel} شهر ایران در این فهرست هست؛ شهر و تاریخ را انتخاب می‌کنی و سفرینو بلیت، اقامتگاه و برنامه را با همین عددها می‌چیند.
+            </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2" aria-hidden="true">
+              {[0, 1, 2, 3].map((index) => (
+                <div key={index} className="h-16 animate-pulse rounded-xl border border-white/10 bg-white/[0.04]" />
+              ))}
+            </div>
+            <p className="mt-4 flex items-center gap-2 text-[11px] text-cyan-100">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              خواندن سفر ذخیره‌شده روی همین دستگاه…
+            </p>
+          </div>
+        </section>
       </main>
     );
   }
@@ -196,7 +220,7 @@ export default function StartCitiesPage() {
         <div className="glass p-4 sm:p-6">
           <h1 className="text-xl font-black text-white sm:text-2xl">مبدأ و مقصد سفر</h1>
           <p className="mt-2 text-[11px] leading-6 text-slate-400">
-            هر شهر ایران در این فهرست هست. بر اساس همین شهرها، بلیت، مسیر و اقامتگاه جست‌وجو می‌شود.
+            {SITE_FACTS.citiesLabel} شهر ایران در این فهرست هست — نه «همهٔ شهرهای ایران»؛ همین شهرها هستند که برایشان بلیت، مسیر و اقامتگاه جست‌وجو می‌شود.
           </p>
 
           <div className="mt-4">

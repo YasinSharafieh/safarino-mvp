@@ -114,8 +114,10 @@ check("a ticket that lands a day after check-in is a problem", lateTicket.compat
 check("and the traveller is told why", lateTicket.issues.some((issue) => issue.tone === "problem" && issue.body.includes("شب")));
 const nightArrival = ticketStayCheck({ arrival: "2026-12-01T23:40:00+03:30", checkIn: "2026-12-01", checkOut: "2026-12-03" });
 check("a 23:40 arrival is flagged as a night arrival", nightArrival.issues.some((issue) => issue.title.includes("شب")));
-const noTime = ticketStayCheck({ checkIn: "2026-12-01", checkOut: "2026-12-03" });
+const noTime = ticketStayCheck({ hasTicket: true, departure: "2026-12-01T10:00:00+03:30", checkIn: "2026-12-01", checkOut: "2026-12-03" });
 check("a missing hour is said out loud, never guessed", noTime.issues.some((issue) => issue.tone === "warn"));
+const noTicket = ticketStayCheck({ checkIn: "2026-12-01", checkOut: "2026-12-03" });
+check("with no ticket yet, the ticket is not blamed for anything", !noTicket.issues.some((issue) => issue.title.includes("ساعت رسیدن")), noTicket.line);
 
 console.log("۴ — همسفر دربارهٔ مقصد هم جواب می‌دهد");
 const facts: AskFacts = {

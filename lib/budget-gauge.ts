@@ -75,7 +75,7 @@ export function budgetGauge(input: GaugeInput): BudgetGauge {
       ? `${fa(Math.abs(plan.remaining))} تومان از بودجه بیشتر شده؛ با این انتخاب، سفر تا آخر کشیده نمی‌شود.`
       : zone === "watch"
         ? `بودجه تقریباً پر است و ${fa(Math.max(0, plan.remaining))} تومان جای مانور مانده.`
-        : `بعد از بلیت، اقامت و پول غذا، ${fa(Math.max(0, plan.remaining))} تومان برای خرج آزاد می‌ماند.`;
+        : `بعد از بلیت، اقامت، پول غذا، گشت‌وگذار و رفت‌وآمد شهری، ${fa(Math.max(0, plan.remaining))} تومان برای خرج آزاد می‌ماند.`;
 
   let hint: string;
   const alternative = input.cheaperAlternative;

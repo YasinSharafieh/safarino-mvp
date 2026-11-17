@@ -217,6 +217,9 @@ export default function AccommodationPage() {
     arrival: pickedTransport?.arrival || null,
     checkIn: checkIn || null,
     checkOut: checkOut || null,
+    // With no ticket chosen yet, the page must not warn about a missing arrival
+    // time it does not have.
+    hasTicket: Boolean(pickedTransport),
   });
 
   const totalSpent = costs.totalSpent;
@@ -548,7 +551,7 @@ export default function AccommodationPage() {
         </div>
 
         <SiteHeader />
-        <TravelSteps current={3} />
+        <TravelSteps current={3} done={pickedTransport ? [1, 2] : [1]} />
 
         <div className="mx-auto max-w-7xl pb-16 pt-10 sm:pt-14">
           <motion.section initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="glass overflow-hidden p-5 shadow-card sm:p-7">
@@ -576,10 +579,10 @@ export default function AccommodationPage() {
 
               <div className="mt-7 rounded-2xl border border-white/10 bg-night-900/50 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-xs font-bold text-white"><WalletCards className="h-4 w-4 text-turquoise-300" />بودجهٔ یکپارچهٔ حمل‌ونقل و اقامت</span>
+                  <span className="flex items-center gap-2 text-xs font-bold text-white"><WalletCards className="h-4 w-4 text-turquoise-300" />چقدر از بودجه برنامه‌ریزی شده</span>
                   <span className={`text-xs font-black ${remainingBudget < 0 ? "text-rose-300" : "text-emerald-300"}`}>{formatNumber(budgetPercent)}٪ از بودجه</span>
                 </div>
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="هزینه حمل‌ونقل و اقامت نسبت به بودجه" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(budgetPercent, 100)}>
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="سهم هزینه‌های برنامه‌ریزی‌شده از بودجهٔ کل" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(budgetPercent, 100)}>
                   <motion.div className={`h-full rounded-full ${remainingBudget < 0 ? "bg-rose-500" : "bg-emerald-400"}`} animate={{ width: `${Math.min(budgetPercent, 100)}%` }} />
                 </div>
                 <div className="mt-4 space-y-1.5">
