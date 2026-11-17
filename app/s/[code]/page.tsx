@@ -91,6 +91,16 @@ export default async function SharedPlanPage(props: PageProps) {
             {fa(trip.totals.days)} روز · {fa(trip.totals.stops)} ایستگاه · {fa(trip.totals.km)} کیلومتر رانندگی · حدود {fa(trip.totals.driveMinutes)} دقیقه پشت فرمان
           </p>
 
+          {/* «این سفر چطور است؟» — two sentences for someone who is not going. */}
+          {trip.intro ? (
+            <div className="mt-3 rounded-2xl border border-turquoise-400/20 bg-gradient-to-l from-turquoise-400/[0.09] to-transparent p-3">
+              <p className="text-[11px] leading-7 text-slate-200">{trip.intro}</p>
+              <p className="mt-1 text-[8px] text-slate-500">
+                {trip.introSource === "ai" ? "این دو جمله با هوش مصنوعی از همین برنامه نوشته شده و با اعداد برنامه بازبینی شده است." : "این دو جمله از خودِ همین برنامه ساخته شده است."}
+              </p>
+            </div>
+          ) : null}
+
           <div className="mt-4 grid gap-2 sm:grid-cols-4">
             {[
               { icon: MapPin, label: "روز", value: fa(trip.totals.days) },

@@ -23,6 +23,9 @@ import { sentences } from "../lib/speech";
 import { normalizeReceiptReading } from "../lib/ai-vision";
 import { addExpense, ledgerSentence, ledgerTotals, type Expense } from "../lib/trip-ledger";
 import { reminderHeadline, tripReminders, type ReminderInput } from "../lib/trip-reminders";
+import { buildOfflinePack, offlinePackKey, packAge, packWarnings, OFFLINE_PACK_VERSION } from "../lib/offline-pack";
+import { acceptIntro, localIntro, shareFacts } from "../lib/share-intro";
+import type { ShareTrip } from "../lib/share";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -354,6 +357,71 @@ check("a dry day creates nothing", !dryOk.some((reminder) => reminder.id === "ra
 const leavingTomorrow = tripReminders({ ...baseTrip, departureDate: "2026-11-06" });
 check("leaving tomorrow produces the packing line", leavingTomorrow.some((reminder) => reminder.id === "departing"));
 check("urgent reminders come first", leavingTomorrow[0].severity === "now");
+
+// ---- the offline pack
+const pack = buildOfflinePack({
+  trip: {
+    origin: "تهران",
+    destination: "اصفهان",
+    departureDate: "2026-11-20",
+    returnDate: "2026-11-23",
+    days: 3,
+    travellers: 2,
+    children: 1,
+  },
+  days: [
+    { day: 1, title: "میدان نقش جهان", stops: [{ name: "عمارت عالی‌قاپو", category: "تاریخی", time: "۰۹:۳۰", latitude: 32.6575, longitude: 51.6674 }] },
+    { day: 2, title: "پل‌ها", stops: [{ name: "سی‌وسه‌پل", category: "تاریخی", time: "۱۷:۰۰", latitude: 32.6447, longitude: 51.6676 }] },
+  ],
+  booking: { transportLabel: "قطار", transportCost: 4_800_000, stayName: "هتل خیام", stayCost: 9_000_000, stayAddress: "خیابان چهارباغ", stayPhone: null },
+  money: { budgetToman: 40_000_000, plannedToman: 13_800_000, spentToman: 1_200_000, remainingToman: 38_800_000, rows: [{ label: "بلیت", toman: 4_800_000, kind: "real" }] },
+  now: new Date("2026-11-05T08:00:00Z"),
+});
+check("the pack carries both days and both stops", pack.days.length === 2 && pack.days.flatMap((day) => day.stops).length === 2);
+check("coordinates are kept, rounded, for offline routing", pack.days[0].stops[0].latitude === 32.6575);
+check("the version is stamped", pack.version === OFFLINE_PACK_VERSION);
+check("the pack knows what it could not fill", Array.isArray(pack.gaps));
+const gapPack = buildOfflinePack({
+  trip: { origin: "تهران", destination: "یزد", departureDate: null, returnDate: null, days: 2, travellers: 2, children: 0 },
+  days: [{ day: 1, stops: [] }],
+  booking: { transportLabel: null, transportCost: 0, stayName: null, stayCost: 0, stayAddress: null, stayPhone: null },
+  money: { budgetToman: 20_000_000, plannedToman: 0, spentToman: 0, remainingToman: 20_000_000, rows: [] },
+});
+check("an empty trip admits its gaps", gapPack.gaps.length >= 3);
+check("a four-day-old pack is warned about", packWarnings(pack, new Date("2026-11-09T08:00:00Z")).some((line) => line.includes("ذخیره شده")));
+check("a three-day-old pack is warned about", packWarnings(pack, new Date("2026-11-08T08:00:00Z")).some((line) => line.includes("ذخیره شده")));
+check("age is spoken in Persian", packAge(pack, new Date("2026-11-05T11:00:00Z")).text.includes("ساعت"), packAge(pack, new Date("2026-11-05T11:00:00Z")).text);
+check("each trip has its own pack key", offlinePackKey({ origin: "تهران", destination: "یزد", departureDate: "2026-11-20", days: 2 }) !== offlinePackKey({ origin: "تهران", destination: "یزد", departureDate: "2026-11-21", days: 2 }));
+
+// ---- the share intro
+const sharedTrip: ShareTrip = {
+  v: 1,
+  city: "اصفهان",
+  createdAt: "2026-11-05T08:00:00Z",
+  days: [
+    {
+      d: 1,
+      th: "نقش جهان",
+      ar: "صبح",
+      km: 4,
+      mn: 12,
+      stops: [
+        { n: "عمارت عالی‌قاپو", c: "تاریخی", la: 32.6575, lo: 51.6674, t: "۰۹:۳۰", v: 60 },
+        { n: "مسجد شیخ لطف‌الله", c: "تاریخی", la: 32.6572, lo: 51.6676, t: "۱۱:۰۰", v: 45 },
+      ],
+    },
+  ],
+  totals: { km: 4, driveMinutes: 12, stops: 2, days: 1 },
+  engine: "local",
+  money: { total: 13_800_000, real: 4_800_000, estimate: 9_000_000, budget: 40_000_000, remaining: 26_200_000, lines: [] },
+};
+const shareInfo = shareFacts(sharedTrip);
+check("the facts are the plan's own", shareInfo.city === "اصفهان" && shareInfo.stops === 2 && shareInfo.names.includes("عمارت عالی‌قاپو"));
+const local = localIntro(sharedTrip);
+check("the local paragraph names the city and the days", local.includes("اصفهان") && local.includes("۱"));
+check("a model paragraph that invents a price is dropped", acceptIntro({ intro: "این سفر فوق‌العاده است و فقط ۹۹ میلیون تومان هزینه دارد، حتماً بروید و لذت ببرید." }, sharedTrip).source === "local");
+check("a model paragraph with real numbers is kept", acceptIntro({ intro: `${local}` }, sharedTrip).intro.length > 40);
+check("a too-short paragraph is refused", acceptIntro({ intro: "خوب است." }, sharedTrip).source === "local");
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);

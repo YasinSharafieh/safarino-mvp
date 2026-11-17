@@ -76,6 +76,10 @@ export type ShareTrip = {
   note?: string;
   weather?: { mode: "forecast" | "normals"; note: string; days: ShareWeatherDay[] } | null;
   money?: ShareMoney | null;
+  /** Two warm sentences for whoever opens the link, written from this plan only. */
+  intro?: string | null;
+  /** Who wrote the paragraph, so the page never takes credit for the wrong brain. */
+  introSource?: "local" | "ai" | null;
 };
 
 function short(value: unknown, limit: number): string {

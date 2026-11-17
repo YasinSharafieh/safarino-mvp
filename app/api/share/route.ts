@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { INLINE_URL_LIMIT, compactTrip, encodeTripToToken, saveSharedTrip } from "@/lib/share";
 import { siteUrlFrom } from "@/lib/site";
+import { writeIntro } from "@/lib/share-intro";
 
 /**
  * Makes a shareable link for the plan the traveller is looking at.
@@ -20,7 +21,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "برنامه‌ای برای اشتراک‌گذاری پیدا نشد." }, { status: 400 });
   }
 
-  const code = await saveSharedTrip(trip);
+  /**
+   * A paragraph for whoever opens the link — written from this plan only, checked
+   * against this plan only, and never allowed to block the share itself.
+   */
+  const { intro, source } = await writeIntro(trip);
+  const shared = { ...trip, intro, introSource: source };
+
+  const code = await saveSharedTrip(shared);
   const origin = siteUrlFrom(request);
 
   if (code) {
@@ -29,12 +37,13 @@ export async function POST(request: Request) {
       mode: "short",
       code,
       url: `${origin}/s/${code}`,
-      summary: trip,
+      summary: shared,
+      intro,
       note: "این لینک یک تصویر ثابت از برنامه است؛ هر کسی آن را باز کند همین روزها و همین عددها را می‌بیند.",
     });
   }
 
-  const token = encodeTripToToken(trip);
+  const token = encodeTripToToken(shared);
   const url = `${origin}/s/inline?d=${token}`;
   if (url.length > INLINE_URL_LIMIT) {
     return NextResponse.json({
@@ -47,7 +56,8 @@ export async function POST(request: Request) {
     mode: "inline",
     code: null,
     url,
-    summary: trip,
+    summary: shared,
+    intro,
     note: "حافظهٔ سرور در دسترس نبود، پس کل برنامه داخل خودِ لینک گذاشته شد؛ همان برنامه، لینک بلندتر.",
   });
 }

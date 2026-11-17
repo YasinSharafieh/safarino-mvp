@@ -45,6 +45,7 @@ import StoryExport from "@/components/StoryExport";
 import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import TripReminders from "@/components/TripReminders";
+import OfflinePackCard from "@/components/OfflinePackCard";
 import ExpenseLedger from "@/components/ExpenseLedger";
 import { chosenTransport } from "@/lib/transport-selection";
 import {
@@ -468,6 +469,23 @@ function ItineraryContent() {
         <div className="mx-auto mt-4 grid max-w-6xl gap-3 lg:grid-cols-2">
           <TripReminders />
           <ExpenseLedger />
+        </div>
+
+        {/* One press: the trip works in a tunnel. */}
+        <div className="mx-auto mt-3 max-w-6xl">
+          <OfflinePackCard
+            days={(data?.days || []).map((day) => ({
+              day: day.day,
+              title: day.theme,
+              stops: day.stops.map((stop) => ({
+                name: stop.place.name,
+                category: stop.place.category,
+                time: (stop as { startTime?: string }).startTime,
+                latitude: stop.place.latitude,
+                longitude: stop.place.longitude,
+              })),
+            }))}
+          />
         </div>
 
         <section className="mx-auto mt-6 max-w-6xl">

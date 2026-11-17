@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Car, Compass, MapPin, WifiOff } from "lucide-react";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
+import { packAge, packWarnings, readOfflinePack, type OfflinePack } from "@/lib/offline-pack";
+import { useTravel } from "@/app/context/TravelContext";
+import { tripSignature } from "@/lib/checklist";
 import SiteHeader from "@/components/SiteHeader";
 
 type SavedDay = {
@@ -31,8 +34,27 @@ function fa(value: number): string {
  * was made on this device, read straight from the device — nothing is fetched.
  */
 export default function OfflinePage() {
+  const { travelData, isHydrated } = useTravel();
   const [plan, setPlan] = useState<SavedPlan | null>(null);
+  const [pack, setPack] = useState<OfflinePack | null>(null);
   const [checked, setChecked] = useState(false);
+
+  /**
+   * The saved pack is the better source: it carries the addresses, the booking
+   * and the money, not only the plan. The older plan copy stays as a fallback so
+   * a device that saved before this feature still shows something real.
+   */
+  useEffect(() => {
+    if (!isHydrated) return;
+    const trip = tripSignature({
+      origin: travelData.origin,
+      destination: travelData.destination,
+      departureDate: travelData.departureDate,
+      days: travelData.days,
+    });
+    const read = readOfflinePack(trip);
+    if (read.state === "ok" && read.pack) setPack(read.pack);
+  }, [isHydrated, travelData.days, travelData.departureDate, travelData.destination, travelData.origin]);
 
   useEffect(() => {
     try {
@@ -63,7 +85,83 @@ export default function OfflinePage() {
             صفحه‌هایی که قبلاً باز کرده‌اید از روی همین دستگاه باز می‌شوند. جست‌وجوی زنده، قیمت‌ها و هوای روزهای سفر بدون اینترنت به‌روز نمی‌شوند و چیزی از خودمان نمی‌سازیم.
           </p>
 
-          {plan?.days?.length ? (
+          {pack ? (
+            <div className="mt-4 rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-3">
+              <p className="flex items-center gap-1.5 text-[11px] font-black text-cyan-100">
+                <MapPin className="h-4 w-4" />
+                {pack.trip.origin} → {pack.trip.destination}
+                <span className="font-normal text-cyan-200/70">· ذخیره‌شده {packAge(pack).text}</span>
+              </p>
+
+              <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-1.5">
+                  <span className="block text-[8px] text-slate-400">بودجه</span>
+                  <b className="block text-[10px] font-black text-white">{fa(pack.money.budgetToman)}</b>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-1.5">
+                  <span className="block text-[8px] text-slate-400">خرج شده</span>
+                  <b className="block text-[10px] font-black text-amber-200">{fa(pack.money.spentToman)}</b>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-1.5">
+                  <span className="block text-[8px] text-slate-400">مانده</span>
+                  <b className={`block text-[10px] font-black ${pack.money.remainingToman < 0 ? "text-rose-200" : "text-emerald-200"}`}>
+                    {fa(pack.money.remainingToman)}
+                  </b>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-1.5">
+                  <span className="block text-[8px] text-slate-400">روز</span>
+                  <b className="block text-[10px] font-black text-white">{fa(pack.days.length)}</b>
+                </div>
+              </div>
+
+              {pack.booking.transportLabel || pack.booking.stayName ? (
+                <div className="mt-2 rounded-lg border border-white/10 bg-slate-950/40 p-2 text-[9.5px] leading-5 text-slate-300">
+                  {pack.booking.transportLabel ? (
+                    <p>
+                      <b className="text-slate-400">بلیت: </b>
+                      {pack.booking.transportLabel} — {fa(pack.booking.transportCost)} تومان
+                    </p>
+                  ) : null}
+                  {pack.booking.stayName ? (
+                    <p>
+                      <b className="text-slate-400">اقامت: </b>
+                      {pack.booking.stayName}
+                      {pack.booking.stayAddress ? ` · ${pack.booking.stayAddress}` : ""}
+                      {pack.booking.stayPhone ? ` · ${pack.booking.stayPhone}` : ""}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="mt-2 space-y-2">
+                {pack.days.map((day) => (
+                  <div key={day.day} className="rounded-xl border border-white/10 bg-slate-950/30 p-2">
+                    <p className="text-[10px] font-black text-white">روز {fa(day.day)} · {day.title}</p>
+                    <ol className="mt-1 space-y-0.5">
+                      {day.stops.map((stop, index) => (
+                        <li key={`${day.day}-${stop.name}-${index}`} className="text-[9.5px] leading-5 text-slate-300">
+                          <span className="me-1 text-cyan-300">{stop.time}</span>
+                          {stop.name}
+                          <span className="text-slate-500"> — {stop.category}</span>
+                          {stop.latitude !== null && stop.longitude !== null ? (
+                            <span className="text-slate-600" dir="ltr"> {stop.latitude.toFixed(4)}, {stop.longitude.toFixed(4)}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+              </div>
+
+              {packWarnings(pack).length ? (
+                <ul className="mt-2 space-y-0.5 text-[9px] leading-5 text-amber-200/85">
+                  {packWarnings(pack).slice(0, 3).map((warning) => (
+                    <li key={warning}>· {warning}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : plan?.days?.length ? (
             <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-3">
               <p className="flex items-center gap-1.5 text-[11px] font-black text-cyan-100">
                 <MapPin className="h-4 w-4" />
