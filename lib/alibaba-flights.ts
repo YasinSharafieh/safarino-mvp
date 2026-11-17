@@ -1,4 +1,5 @@
 import { alibabaCdnUrl } from "./alibaba-assets";
+import { resolveIranianCity, transportCityCode } from "./iran-cities";
 import { siteReference } from "./site";
 
 const API_ROOT = "https://ws.alibaba.ir/api";
@@ -44,6 +45,20 @@ function toman(rial: unknown): number | null {
   return Number.isFinite(value) && value >= 0 ? Math.round(value / 10) : null;
 }
 
+/**
+ * The provider speaks airport codes, never city names: «تهران» has to become
+ * «THR» before the request leaves. This is the one place that conversion
+ * happens, so a search started from the ticket page, from a home-page deal or
+ * from the companion all reach the same planes.
+ */
+function resolvedFlightInput(input: FlightSearchInput): FlightSearchInput {
+  const code = (value: string): string => {
+    const city = resolveIranianCity(value);
+    return city ? transportCityCode(city, "plane") : value;
+  };
+  return { ...input, origin: code(input.origin), destination: code(input.destination) };
+}
+
 export function alibabaJalaliDate(date: string): string {
   const parts = new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-latn", {
     timeZone: "UTC",
@@ -67,7 +82,8 @@ export function alibabaBookingUrl(input: FlightSearchInput): string {
     cabinType: "All",
     ...(input.returnDate ? { returning: alibabaJalaliDate(input.returnDate) } : {}),
   });
-  return `${SITE_ROOT}/flights/${input.origin}-${input.destination}?${query.toString()}`;
+  const route = resolvedFlightInput(input);
+  return `${SITE_ROOT}/flights/${route.origin}-${route.destination}?${query.toString()}`;
 }
 
 export async function alibabaRequest(path: string, init?: { body?: unknown }): Promise<unknown> {
@@ -142,7 +158,8 @@ function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
   };
 }
 
-export async function searchAlibabaFlights(input: FlightSearchInput) {
+export async function searchAlibabaFlights(rawInput: FlightSearchInput) {
+  const input = resolvedFlightInput(rawInput);
   const started = await alibabaRequest("v1/flights/domestic/available", {
     body: {
       origin: input.origin.toLowerCase(),

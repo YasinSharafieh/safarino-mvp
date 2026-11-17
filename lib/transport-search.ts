@@ -10,6 +10,7 @@ import { readWithRefresh, snapshotKey, writeSnapshot } from "./snapshot-store";
 import { searchAlibabaFlights } from "./alibaba-flights";
 import { searchAlibabaTrains, searchAlibabaBuses } from "./alibaba-ground";
 import { searchSafar724Buses } from "./safar724-bus";
+import { resolveIranianCity, transportCityCode } from "./iran-cities";
 import {
   dedupeTransportOffers,
   PROVIDER_LABELS,
@@ -155,8 +156,25 @@ function statusFor(provider: TransportProviderId, count: number, found: number, 
 }
 
 /** The actual provider crawl; kept separate so the snapshot store can call it. */
+/**
+ * City names are for people, codes are for providers.
+ *
+ * The ticket page sends codes, but a home-page deal and the companion send the
+ * traveller's own words («تهران»), so the conversion happens here — once, for
+ * every provider and every booking link — instead of being trusted to callers.
+ */
+function providerCodes(input: TransportSearchInput) {
+  const code = (value: string) => {
+    const city = resolveIranianCity(value);
+    return city ? transportCityCode(city, input.mode) : value;
+  };
+  return { origin: code(input.origin), destination: code(input.destination) };
+}
+
 async function crawlTransport(input: TransportSearchInput): Promise<TransportSearchPayload> {
   const { mode, origin, destination, date, returnDate, adults, children, infants } = input;
+  const provider = providerCodes(input);
+  const providerInput: TransportSearchInput = { ...input, origin: provider.origin, destination: provider.destination };
   const statuses: ProviderStatus[] = [];
   const bundles: TransportOffer[][] = [];
   const returningBundles: TransportOffer[][] = [];
@@ -166,25 +184,25 @@ async function crawlTransport(input: TransportSearchInput): Promise<TransportSea
   const alibabaTask = (async () => {
     try {
       if (mode === "plane") {
-        const result = await searchAlibabaFlights({ origin, destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
+        const result = await searchAlibabaFlights({ origin: providerInput.origin, destination: providerInput.destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
         const legacy = result as unknown as Record<string, unknown>;
         const offers = fromAlibabaFlights(result.flights);
         const returning = fromAlibabaFlights(result.returning);
-        const bookingUrl = infoUrl(legacy, "plane", input!);
+        const bookingUrl = infoUrl(legacy, "plane", providerInput);
         const withLinks = offers.map((offer) => ({ ...offer, bookingUrl, bookingNote: "صفحهٔ همین مسیر و تاریخ در علی‌بابا باز می‌شود؛ ردیف پرواز را تطبیق بده." }));
-        const returningWithLinks = returning.map((offer) => ({ ...offer, bookingUrl: returnUrl(legacy, "plane", input!), bookingNote: "صفحهٔ همین مسیر و تاریخ بازگشت در علی‌بابا باز می‌شود." }));
+        const returningWithLinks = returning.map((offer) => ({ ...offer, bookingUrl: returnUrl(legacy, "plane", providerInput), bookingNote: "صفحهٔ همین مسیر و تاریخ بازگشت در علی‌بابا باز می‌شود." }));
         bundles.push(withLinks);
         returningBundles.push(returningWithLinks);
         statuses.push(statusFor("alibaba", withLinks.length, Number(result.count) || withLinks.length));
       } else if (mode === "train") {
-        const result = await searchAlibabaTrains({ origin, destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
+        const result = await searchAlibabaTrains({ origin: providerInput.origin, destination: providerInput.destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
         const offers = fromAlibabaGround(result.offers, "train", result.bookingUrl);
         const returning = fromAlibabaGround(result.returningOffers, "train", result.bookingUrl);
         bundles.push(offers);
         returningBundles.push(returning);
         statuses.push(statusFor("alibaba", offers.length, Number(result.count) || offers.length));
       } else {
-        const result = await searchAlibabaBuses({ origin, destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
+        const result = await searchAlibabaBuses({ origin: providerInput.origin, destination: providerInput.destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) });
         const offers = fromAlibabaGround(result.offers, "bus", result.bookingUrl);
         const returning = fromAlibabaGround(result.returningOffers, "bus", result.bookingUrl);
         bundles.push(offers);

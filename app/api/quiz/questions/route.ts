@@ -4,17 +4,34 @@ import {
   questionsPrompt,
   sanitizeQuestions,
   drawQuestions,
+  QUIZ_TOPICS,
   type AiQuestion,
 } from "../../../../lib/quiz-ai";
+import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
 import { chainFor } from "@/lib/ai-models";
 import { askJson } from "@/lib/ai-openrouter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Ten four-option questions in Persian are long; a short cap truncates the
-// JSON and the whole set is lost, so the answer gets room to finish.
-const MAX_OUTPUT_TOKENS = 4800;
+/**
+ * How the set is written now.
+ *
+ * A single call asking for twelve four-option questions with weights is longer
+ * than the cheap models' output ceiling (the chain allows 900 tokens), so the
+ * JSON was cut off mid-array, the parse failed, and the question bank answered
+ * every single time. Three small calls in parallel — four subjects each, inside
+ * the ceiling — write the whole set in the time of one call, and the result is
+ * cached so the next traveller sees it instantly.
+ */
+const CALLS = [
+  { count: 4, topics: QUIZ_TOPICS.slice(0, 4) },
+  { count: 4, topics: QUIZ_TOPICS.slice(4, 8) },
+  { count: 4, topics: QUIZ_TOPICS.slice(8, 12) },
+] as const;
+
+/** How long a written set is reused before another one is asked for. */
+const SET_TTL_SECONDS = 3 * 60 * 60;
 
 /**
  * How many questions a traveller is asked. Ten is the floor; twelve gives room
@@ -60,11 +77,10 @@ function topUp(written: AiQuestion[], wanted: number, seen: string[] = []): AiQu
 
 /**
  * How long a traveller may wait for written questions before the real question
- * bank answers instead. Twelve seconds is enough for a normal answer and short
- * enough that nobody sits in front of a spinner: the sweep on the live site
- * measured ۴۳ seconds before this limit existed.
+ * bank answers instead. Nine seconds covers one small model call; the sweep on
+ * the live site measured ۴۳ seconds before any limit existed.
  */
-const DEADLINE_MS = 12_000;
+const DEADLINE_MS = 9_000;
 
 /** A promise that resolves, or rejects when the clock runs out. */
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -83,24 +99,46 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-async function askModel(prompt: string, seen: string[] = [], timeoutMs = 10_000) {
+async function askModel(
+  prompt: string,
+  seen: string[] = [],
+  timeoutMs = 8_000,
+): Promise<AiQuestion[]> {
   // «ساختن سؤال» — creativity matters more than price here, but the cheapest
   // good model still wins; the local bank stays as the floor.
   const parsed = (await askJson({
     task: "quiz",
     title: "Safarino Quiz",
-    maxTokens: MAX_OUTPUT_TOKENS,
+    maxTokens: 900,
     timeoutMs,
     system:
       "تو یک مشاور سفر ایرانی هستی که سلیقهٔ مسافر را با سؤال‌های کوتاه و طبیعی می‌شناسد. فقط JSON معتبر به فارسی تولید می‌کنی و هیچ شهر یا جاذبه‌ای از خودت نمی‌سازی.",
     prompt,
   })) as Record<string, unknown>;
-  const written = sanitizeQuestions(parsed?.questions ?? parsed, WANTED);
-  if (!written.length) throw new Error("No usable question in the answer");
-  // A model may write eight good questions and two broken ones. The good ones
-  // are kept and the local bank tops the set up to ten — the traveller always
-  // gets ten questions, and none of them is repeated.
-  return { questions: topUp(written, WANTED, seen), written: written.length };
+  return sanitizeQuestions(parsed?.questions ?? parsed, 6).filter((question) => !seen.includes(question.prompt));
+}
+
+/** All three calls at once; whichever answer, its questions are kept. */
+async function writeSet(origin: string, travellers: number, version: string, seen: string[], timeoutMs: number) {
+  const batches = await Promise.all(
+    CALLS.map((call) =>
+      askModel(
+        questionsPrompt({ origin, travellers, version, avoidPrompts: seen, count: call.count, topics: call.topics }),
+        seen,
+        timeoutMs,
+      ).catch(() => [] as AiQuestion[]),
+    ),
+  );
+  const keys = new Set<string>();
+  const prompts = new Set<string>();
+  const written: AiQuestion[] = [];
+  for (const question of batches.flat()) {
+    if (keys.has(question.key) || prompts.has(question.prompt)) continue;
+    keys.add(question.key);
+    prompts.add(question.prompt);
+    written.push(question);
+  }
+  return written;
 }
 
 /**
@@ -133,25 +171,51 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...fallback(), note: "بدون سرویس هوش مصنوعی، سؤال‌ها از بانک داخلی انتخاب شدند." });
   }
 
-  const prompt = questionsPrompt({ origin, travellers, version: token, avoidPrompts: seen });
+  /**
+   * A written set is reused for a few hours: the store keeps the model's work,
+   * so the traveller after this one gets the same fresh questions with no wait
+   * and the $10 budget is not spent writing the same twelve subjects again.
+   */
+  const cacheKey = `safarino:quiz-set:v3:${origin.replace(/\s+/g, "-")}:${travellers}`;
+  const cached = await getProviderCache<{ questions: AiQuestion[] }>(cacheKey);
+  const cachedQuestions = Array.isArray(cached?.questions) ? cached!.questions : [];
+  if (cachedQuestions.length >= WANTED) {
+    return NextResponse.json({
+      success: true,
+      questions: cachedQuestions,
+      source: "ai",
+      cached: true,
+      meta: { model: chainFor("quiz").models[0], writtenByModel: cachedQuestions.length, generatedAt: null },
+    });
+  }
+
   const chain = chainFor("quiz");
   const startedAt = Date.now();
 
   /*
-   * One attempt, on the task's own chain (askJson already falls back between
-   * models), and never past the deadline. Before this, a slow model could hold
-   * the page for most of a minute — the questions themselves are not worth it,
-   * because the local bank is real, varied and instant.
+   * Three small parallel calls, never past the deadline. Before this, one big
+   * call was cut off by the token ceiling — so the model's questions never
+   * reached a traveller — and the wait measured ۴۳ seconds on the live site.
    */
   try {
-    const result = await withDeadline(askModel(prompt, seen, DEADLINE_MS - 2_000), DEADLINE_MS);
+    const written = await withDeadline(
+      writeSet(origin, travellers, token, seen, DEADLINE_MS - 1_500),
+      DEADLINE_MS,
+    );
+    if (!written.length) throw new Error("No usable question in the answer");
+    const questions = topUp(written, WANTED, seen);
+    // Only a set that is mostly model-written is worth keeping; a set that is
+    // one stray question plus eleven from the bank is not a cache entry.
+    if (written.length >= 6) {
+      await setProviderCache(cacheKey, { questions }, SET_TTL_SECONDS);
+    }
     return NextResponse.json({
       success: true,
-      questions: result.questions,
+      questions,
       source: "ai",
       meta: {
         model: chain.models[0],
-        writtenByModel: result.written,
+        writtenByModel: written.length,
         generatedAt: new Date().toISOString(),
         ms: Date.now() - startedAt,
       },

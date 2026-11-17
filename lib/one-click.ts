@@ -18,7 +18,7 @@
  */
 
 import { DISCOVER_CITIES, type DiscoverCity, type DiscoverMood } from "./discover";
-import { IRANIAN_CITIES } from "./iran-cities";
+import { parseVoiceTrip } from "./voice-parse";
 import { MIN_BUDGET_MILLIONS, MAX_BUDGET_MILLIONS } from "./budget-control";
 
 export type ParsedTrip = {
@@ -38,27 +38,6 @@ export type ParsedTrip = {
   understanding: string;
 };
 
-const FA_DIGITS: Record<string, string> = { "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4", "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9" };
-
-function latin(text: string): string {
-  return (text || "")
-    .replace(/[۰-۹]/g, (digit) => FA_DIGITS[digit] || digit)
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace(/ك/g, "ک")
-    .replace(/ي/g, "ی");
-}
-
-/** A city only counts when it is a real city the app knows. */
-function findCityIn(text: string, pool: { name: string }[]): string | null {
-  let best: { name: string; index: number } | null = null;
-  for (const city of pool) {
-    const index = text.indexOf(city.name);
-    if (index < 0) continue;
-    if (!best || city.name.length > best.name.length) best = { name: city.name, index };
-  }
-  return best?.name ?? null;
-}
-
 const MOOD_WORDS: { mood: string; patterns: RegExp }[] = [
   { mood: "تاریخی", patterns: /(تاریخ|قدیمی|باستان|میراث|بنای|کاخ|مسجد)/ },
   { mood: "طبیعت", patterns: /(طبیعت|جنگل|کوه|آبشار|سبز|روستا|کویر)/ },
@@ -69,77 +48,54 @@ const MOOD_WORDS: { mood: string; patterns: RegExp }[] = [
   { mood: "کویری", patterns: /(کویر|شتر|ستاره|آسمان شب|ریگ)/ },
 ];
 
+/**
+ * One sentence in, the trip's own facts out.
+ *
+ * This used to be a second, hand-written parser that only understood digits —
+ * «سه روز»، «دو نفر»، «بیست میلیون» were all read as nothing — and its «از»
+ * pattern matched the *end* of «شیراز», so a sentence about Shiraz lost its own
+ * destination. The voice door already had a parser that reads Persian numbers,
+ * folds ي/ك, knows the real city list and finds «از تهران» correctly, so the
+ * two doors now share it: whatever a traveller can say to the microphone, they
+ * can type in the one-click box, with the same result.
+ */
 export function parseTripSentence(input: string): ParsedTrip {
-  const text = latin(input);
-  const numbers = (text.match(/\d+(?:[.,]\d+)?/g) || []).map((value) => Number(value.replace(",", ".")));
-
-  // Days: «۵ روز» / «یک هفته»
-  let days: number | null = null;
-  const dayMatch = text.match(/(\d+)\s*(?:روز|شب)/);
-  if (dayMatch) days = Number(dayMatch[1]);
-  else if (/یک\s*هفته|1\s*هفته/.test(text)) days = 7;
-  else if (/دو\s*هفته|2\s*هفته/.test(text)) days = 14;
-  else if (/آخر\s*هفته|weekend/i.test(text)) days = 2;
-
-  // People: «۲ نفر» / «۴ نفر با بچه» / «تنها»
-  let travelers: number | null = null;
-  let children = 0;
-  const peopleMatch = text.match(/(\d+)\s*(?:نفر|بزرگسال|مسافر)/);
-  if (peopleMatch) travelers = Number(peopleMatch[1]);
-  if (/تنها|خودم|سینگل/.test(text)) travelers = travelers || 1;
-  const childMatch = text.match(/(\d+)\s*(?:بچه|کودک|نوجوان)/);
-  if (childMatch) {
-    children = Number(childMatch[1]);
-    travelers = travelers || 2;
-  } else if (/با\s*بچه|با\s*کودک|خانوادگی/.test(text)) {
-    children = 1;
-    travelers = travelers || 2;
-  }
-
-  // Budget: «۴۰ میلیون» / «۴۰م» / «بودجه ۴۰ میلیون تومان»
-  let budgetMillions: number | null = null;
-  const millionMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:میلیون|م\b)/);
-  if (millionMatch) budgetMillions = Number(millionMatch[1]);
-  else {
-    // A bare number over a thousand is read as toman only when it says so.
-    const tomanMatch = text.match(/(\d{6,})\s*(?:تومان|تومن)/);
-    if (tomanMatch) budgetMillions = Math.round(Number(tomanMatch[1]) / 1_000_000);
-  }
-
-  // Origin: «از تهران»
-  const fromMatch = text.match(/از\s+([آ-ی\s]{2,20})/);
-  const origin = fromMatch ? findCityIn(fromMatch[1], IRANIAN_CITIES) : null;
-
-  // Destination: a city named anywhere except right after «از».
-  const withoutOrigin = fromMatch ? text.replace(fromMatch[0], " ") : text;
-  const destination = findCityIn(withoutOrigin, DISCOVER_CITIES) || findCityIn(withoutOrigin, IRANIAN_CITIES);
+  const voice = parseVoiceTrip(input);
+  const text = voice.transcript;
 
   const moods = MOOD_WORDS.filter((entry) => entry.patterns.test(text)).map((entry) => entry.mood);
 
+  /**
+   * «با بچه» says there is a child, and a child travelling with nobody is not a
+   * trip: with no adult count in the sentence the party is one adult plus the
+   * children — said out loud in `assumed`, never silently.
+   */
+  const travelers = voice.travelers || (voice.children ? Math.min(12, voice.children + 1) : null);
+
   const missing: string[] = [];
-  if (!destination) missing.push("مقصد");
-  if (!days) missing.push("تعداد روز");
+  if (!voice.destination) missing.push("مقصد");
+  if (!voice.days) missing.push("تعداد روز");
   if (!travelers) missing.push("تعداد نفرات");
-  if (!budgetMillions) missing.push("بودجه");
+  if (!voice.budgetMillions) missing.push("بودجه");
 
   const fa = new Intl.NumberFormat("fa-IR");
   const parts: string[] = [];
-  if (origin) parts.push(`از ${origin}`);
-  if (destination) parts.push(`به ${destination}`);
-  if (days) parts.push(`${fa.format(days)} روز`);
-  if (travelers) parts.push(`${fa.format(travelers)} نفر${children ? ` (${fa.format(children)} کودک)` : ""}`);
-  if (budgetMillions) parts.push(`بودجهٔ ${fa.format(budgetMillions)} میلیون تومان`);
+  if (voice.origin) parts.push(`از ${voice.origin}`);
+  if (voice.destination) parts.push(`به ${voice.destination}`);
+  if (voice.days) parts.push(`${fa.format(voice.days)} روز`);
+  if (travelers) parts.push(`${fa.format(travelers)} نفر${voice.children ? ` (${fa.format(voice.children)} کودک)` : ""}`);
+  if (voice.budgetMillions) parts.push(`بودجهٔ ${fa.format(voice.budgetMillions)} میلیون تومان`);
   if (moods.length) parts.push(`سلیقه: ${moods.join("، ")}`);
 
   return {
-    origin,
-    destination,
-    days,
+    origin: voice.origin,
+    destination: voice.destination,
+    days: voice.days,
     travelers,
-    children,
-    budgetMillions,
+    children: voice.children || 0,
+    budgetMillions: voice.budgetMillions,
     moods,
-    departureDate: null,
+    departureDate: voice.departureDate,
     missing,
     understanding: parts.length ? parts.join(" · ") : "از جمله‌ات چیزی نفهمیدم؛ یک بار ساده‌تر بنویس.",
   };
@@ -224,11 +180,19 @@ export function acceptProposal(raw: unknown, parsed: ParsedTrip, local: OneClick
   // A city the traveller named themselves is never overridden.
   if (!city || reason.length < 15 || parsed.destination) return local;
   const days = Number(body.days);
+  /**
+   * When the model names the city, the note that used to say «مقصد را از میان
+   * شهرهای واقعی «X» گذاشتم» must not keep the local engine's other city — that
+   * read as a contradiction on screen («مقصد مشهد» next to a plan for اصفهان).
+   */
+  const assumed = local.assumed.filter((line) => !line.startsWith("مقصد"));
+  if (!parsed.destination) assumed.push(`مقصد را از میان شهرهای واقعی «${city.name}» انتخاب کردم.`);
   return {
     ...local,
     destination: city.name,
     days: Number.isFinite(days) && days >= 1 && days <= 21 ? Math.round(days) : local.days,
     reason,
     source: "ai",
+    assumed,
   };
 }

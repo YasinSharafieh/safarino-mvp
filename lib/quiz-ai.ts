@@ -89,17 +89,41 @@ export function sanitizeQuestions(raw: unknown, limit = 10): AiQuestion[] {
   return questions;
 }
 
+/**
+ * The twelve subjects a taste test has to cover. They are split across parallel
+ * model calls, because one call asking for all twelve is longer than the cheap
+ * models' token ceiling — the answer got cut off and the whole set was lost.
+ */
+export const QUIZ_TOPICS = [
+  "با چه کسی سفر می‌کند",
+  "وسیلهٔ رفتن",
+  "آب‌وهوای دلخواه",
+  "نوع جاذبه‌ای که دوست دارد",
+  "چقدر شلوغی را می‌پسندد",
+  "ریتم و سرعت سفر",
+  "نوع اقامتگاه",
+  "خوراک و تجربهٔ محلی",
+  "چیزی که در سفر آزارش می‌دهد",
+  "ترجیح بین سفر شهری و طبیعت",
+  "یک‌جا ماندن یا هر روز جای تازه",
+  "استراحت یا کشف",
+] as const;
+
 export function questionsPrompt(input: {
   origin: string;
   travellers: number;
   version: string;
   avoidPrompts: string[];
+  /** How many questions this call should write (the rest come from another call). */
+  count?: number;
+  /** Which subjects this call covers — so parallel calls never overlap. */
+  topics?: readonly string[];
 }): string {
   const cities = PROFILED_CITIES.slice(0, 40).map((city) => `${city.name}(${city.moods.join("،")})`).join(" | ");
   return `تو یک مشاور سفر ایرانی هستی که می‌خواهد سلیقهٔ یک مسافر را از صفر بشناسد.
-برای او دقیقاً ۱۲ سؤال چهارگزینه‌ای بساز که با جواب‌هایشان بتوانی بهترین شهر ایران را برایش انتخاب کنی.
+برای او دقیقاً ${new Intl.NumberFormat("fa-IR").format(input.count ?? 12)} سؤال چهارگزینه‌ای بساز که با جواب‌هایشان بتوانی بهترین شهر ایران را برایش انتخاب کنی.
 شرایط: مبدأ احتمالی ${input.origin}؛ ${input.travellers} نفر؛ نسخهٔ ${input.version}.
-سؤال‌ها باید این موضوع‌ها را کامل پوشش دهند (هر کدام یک سؤال، و هر سؤال یک مفهوم تازه — نه دو سؤال شبیه هم): با چه کسی سفر می‌کند؛ وسیلهٔ رفتن؛ چه آب‌وهوایی؛ چه نوع جاذبه‌ای؛ چقدر شلوغی را می‌پسندد؛ ریتم و سرعت سفر؛ نوع اقامتگاه؛ خوراک و تجربهٔ محلی؛ چیزی که در سفر آزارش می‌دهد؛ ترجیحش بین سفر شهری و طبیعت؛ اینکه یک جا بماند یا هر روز جای تازه باشد؛ و اینکه سفر برایش استراحت است یا کشف.
+سؤال‌ها باید این موضوع‌ها را کامل پوشش دهند (هر کدام یک سؤال، و هر سؤال یک مفهوم تازه — نه دو سؤال شبیه هم): ${(input.topics && input.topics.length ? input.topics : QUIZ_TOPICS).join("؛ ")}.
 سؤال بودجه را نپرس؛ بودجه در پایان به‌صورت یک عدد از خودش پرسیده می‌شود.
 سؤال‌ها کوتاه، طبیعی، محاوره‌ای و بدون تکرار باشند و با این سؤال‌ها یکسان نباشند: ${input.avoidPrompts.join(" / ") || "—"}
 هر گزینه باید weight روی دسته‌های زیر بدهد (فقط از این هفت): ${DISCOVER_MOODS.join("، ")}.
