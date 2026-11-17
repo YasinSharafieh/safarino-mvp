@@ -57,12 +57,38 @@ function questionsFromClient(raw: unknown): QuizQuestion[] {
   return out.slice(0, 20);
 }
 
-async function askModel(prompt: string) {
+/**
+ * How long the traveller waits for the written analysis.
+ *
+ * The result screen is already complete without it (the local engine names real
+ * cities from the same answers), so this is an enrichment with a hard ceiling —
+ * a sweep of the live site measured ۲۷ seconds for one visit before this limit.
+ */
+const ANALYSIS_DEADLINE_MS = 9_000;
+
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("ANALYSIS_DEADLINE")), Math.max(500, ms));
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function askModel(prompt: string, timeoutMs = ANALYSIS_DEADLINE_MS - 1_000) {
   // «پیشنهاد با دلیل» — a small structured answer that must never invent a city.
   const raw = await askJson({
     task: "suggest",
     title: "Safarino Quiz Analysis",
     maxTokens: MAX_OUTPUT_TOKENS,
+    timeoutMs,
     system:
       "تو یک مشاور سفر ایرانی هستی. فقط از فهرست شهرهای داده‌شده انتخاب می‌کنی، قیمت و جاذبه از خودت نمی‌سازی، و فقط JSON معتبر می‌دهی.",
     prompt,
@@ -126,7 +152,7 @@ export async function POST(request: NextRequest) {
 
   for (const model of chain.models) {
     try {
-      const result = await askModel(prompt);
+      const result = await withDeadline(askModel(prompt), ANALYSIS_DEADLINE_MS);
       const analysis = sanitizeAnalysis(result.raw, { budgetMillions, travellers, origin, fallback });
       return NextResponse.json({
         success: true,
@@ -144,5 +170,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, analysis: fallback });
+  return NextResponse.json({
+    success: true,
+    analysis: fallback,
+    note: "نوشتن تحلیل طول کشید؛ شهرها با موتور داخلی سفرینو و از همان پاسخ‌های تو انتخاب شدند.",
+  });
 }

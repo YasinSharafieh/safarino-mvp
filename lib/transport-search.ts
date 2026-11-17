@@ -51,7 +51,8 @@ export type TransportSearchPayload = {
 
 /** The live answer, served from the shared snapshot store when one exists. */
 export async function searchTransport(input: TransportSearchInput): Promise<{ payload: TransportSearchPayload; source: string; savedAt?: string }> {
-  const base = snapshotKey("transport-v2", {
+  // v3 throws away copies saved while the flight search was still broken.
+  const base = snapshotKey("transport-v3", {
     mode: input.mode,
     origin: input.origin,
     destination: input.destination,
@@ -70,7 +71,22 @@ export async function searchTransport(input: TransportSearchInput): Promise<{ pa
     return { payload: saved.snapshot.value, source: saved.source, savedAt: saved.snapshot.storedAt };
   }
   const live = await crawlTransport(input);
-  await writeSnapshot(base, live, TRANSPORT_FRESH_SECONDS, TRANSPORT_KEEP_SECONDS);
+  /*
+   * An empty or failed answer is never kept the way a good one is.
+   *
+   * The keep window is twelve hours so a route that answered once still shows
+   * instantly later; but a route that found nothing (or whose provider did not
+   * answer) used to be stored for those same twelve hours — so one bad minute
+   * blanked the ticket list for half a day, even after the provider recovered.
+   * A poor answer is kept for ten minutes only, and asked again after that.
+   */
+  const worthKeeping = live.offers.length > 0 && live.providerStatuses.every((status) => status.status === "ok");
+  await writeSnapshot(
+    base,
+    live,
+    worthKeeping ? TRANSPORT_FRESH_SECONDS : 120,
+    worthKeeping ? TRANSPORT_KEEP_SECONDS : 600,
+  );
   return { payload: live, source: "live" };
 }
 

@@ -29,10 +29,14 @@ export type PoiSearchResult = {
   longitude: number | null;
   pois: Poi[];
   poisWithArticle: number;
+  /**
+   * «ok» answered with places, «empty» answered with none in this area,
+   * «failed» did not answer at all — three different facts, said differently.
+   */
   sources: {
-    openstreetmap: "ok" | "failed";
-    wikidata: "ok" | "failed";
-    wikipedia: "ok" | "failed";
+    openstreetmap: "ok" | "empty" | "failed";
+    wikidata: "ok" | "empty" | "failed";
+    wikipedia: "ok" | "empty" | "failed";
   };
   note: string;
 };

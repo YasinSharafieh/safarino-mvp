@@ -43,8 +43,15 @@ export async function POST(request: NextRequest) {
   // Optional: the categories of each plan day, to suggest the best order.
   let suggestion: { order: number[]; reason: string; changed: boolean } | null = null;
   const planDays = Array.isArray(body.planDays) ? (body.planDays as { dayNumber?: unknown; categories?: unknown }[]) : [];
-  if (planDays.length === weather.days.length && planDays.length > 0) {
-    const parsed: DayToMatch[] = planDays.map((day, index) => ({
+  if (planDays.length && weather.days.length) {
+    /*
+     * The plan and the forecast do not have to be the same length: a traveller
+     * may have four plan days and only three forecast days (the rest is beyond
+     * the forecast window). The order is suggested for the days both sides know,
+     * which is always better than saying nothing at all.
+     */
+    const covered = Math.min(planDays.length, weather.days.length);
+    const parsed: DayToMatch[] = planDays.slice(0, covered).map((day, index) => ({
       dayNumber: Number.isFinite(Number(day.dayNumber)) ? Number(day.dayNumber) : index + 1,
       categories: Array.isArray(day.categories) ? day.categories.filter((item): item is string => typeof item === "string") : [],
     }));

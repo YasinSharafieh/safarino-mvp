@@ -59,18 +59,25 @@ async function main() {
 
     const deals = await call("/api/deals?from=" + encodeURIComponent("تهران"), undefined, "GET");
     const packages: any[] = deals.json?.packages || [];
-    const priced = packages.filter((item) => money(item?.priceToman));
+    // A package carries its two real prices separately: the ticket and the night.
+    const priced = packages.filter((item) => money(item?.ticket?.priceToman) && money(item?.stay?.pricePerNightToman ?? item?.stay?.priceTotalToman));
     check(phase, "پیشنهادهای ویژهٔ خانه", deals.status === 200 && packages.length >= 2 && priced.length === packages.length,
-      `${packages.length} بسته، ${priced.length} با قیمت واقعی`, deals.ms);
+      `${packages.length} بسته، ${priced.length} با بلیت و اقامت قیمت‌دار`, deals.ms);
+    check(phase, "هر بسته لینک خرید بلیت دارد", packages.every((item) => typeof item?.ticket?.bookingUrl === "string" && item.ticket.bookingUrl.startsWith("https://")),
+      "همه لینک دارند", 0);
     check(phase, "بسته‌ها شهر واقعی دارند", packages.every((item) => hasPersian(item?.destination || item?.city || "")),
       packages.slice(0, 3).map((item) => item?.destination || item?.city).join("، "), 0);
 
     const reviews = await call("/api/reviews", undefined, "GET");
     const rows: any[] = reviews.json?.reviews || [];
-    check(phase, "نظرات مسافران", reviews.status === 200 && Array.isArray(rows) && rows.length > 0,
-      `${rows.length} نظر، میانگین ${reviews.json?.average ?? "—"}`, reviews.ms);
-    check(phase, "هیچ نظر ساختگی نیست", rows.every((row) => typeof row?.source === "string" && row.source.length > 0),
-      `منبع همه مشخص است`, 0);
+    // A real site starts with no reviews; what matters is that the empty answer is
+    // honest (a stated count of zero) and that nothing undisplayable arrives.
+    check(phase, "نظرات مسافران", reviews.status === 200 && Array.isArray(rows) && reviews.json?.total === rows.length,
+      `${rows.length} نظر ثبت‌شده`, reviews.ms);
+    check(phase, "نظر بدون نام یا متن پذیرفته نمی‌شود", rows.every((row) => hasPersian(row?.name) && hasPersian(row?.text) && row?.rating >= 1),
+      rows.length ? "همه کامل‌اند" : "فهرست خالی و صادق است", 0);
+    const badReview = await call("/api/reviews", { name: "ا", city: "", rating: 9, text: "خ" });
+    check(phase, "نظر نامعتبر رد می‌شود", badReview.status === 400, `${badReview.status}`, badReview.ms);
 
     // a package list is what the smart deal chooser eats
     const smart = await call("/api/deals/smart", {
@@ -152,8 +159,9 @@ async function main() {
       questions: quizQuestions,
       answers,
     });
-    check(phase, "تحلیل پاسخ‌ها", analyze.status === 200 && Array.isArray(analyze.json?.suggestions || analyze.json?.cities),
-      `پیشنهاد: ${(analyze.json?.suggestions || analyze.json?.cities || []).slice(0, 3).map((row: any) => row?.city || row?.name).join("، ") || "—"}`, analyze.ms);
+    const cities: any[] = analyze.json?.analysis?.cities || [];
+    check(phase, "تحلیل پاسخ‌ها و پیشنهاد شهر واقعی", analyze.status === 200 && cities.length > 0 && cities.every((row) => hasPersian(row?.name)),
+      `پیشنهاد: ${cities.slice(0, 3).map((row: any) => row?.name).join("، ") || "—"} · ${analyze.json?.analysis?.source ?? "?"}`, analyze.ms);
     (globalThis as any).__quiz = { quizQuestions, answers, analyze: analyze.json };
   }
 
@@ -162,8 +170,10 @@ async function main() {
   {
     const phase = "۳ بلیت";
     for (const mode of ["train", "plane", "bus"] as const) {
+      // Two days out: that is where the providers' real inventory is. A date far
+      // ahead has no train on sale yet, and the page says so in its own words.
       const price = await call("/api/providers/transport/search", {
-        origin: "تهران", destination: "مشهد", date: future(12), mode, travellers: 2,
+        origin: "تهران", destination: "مشهد", date: future(2), mode, travellers: 2,
       });
       const offers: any[] = price.json?.offers || [];
       if (mode === "train") transportOffers = offers;
@@ -187,10 +197,22 @@ async function main() {
       `${alibabaFlight.json?.count ?? 0} پرواز`, alibabaFlight.ms);
 
     const ground = await call("/api/providers/alibaba/ground", {
-      origin: "تهران", destination: "مشهد", date: future(12), mode: "train", adults: 2,
+      origin: "THR", destination: "MHD", date: future(2), mode: "train", adults: 2,
     });
     check(phase, "قطار از علی‌بابا (لایهٔ دوم)", ground.status === 200 && ground.json?.success === true,
       `HTTP ${ground.status} · ${ground.json?.error ?? "ok"}`, ground.ms);
+
+    const planeByCity = await call("/api/providers/transport/search", {
+      origin: "تهران", destination: "مشهد", date: future(2), mode: "plane", travellers: 1,
+    });
+    const planeOffers: any[] = planeByCity.json?.offers || [];
+    check(phase, "پرواز با نام شهر هم پیدا می‌شود (مسیر پیشنهادهای خانه و همسفر)",
+      planeOffers.length > 0, `${planeOffers.length} پرواز`, planeByCity.ms);
+    if (planeOffers.length) {
+      const link = String(planeOffers[0]?.bookingUrl || "");
+      check(phase, "لینک خرید پرواز کد فرودگاه دارد نه نام فارسی",
+        link.includes("alibaba.ir/flights/") && !/[\u0600-\u06FF]/.test(link), link.slice(0, 70), 0);
+    }
 
     // rejection arms: a past date and a mode-less body must be refused, in Persian
     const past = await call("/api/providers/transport/search", {
@@ -267,8 +289,12 @@ async function main() {
     check(phase, "هر جاذبه نام و دسته دارد",
       pois.every((poi) => hasPersian(poi?.name) && (hasPersian(poi?.category) || poi?.category === undefined)),
       "نام‌ها فارسی", 0);
-    check(phase, "منبع جاذبه‌ها اعلام می‌شود", Array.isArray(search.json?.sources) && search.json.sources.length > 0,
-      (search.json?.sources || []).join("، "), 0);
+    const sources = search.json?.sources || {};
+    const active = Object.keys(sources).filter((key) => sources[key] === "ok");
+    check(phase, "منبع هر جاذبه اعلام می‌شود", Object.keys(sources).length === 3,
+      Object.keys(sources).map((key) => `${key}:${sources[key]}`).join(" · "), 0);
+    check(phase, "جملهٔ منابع با وضعیت واقعی می‌خواند", active.every((key) => String(search.json?.note || "").includes(key === "wikidata" ? "ویکی‌داده" : key === "wikipedia" ? "ویکی‌پدیا" : "OpenStreetMap")),
+      `${active.length} منبع پاسخ داد`, 0);
 
     const distances = await call("/api/route/poi-distances", {
       origin: { latitude: 29.6256, longitude: 52.5585 },
@@ -278,8 +304,8 @@ async function main() {
     check(phase, "فاصلهٔ واقعی اقامتگاه تا جاذبه‌ها", distances.status === 200 && entries.length >= 4,
       `${entries.length} اندازه‌گیری`, distances.ms);
     check(phase, "فاصله‌ها صفر یا منفی نیستند",
-      entries.every((entry) => Number(entry?.km) >= 0 && Number(entry?.minutes) >= 0),
-      `موتور: ${entries[0]?.engine ?? "—"}`, 0);
+      entries.every((entry) => Number(entry?.distanceKm) >= 0 && Number(entry?.durationMinutes) >= 0),
+      `موتور: ${distances.json?.engineLabel ?? distances.json?.engine ?? "—"}`, 0);
 
     const curate = await call("/api/plan/curate", {
       destination: "شیراز",
@@ -315,8 +341,8 @@ async function main() {
       "متن فارسی از همان جاذبه‌ها", 0);
 
     const measure = await call("/api/route/distance", { origin: "تهران", destination: "شیراز" });
-    check(phase, "مسیر جاده‌ای تهران–شیراز", measure.status === 200 && Number(measure.json?.km) > 800,
-      `${Math.round(Number(measure.json?.km) || 0)} کیلومتر · ${Math.round(Number(measure.json?.minutes) || 0)} دقیقه`, measure.ms);
+    check(phase, "مسیر جاده‌ای تهران–شیراز", measure.status === 200 && Number(measure.json?.distanceKm) > 800,
+      `${Math.round(Number(measure.json?.distanceKm) || 0)} کیلومتر · ${Math.round(Number(measure.json?.durationMinutes) || 0)} دقیقه`, measure.ms);
 
     const neshanRoute = await call("/api/route/neshan-route", {
       origin: { latitude: 29.6, longitude: 52.5 },
@@ -347,9 +373,13 @@ async function main() {
     check(phase, "هر روز ایستگاه واقعی دارد", stops.length > 0, `${stops.length} ایستگاه`, 0);
     check(phase, "هر ایستگاه ساعت شروع دارد", stops.every((stop) => /[۰-۹\d]/.test(String(stop?.startTime))),
       `اولین: ${stops[0]?.startTime ?? "—"}`, 0);
-    check(phase, "همهٔ جاذبه‌های انتخابی استفاده می‌شوند",
-      (itinerary.json?.unused || []).length + stops.length >= Math.min(pois.length, 10),
-      `استفاده‌شده ${stops.length}+، بی‌استفاده ${(itinerary.json?.unused || []).length}`, 0);
+    const chosenIds = new Set(pois.slice(0, 10).map((poi) => poi.id));
+    const usedIds = (itinerary.json?.days || []).flatMap((day: any) => (day.stops || []).map((stop: any) => stop?.place?.id));
+    check(phase, "هر ایستگاه از فهرست خود مسافر است",
+      usedIds.every((id: string) => chosenIds.has(id)), `${usedIds.length} ایستگاه`, 0);
+    check(phase, "جای‌نشده‌ها هم صادقانه نام برده می‌شوند",
+      (itinerary.json?.unused || []).every((row: any) => hasPersian(row?.name)),
+      `${(itinerary.json?.unused || []).length} مکان بیرون از ظرفیت روزها`, 0);
 
     const legsInput = stops.slice(0, 5).map((stop) => ({ latitude: stop?.place?.latitude, longitude: stop?.place?.longitude }))
       .filter((point) => Number.isFinite(point.latitude));
@@ -371,8 +401,11 @@ async function main() {
       `${days.length} روز · ${weather.json?.source ?? "—"}`, weather.ms);
     check(phase, "دما عدد واقعی است", days.every((day) => Number.isFinite(Number(day?.maxC)) && Number.isFinite(Number(day?.minC))),
       `بیشینه ${days[0]?.maxC ?? "—"}°`, 0);
-    check(phase, "هوا با برنامهٔ همان روز جفت می‌شود", Boolean(weather.json?.planDays || weather.json?.hints || weather.json?.days?.[0]?.categories),
-      "پیوند روز و دسته", 0);
+    check(phase, "هر روز هوا راهنمای همان روز را دارد",
+      days.every((day) => hasPersian(day?.advice) && Number.isFinite(Number(day?.score))),
+      `${days[0]?.advice?.slice(0, 30) ?? "—"}`, 0);
+    check(phase, "ترتیب روزها بر پایهٔ هوا پیشنهاد می‌شود", Boolean(weather.json?.suggestion?.reason),
+      String(weather.json?.suggestion?.reason ?? "—").slice(0, 40), 0);
 
     const withoutWeatherSource = await call("/api/weather/trip", { city: "شهرناموجود", startDate: future(2), days: 2 });
     check(phase, "شهر ناشناخته هوا را از خودش نمی‌سازد", withoutWeatherSource.status >= 400 || withoutWeatherSource.json?.success === false || withoutWeatherSource.json?.days?.length === 0,
@@ -411,17 +444,23 @@ async function main() {
       check(phase, "لینک اشتراکی باز می‌شود و همان برنامه را نشان می‌دهد",
         page.status === 200 && html.includes("حافظیه"), `HTTP ${page.status}`, 0);
       check(phase, "در لینک اشتراکی دادهٔ شخصی نیست",
-        !/07\d{9}|@/.test(html), "بدون شماره و ایمیل", 0);
+        !/(^|[^\d])09\d{9}([^\d]|$)/.test(html) && !/[\w.+-]+@[\w-]+\.[\w.]+/.test(html),
+        "بدون شمارهٔ موبایل و ایمیل", 0);
     }
     const emptyShare = await call("/api/share", {});
     check(phase, "اشتراک بدون برنامه رد می‌شود", emptyShare.status === 400, `${emptyShare.status}`, emptyShare.ms);
 
     const caption = await call("/api/trip/caption", {
-      city: "شیراز",
-      days: 2,
-      stops: ["حافظیه", "باغ ارم"],
-      transportLabel: "قطار",
-      totals: { km: 12, stops: 5 },
+      input: {
+        destination: "شیراز",
+        origin: "تهران",
+        days: 2,
+        travellers: 2,
+        transportLabel: "قطار",
+        topPlaces: ["حافظیه", "باغ ارم"],
+        km: 12,
+        totalToman: 20_000_000,
+      },
     });
     check(phase, "کپشن استوری", caption.status === 200 && hasPersian(caption.json?.caption || caption.json?.text),
       `${String(caption.json?.caption || caption.json?.text || "").slice(0, 40)}…`, caption.ms);

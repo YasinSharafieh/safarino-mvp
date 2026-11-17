@@ -250,6 +250,16 @@ const DAY_SLOTS = ["۰۸:۳۰", "۱۰:۳۰", "۱۲:۳۰", "۱۵:۰۰", "۱۷:۳�
  * by the routing service, so «۱۰:۳۰» is a real time, not a label.
  */
 
+/**
+ * ✅ answered with places · ⚪ answered, nothing here · — did not answer.
+ * A source that stayed silent must not look like a source that had nothing.
+ */
+function sourceMark(state: "ok" | "empty" | "failed" | undefined): string {
+  if (state === "ok") return "✅";
+  if (state === "empty") return "⚪";
+  return "—";
+}
+
 export default function PlanPage() {
   const { travelData, setTravelData, isHydrated } = useTravel();
   const peopleCount = Math.max(1, Number(travelData.travelers || 2) + Number(travelData.children || 0));
@@ -1381,7 +1391,7 @@ export default function PlanPage() {
                 {poiLoading ? "در حال خواندن جاذبه‌ها از منابع عمومی…" : poiData?.note || "برای این مقصد جاذبهٔ تأییدشده‌ای پیدا نشد؛ هیچ جاذبهٔ ساختگی نمایش داده نمی‌شود."}
               </p>
             )}
-            {poiData && <p className="mt-3 text-[10px] leading-6 text-slate-500">{poiData.note} منابع: ویکی‌پدیا {poiData.sources.wikipedia === "ok" ? "✅" : "—"} · ویکی‌داده {poiData.sources.wikidata === "ok" ? "✅" : "—"} · OpenStreetMap {poiData.sources.openstreetmap === "ok" ? "✅" : "—"}</p>}
+            {poiData && <p className="mt-3 text-[10px] leading-6 text-slate-500">{poiData.note} منابع: ویکی‌پدیا {sourceMark(poiData.sources.wikipedia)} · ویکی‌داده {sourceMark(poiData.sources.wikidata)} · OpenStreetMap {sourceMark(poiData.sources.openstreetmap)}</p>}
           </section>
 
           <div className="mt-6 flex flex-col items-center gap-3 print:hidden">

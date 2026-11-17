@@ -51,10 +51,26 @@ export function normalizeTerm(value: string): string {
     .toLowerCase();
 }
 
+/**
+ * A city's own point — and never another city's.
+ *
+ * This used to accept any name that merely *contained* a city name, so a place
+ * the app has never heard of («شهرناموجود») silently got the weather of whichever
+ * city happened to sit inside that text. A traveller then saw a real forecast for
+ * the wrong place, which is worse than seeing none. Only an exact name, or a name
+ * that differs by a short suffix («مشهد» / «مشهد مقدس»), is accepted now.
+ */
 export function cityCoordinate(city: string): Coordinate | null {
   const target = normalizeTerm(city);
+  if (!target) return null;
+  const near = (name: string): boolean => {
+    const normalized = normalizeTerm(name);
+    if (!normalized) return false;
+    const [longer, shorter] = normalized.length >= target.length ? [normalized, target] : [target, normalized];
+    return shorter.length >= 4 && longer.startsWith(shorter) && longer.length - shorter.length <= 8;
+  };
   const match = IRANIAN_CITIES.find((item) => normalizeTerm(item.name) === target)
-    ?? IRANIAN_CITIES.find((item) => normalizeTerm(item.name).includes(target) || target.includes(normalizeTerm(item.name)));
+    ?? IRANIAN_CITIES.find((item) => near(item.name));
   if (match && typeof match.latitude === "number" && typeof match.longitude === "number" && match.latitude !== 0) {
     return { latitude: match.latitude, longitude: match.longitude };
   }
@@ -155,7 +171,9 @@ function overpassQuery(center: Coordinate): string {
 out center tags 400;`;
 }
 
-async function fetchOverpass(center: Coordinate): Promise<OverpassTagged[]> {
+type SourceFetch<T> = { rows: T[]; reached: boolean };
+
+async function fetchOverpass(center: Coordinate): Promise<SourceFetch<OverpassTagged>> {
   const query = overpassQuery(center);
   // Both mirrors are asked at the same time with a short deadline: this source is
   // an optional supplement and must never slow the encyclopedia sources down.
@@ -169,15 +187,17 @@ async function fetchOverpass(center: Coordinate): Promise<OverpassTagged[]> {
           signal: AbortSignal.timeout(7_000),
           cache: "no-store",
         });
-        if (!response.ok) return [];
+        if (!response.ok) return { rows: [], reached: false };
         const payload = (await response.json()) as { elements?: OverpassTagged[] };
-        return Array.isArray(payload.elements) ? payload.elements : [];
+        return { rows: Array.isArray(payload.elements) ? payload.elements : [], reached: true };
       } catch {
-        return [];
+        return { rows: [], reached: false };
       }
     }),
   );
-  return attempts.find((rows) => rows.length) ?? [];
+  const answered = attempts.find((attempt) => attempt.reached);
+  const rows = attempts.map((attempt) => attempt.rows).find((list) => list.length) ?? [];
+  return { rows, reached: Boolean(answered) };
 }
 
 /** Famous places: Wikidata items with several encyclopedia articles in different languages. */
@@ -198,20 +218,22 @@ HAVING(COUNT(?sl) >= 3)
 LIMIT 400`;
 }
 
-async function fetchFamousPlaces(center: Coordinate): Promise<WikidataRow[]> {
+async function fetchFamousPlaces(center: Coordinate): Promise<SourceFetch<WikidataRow>> {
   try {
     const response = await fetch(`${WIKIDATA_ENDPOINT}?${new URLSearchParams({ query: famousQuery(center), format: "json" })}`, {
       headers: { Accept: "application/sparql-results+json", "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(25_000),
       cache: "no-store",
     });
-    if (!response.ok) return [];
+    if (!response.ok) return { rows: [], reached: false };
     const payload = (await response.json()) as { results?: { bindings?: WikidataRow[] } };
-    return Array.isArray(payload.results?.bindings) ? payload.results.bindings : [];
+    return { rows: Array.isArray(payload.results?.bindings) ? payload.results.bindings : [], reached: true };
   } catch {
-    return [];
+    return { rows: [], reached: false };
   }
 }
+
+const wikipediaReached = { value: false };
 
 async function wikipediaJson(params: Record<string, string>): Promise<Record<string, unknown>> {
   try {
@@ -221,6 +243,7 @@ async function wikipediaJson(params: Record<string, string>): Promise<Record<str
       cache: "no-store",
     });
     if (!response.ok) return {};
+    wikipediaReached.value = true;
     return (await response.json()) as Record<string, unknown>;
   } catch {
     return {};
@@ -229,7 +252,7 @@ async function wikipediaJson(params: Record<string, string>): Promise<Record<str
 
 type WikipediaPlace = GeoSearchRow & { description?: string; length?: number };
 
-async function fetchWikipediaPlaces(center: Coordinate): Promise<WikipediaPlace[]> {
+async function fetchWikipediaPlaces(center: Coordinate): Promise<SourceFetch<WikipediaPlace>> {
   const geo = await wikipediaJson({
     action: "query",
     list: "geosearch",
@@ -241,7 +264,7 @@ async function fetchWikipediaPlaces(center: Coordinate): Promise<WikipediaPlace[
   const rows = ((geo.query as { geosearch?: GeoSearchRow[] } | undefined)?.geosearch ?? []).filter(
     (row) => typeof row.lat === "number" && typeof row.lon === "number" && row.title,
   );
-  if (!rows.length) return [];
+  if (!rows.length) return { rows: [], reached: wikipediaReached.value };
   const meta = await wikipediaJson({
     action: "query",
     pageids: rows.slice(0, 50).map((row) => String(row.pageid)).join("|"),
@@ -249,10 +272,13 @@ async function fetchWikipediaPlaces(center: Coordinate): Promise<WikipediaPlace[
   });
   const pages = ((meta.query as { pages?: PageMeta[] } | undefined)?.pages ?? []);
   const byId = new Map(pages.map((page) => [String(page.pageid), page]));
-  return rows.map((row) => {
-    const page = byId.get(String(row.pageid));
-    return { ...row, description: page?.description ?? "", length: page?.length ?? 0 };
-  });
+  return {
+    rows: rows.map((row) => {
+      const page = byId.get(String(row.pageid));
+      return { ...row, description: page?.description ?? "", length: page?.length ?? 0 };
+    }),
+    reached: wikipediaReached.value,
+  };
 }
 
 /** Returns null when the Wikidata kind is too generic to prove the item is a visitable place. */
@@ -297,6 +323,35 @@ function dedupeKey(name: string): string {
 
 export type PoiWithMeta = Poi & { notability?: number };
 
+/**
+ * «ok» means the source answered with places; «empty» means it answered and had
+ * nothing in this area; «failed» means it did not answer at all. The three are
+ * not the same thing, and the sentence under the list says which ones really
+ * contributed — the page must never credit a source that stayed silent.
+ */
+export type SourceState = "ok" | "empty" | "failed";
+
+function sourceState(rows: number, reached: boolean): SourceState {
+  if (rows > 0) return "ok";
+  return reached ? "empty" : "failed";
+}
+
+const SOURCE_NAMES: Record<string, string> = {
+  wikidata: "ویکی‌داده",
+  wikipedia: "ویکی‌پدیای فارسی",
+  openstreetmap: "OpenStreetMap",
+};
+
+function poisNote(count: number, states: Record<string, SourceState>): string {
+  if (!count) return "در این شعاع جاذبهٔ معتبری پیدا نشد؛ هیچ جاذبهٔ ساختگی نمایش داده نمی‌شود.";
+  const used = Object.keys(states).filter((key) => states[key] === "ok").map((key) => SOURCE_NAMES[key] ?? key);
+  const silent = Object.keys(states).filter((key) => states[key] !== "ok").map((key) => SOURCE_NAMES[key] ?? key);
+  const head = used.length
+    ? `این جاذبه‌ها از ${used.join("، ")} خوانده شده‌اند؛ هیچ جاذبه‌ای از حافظهٔ هوش مصنوعی ساخته نشده است.`
+    : "این جاذبه‌ها از منابع عمومی خوانده شده‌اند؛ هیچ جاذبه‌ای ساختهٔ هوش مصنوعی نیست.";
+  return silent.length ? `${head} ${silent.join(" و ")} در این بررسی پاسخ نداد.` : head;
+}
+
 export async function searchCityPois(city: string, limit = 24): Promise<PoiSearchResult> {
   const center = cityCoordinate(city) ?? await resolveCityCoordinateFromWikipedia(city);
   if (!center) {
@@ -311,17 +366,21 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
     };
   }
 
-  const cacheKey = `safarino:pois:v6:${normalizeTerm(city).replace(/\s+/g, "-")}`;
+  const cacheKey = `safarino:pois:v7:${normalizeTerm(city).replace(/\s+/g, "-")}`;
   const cached = await getProviderCache<PoiSearchResult & { pois: PoiWithMeta[] }>(cacheKey);
   if (cached && Array.isArray(cached.pois) && cached.pois.length) {
     return { ...cached, pois: cached.pois.slice(0, limit) };
   }
 
-  const [famousRows, wikipediaPlaces, overpassRows] = await Promise.all([
+  wikipediaReached.value = false;
+  const [famous, wikipedia, overpass] = await Promise.all([
     fetchFamousPlaces(center),
     fetchWikipediaPlaces(center),
     fetchOverpass(center),
   ]);
+  const famousRows = famous.rows;
+  const wikipediaPlaces = wikipedia.rows;
+  const overpassRows = overpass.rows;
 
   const merged = new Map<string, Candidate>();
 
@@ -439,13 +498,15 @@ export async function searchCityPois(city: string, limit = 24): Promise<PoiSearc
     pois,
     poisWithArticle: pois.filter((poi) => poi.wikipediaUrl).length,
     sources: {
-      openstreetmap: overpassRows.length ? "ok" : "failed",
-      wikidata: famousRows.length ? "ok" : "failed",
-      wikipedia: wikipediaPlaces.length ? "ok" : "failed",
+      openstreetmap: sourceState(overpassRows.length, overpass.reached),
+      wikidata: sourceState(famousRows.length, famous.reached),
+      wikipedia: sourceState(wikipediaPlaces.length, wikipedia.reached),
     },
-    note: pois.length
-      ? "این جاذبه‌ها از ویکی‌پدیای فارسی، ویکی‌داده و OpenStreetMap خوانده شده‌اند؛ هیچ جاذبه‌ای از حافظهٔ هوش مصنوعی ساخته نشده است."
-      : "در این شعاع جاذبهٔ معتبری پیدا نشد؛ هیچ جاذبهٔ ساختگی نمایش داده نمی‌شود.",
+    note: poisNote(pois.length, {
+      openstreetmap: sourceState(overpassRows.length, overpass.reached),
+      wikidata: sourceState(famousRows.length, famous.reached),
+      wikipedia: sourceState(wikipediaPlaces.length, wikipedia.reached),
+    }),
   };
 
   await setProviderCache(cacheKey, result, CACHE_TTL_SECONDS);
