@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import CompanionAdvice from "@/components/CompanionAdvice";
+import PriceWatch, { type PriceTrendView } from "@/components/PriceWatch";
 import {
   Bus,
   CalendarDays,
@@ -60,6 +61,15 @@ type ProviderStatus = {
 
 type SearchResponse = {
   success: boolean;
+  priceTrend?: {
+    latest: { at: string; priceToman: number; offers: number };
+    baseline: { at: string; priceToman: number; offers: number };
+    deltaToman: number;
+    deltaPct: number;
+    direction: "down" | "up" | "flat";
+    message: string;
+    readings: number;
+  } | null;
   error?: string;
   fetchedAt?: string;
   offers?: LiveOffer[];
@@ -137,6 +147,7 @@ const normalise = (value: string) =>
 export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange, onFixDate }: Props) {
   const { travelData, setTravelData } = useTravel();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
+  const [priceTrend, setPriceTrend] = useState<PriceTrendView | null>(null);
   const [returnOffers, setReturnOffers] = useState<LiveOffer[]>([]);
   const [activeLeg, setActiveLeg] = useState<"outbound" | "return">("outbound");
   const [loading, setLoading] = useState(false);
@@ -205,6 +216,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       setStatuses(data.providerStatuses || []);
       setDuplicates(data.duplicateCount || 0);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
+      setPriceTrend(data.priceTrend || null);
       setActiveLeg("outbound");
       setHasSearched(true);
       setMaxPrice(null);
@@ -621,6 +633,11 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
 
       <div className="divide-y divide-white/5">
         {/* همسفر: یک انتخاب واقعی از میان همین بلیت‌ها، با بودجهٔ همین سفر */}
+        {priceTrend ? (
+          <div className="px-3.5 pt-3">
+            <PriceWatch trend={priceTrend} />
+          </div>
+        ) : null}
         {adviceOptions.length ? (
           <div className="p-3.5">
             <CompanionAdvice

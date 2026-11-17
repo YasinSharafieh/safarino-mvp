@@ -53,6 +53,15 @@ function normalizeSearchText(value: string): string {
 }
 
 type SearchResponse = {
+  priceTrend?: {
+    latest: { at: string; priceToman: number; offers: number };
+    baseline: { at: string; priceToman: number; offers: number };
+    deltaToman: number;
+    deltaPct: number;
+    direction: "down" | "up" | "flat";
+    message: string;
+    readings: number;
+  } | null;
   cached?: boolean;
   savedAt?: string;
   fromStore?: string;
@@ -87,6 +96,7 @@ import { bestStay } from "@/lib/budget-fit";
 import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
 import CompanionAdvice from "@/components/CompanionAdvice";
+import PriceWatch, { type PriceTrendView } from "@/components/PriceWatch";
 import { ticketStayCheck } from "@/lib/ticket-timing";
 import { costTableFootnote, tripCostBreakdown } from "@/lib/trip-costs";
 import { chosenTransport } from "@/lib/transport-selection";
@@ -129,6 +139,7 @@ export default function AccommodationPage() {
   const [infantAges, setInfantAges] = useState<number[]>([]);
   const [offers, setOffers] = useState<AccommodationOffer[]>([]);
   const [groups, setGroups] = useState<AccommodationGroup[]>([]);
+  const [priceTrend, setPriceTrend] = useState<PriceTrendView | null>(null);
 
   /**
    * The cheapest room the traveller can actually book on this page — used by the
@@ -436,6 +447,7 @@ export default function AccommodationPage() {
       setResolvedCity(data.city || city);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
       setFromSavedCopy(Boolean(data.cached));
+      setPriceTrend(data.priceTrend || null);
       setTravelData((current) => ({ ...current, days: nights }));
       try {
         window.sessionStorage.setItem(ACCOMMODATION_RESULTS_KEY, JSON.stringify({
@@ -611,6 +623,13 @@ export default function AccommodationPage() {
               </div>
             </div>
           </motion.section>
+
+          {/* The real price history of this city and these nights. */}
+          {priceTrend ? (
+            <div className="mt-6">
+              <PriceWatch trend={priceTrend} />
+            </div>
+          ) : null}
 
           {/* The companion's own pick, made over the real rooms on this page. */}
           {groups.length ? (

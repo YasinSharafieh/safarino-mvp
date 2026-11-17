@@ -3,6 +3,22 @@ import type { AccommodationSearchInput } from "../../../../../lib/accommodation-
 import { searchMultiProviderAccommodation } from "../../../../../lib/accommodation-search";
 import { assertProviderRateLimit } from "../../../../../lib/provider-cache";
 import { readWithRefresh, snapshotKey, writeSnapshot } from "../../../../../lib/snapshot-store";
+import { priceWatchKey, readPriceTrend, recordPrice } from "@/lib/price-watch";
+
+/**
+ * The cheapest room this answer really contains, for the price watch. Returns
+ * null when the payload has no priced room, so nothing is recorded from nothing.
+ */
+function cheapestRoomToman(payload: unknown): { priceToman: number; offers: number } | null {
+  const groups = (payload as { groups?: { offers?: { priceTotalToman?: number }[] }[] })?.groups;
+  if (!Array.isArray(groups)) return null;
+  const prices = groups
+    .flatMap((group) => group?.offers || [])
+    .map((offer) => Number(offer?.priceTotalToman))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  if (!prices.length) return null;
+  return { priceToman: Math.min(...prices), offers: prices.length };
+}
 
 /** A saved multi-provider answer is good for 30 minutes and usable for a day. */
 const FRESH_SECONDS = 1_800;
@@ -84,8 +100,21 @@ export async function POST(request: NextRequest) {
       // A stale copy is answered instantly and refreshed in the background.
       if (source === "stale-cache" && refreshed) void refreshed();
       const saved = snapshot.value as { allProvidersFailed?: boolean };
+      const roomWatchKey = priceWatchKey("accommodation", {
+        city: input.city,
+        checkIn: input.checkIn,
+        checkOut: input.checkOut,
+        adults: input.adults,
+        kind: input.kind,
+      });
+      const cheapestRoom = cheapestRoomToman(snapshot.value);
+      const roomTrend =
+        source === "fresh-cache" && cheapestRoom
+          ? await recordPrice({ key: roomWatchKey, priceToman: cheapestRoom.priceToman, offers: cheapestRoom.offers })
+          : await readPriceTrend(roomWatchKey);
       return NextResponse.json(
         {
+          ...(roomTrend ? { priceTrend: roomTrend } : {}),
           success: !saved.allProvidersFailed,
           cached: true,
           fromStore: source === "stale-cache" ? "last-saved" : "just-fetched",

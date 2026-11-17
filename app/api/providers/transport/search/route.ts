@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { priceWatchKey, readPriceTrend, recordPrice } from "@/lib/price-watch";
 import { searchTransport, type TransportSearchInput } from "../../../../../lib/transport-search";
 import type { TransportMode } from "../../../../../lib/transport-types";
 
@@ -46,8 +47,46 @@ export async function POST(request: NextRequest) {
   const started = Date.now();
   try {
     const { payload, source, savedAt } = await searchTransport(input);
+
+    /**
+     * One true reading for the price watch: the cheapest total this search really
+     * returned, with the number of offers beside it. Recorded only when the data
+     * came from a live crawl, so a saved copy never pretends to be a new price.
+     */
+    let trend: Awaited<ReturnType<typeof recordPrice>> = null;
+    if (source === "live" && payload.offers.length) {
+      const cheapest = payload.offers.reduce(
+        (best, offer) => Math.min(best, offer.priceToman * input.adults + (offer.childPriceToman || 0) * input.children),
+        Number.POSITIVE_INFINITY,
+      );
+      if (Number.isFinite(cheapest) && cheapest > 0) {
+        trend = await recordPrice({
+          key: priceWatchKey("transport", {
+            mode: input.mode,
+            origin: input.origin,
+            destination: input.destination,
+            date: input.date,
+            adults: input.adults,
+          }),
+          priceToman: cheapest,
+          offers: payload.offers.length,
+        });
+      }
+    } else {
+      trend = await readPriceTrend(
+        priceWatchKey("transport", {
+          mode: input.mode,
+          origin: input.origin,
+          destination: input.destination,
+          date: input.date,
+          adults: input.adults,
+        }),
+      );
+    }
+
     return NextResponse.json(
       {
+        ...(trend ? { priceTrend: trend } : {}),
         ...payload,
         cached: source !== "live",
         fromStore: source === "live" ? "crawled-now" : source === "stale-cache" ? "last-saved" : "just-fetched",

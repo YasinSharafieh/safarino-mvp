@@ -12,6 +12,8 @@ import { AGENT_TOOL_NAMES, runAgentTool, type AgentFacts } from "../lib/ai-agent
 import { chainFor, estimateTaskCostUsd } from "../lib/ai-models";
 import { normalizeTicketReading } from "../lib/ai-vision";
 import { budgetLevels, rescueScenarios } from "../lib/budget-scenarios";
+import { trendFrom, isNoteworthy, priceWatchKey } from "../lib/price-watch";
+import { describeFindings, inspectAccommodation, inspectTransport } from "../lib/data-inspector";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -126,6 +128,54 @@ check("a cheaper room that really exists becomes a scenario", withCheaper.scenar
 const levels = budgetLevels({ travellers: 2, days: 3, city: "اصفهان", ticketToman: 12_000_000, stayToman: 16_000_000 });
 check("three budget sizes, in order", levels[0].millions < levels[1].millions && levels[1].millions < levels[2].millions);
 check("the lean size is at least the trip's real cost", levels[0].millions * 1_000_000 >= 36_400_000);
+
+// ---- the price watch: only real readings, never a guess
+const sameDay = new Date("2026-11-05T09:00:00Z");
+const dayBefore = new Date("2026-11-04T09:00:00Z");
+const down = trendFrom([
+  { at: dayBefore.toISOString(), priceToman: 5_000_000, offers: 12 },
+  { at: sameDay.toISOString(), priceToman: 4_100_000, offers: 14 },
+]);
+check("a cheaper reading is called cheaper", down?.direction === "down" && down.deltaToman === -900_000);
+check("and the sentence carries the real amount", Boolean(down?.message.includes("۹۰۰٬۰۰۰")));
+check("a real 18٪ drop is worth telling the traveller", isNoteworthy(down));
+check("one single reading never pretends to be a trend", trendFrom([{ at: sameDay.toISOString(), priceToman: 5_000_000, offers: 3 }])?.readings === 1);
+check("a flat price says flat", trendFrom([
+  { at: dayBefore.toISOString(), priceToman: 5_000_000, offers: 12 },
+  { at: sameDay.toISOString(), priceToman: 5_000_200, offers: 12 },
+])?.direction === "flat");
+check("a 1٪ wobble is not worth a message", !isNoteworthy(trendFrom([
+  { at: dayBefore.toISOString(), priceToman: 5_000_000, offers: 12 },
+  { at: sameDay.toISOString(), priceToman: 4_980_000, offers: 12 },
+])));
+check("two different searches never share a watch key", priceWatchKey("transport", { a: 1 }) !== priceWatchKey("transport", { a: 2 }));
+check("key order does not create two keys", priceWatchKey("transport", { a: 1, b: 2 }) === priceWatchKey("transport", { b: 2, a: 1 }));
+
+// ---- the inspector: it must catch our own mistakes
+const dirty = inspectTransport({
+  fetchedAt: new Date().toISOString(),
+  offers: [
+    { id: "a", operator: "ماهان", priceToman: 6_000_000, logoUrl: "x" },
+    { id: "a", operator: "ماهان", priceToman: 6_000_000, logoUrl: "x" },
+    { id: "b", operator: "", priceToman: 12, logoUrl: "" },
+  ],
+  providerStatuses: [{ provider: "safar724", status: "failed" }],
+});
+const codes = dirty.map((finding) => finding.code);
+check("a repeated id is an error, not a warning", dirty.some((finding) => finding.code === "duplicate-id" && finding.severity === "error"));
+check("an impossible price is caught", codes.includes("implausible-price"));
+check("a nameless ticket is caught", codes.includes("missing-operator"));
+check("a dead provider is reported", codes.includes("provider-down"));
+const clean = inspectTransport({
+  fetchedAt: new Date().toISOString(),
+  offers: [{ id: "a", operator: "ماهان", priceToman: 6_000_000, logoUrl: "x" }],
+  providerStatuses: [{ provider: "alibaba", status: "ok" }],
+});
+check("a clean payload has no errors", clean.every((finding) => finding.severity !== "error"));
+check("and the verdict says so in Persian", describeFindings(clean).includes("سالم"));
+const stays = inspectAccommodation({ groups: [{ offers: [{ name: "", priceTotalToman: 0 }] }] });
+check("a room without a name is an error", stays.some((finding) => finding.code === "room-without-name" && finding.severity === "error"));
+check("no price at all is an error", stays.some((finding) => finding.code === "implausible-room-price"));
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);
