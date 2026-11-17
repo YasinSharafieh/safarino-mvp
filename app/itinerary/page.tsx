@@ -44,6 +44,8 @@ import SmartPacking from "@/components/SmartPacking";
 import StoryExport from "@/components/StoryExport";
 import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
+import TripReminders from "@/components/TripReminders";
+import ExpenseLedger from "@/components/ExpenseLedger";
 import { chosenTransport } from "@/lib/transport-selection";
 import {
   buildBudgetPlan,
@@ -459,6 +461,13 @@ function ItineraryContent() {
             href="/itinerary/print"
             ctaLabel="نسخهٔ PDF سفر"
           />
+        </div>
+
+        {/* What is still missing, from the trip's own conditions — and the book
+            of real spending, which turns the planned budget into a true one. */}
+        <div className="mx-auto mt-4 grid max-w-6xl gap-3 lg:grid-cols-2">
+          <TripReminders />
+          <ExpenseLedger />
         </div>
 
         <section className="mx-auto mt-6 max-w-6xl">

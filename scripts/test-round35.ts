@@ -20,6 +20,9 @@ import type { WeatherDay } from "../lib/weather";
 import { acceptProposal, candidateCities, localProposal, parseTripSentence } from "../lib/one-click";
 import { acceptVerdict, cityFacts, compareLocally } from "../lib/city-compare";
 import { sentences } from "../lib/speech";
+import { normalizeReceiptReading } from "../lib/ai-vision";
+import { addExpense, ledgerSentence, ledgerTotals, type Expense } from "../lib/trip-ledger";
+import { reminderHeadline, tripReminders, type ReminderInput } from "../lib/trip-reminders";
 
 let failures = 0;
 function check(label: string, value: boolean, detail?: string) {
@@ -279,6 +282,78 @@ check("a model sentence with an invented price is thrown away", hijacked.source 
 
 // ---- the voice
 check("a paragraph is split into speakable sentences", sentences("سلام. امروز به بازار می‌رویم؟ خیلی خوب است!").length === 3);
+
+// ---- the receipt reader
+const receipt = normalizeReceiptReading({ vendor: "رستوران شاطرعباس", title: "ناهار دو نفره", price: "۸۵۰٬۰۰۰", category: "food" });
+check("a receipt amount becomes a real number", receipt.fields.toman === 850_000);
+check("the kind of spending is kept", receipt.fields.category === "food");
+const noPrice = normalizeReceiptReading({ vendor: "تاکسی", title: null, price: null });
+check("a receipt with no readable amount is not used", noPrice.ok === false);
+check("and the missing amount is named", noPrice.unread.includes("مبلغ"));
+const guessed = normalizeReceiptReading({ vendor: "اسنپ", title: "سفر شهری", price: "120000" });
+check("the category is read from the words when missing", guessed.fields.category === "transport");
+
+// ---- the ledger
+const entries: Expense[] = [
+  { id: "1", title: "تاکسی", toman: 300_000, category: "transport", at: "2026-11-06T09:00:00Z", source: "manual" },
+  { id: "2", title: "ناهار", toman: 850_000, category: "food", at: "2026-11-06T13:00:00Z", source: "receipt" },
+  { id: "3", title: "موزه", toman: 200_000, category: "activity", at: "2026-11-06T16:00:00Z", source: "manual" },
+];
+const book = ledgerTotals(entries, 40_000_000);
+check("the book adds up exactly", book.totalToman === 1_350_000);
+check("the remaining is the budget minus the book", book.remainingToman === 38_650_000);
+check("the biggest row is found", book.biggest?.title === "ناهار");
+check("shares add up to a hundred", Math.round(book.byCategory.reduce((sum, row) => sum + row.share, 0)) === 100);
+const over = ledgerTotals([...entries, { id: "4", title: "هتل", toman: 45_000_000, category: "stay", at: "2026-11-06T18:00:00Z", source: "manual" }], 40_000_000);
+check("spending past the budget is called out", over.overBudget);
+check("and the sentence says by how much", ledgerSentence(over, 40_000_000).includes("گذشته است"));
+check("an empty book says so honestly", ledgerSentence(ledgerTotals([], 40_000_000), 40_000_000).includes("هنوز خرجی ثبت نشده"));
+
+// ---- the reminders, only when the condition is true
+const baseTrip: ReminderInput = {
+  origin: "تهران",
+  destination: "مشهد",
+  departureDate: "2026-11-20",
+  returnDate: null,
+  days: 3,
+  travellers: 2,
+  children: 0,
+  budgetToman: 40_000_000,
+  ticketToman: 8_000_000,
+  ticketLabel: "قطار",
+  stayToman: 12_000_000,
+  stayLabel: "هتل خیام",
+  staySkipped: false,
+  dailyTotalToman: 7_200_000,
+  today: "2026-11-05",
+};
+const ready = tripReminders(baseTrip);
+check("a complete trip has nothing urgent", ready.every((reminder) => reminder.severity !== "now"), ready.map((r) => r.id).join(","));
+check("and the headline is calm", reminderHeadline(ready).length > 10);
+
+const noDate = tripReminders({ ...baseTrip, departureDate: null });
+check("a missing date is urgent", noDate.some((reminder) => reminder.id === "no-date" && reminder.severity === "now"));
+const noTicket = tripReminders({ ...baseTrip, ticketToman: 0 });
+check("a missing ticket is caught", noTicket.some((reminder) => reminder.id === "no-ticket"));
+const overBudget = tripReminders({ ...baseTrip, budgetToman: 10_000_000 });
+check("an over-budget trip says the real gap", overBudget.some((reminder) => reminder.id === "over-budget" && reminder.detail.includes("تومان")));
+const skipped = tripReminders({ ...baseTrip, stayToman: 0, staySkipped: true });
+check("a deliberately skipped room is not nagged about", !skipped.some((reminder) => reminder.id === "no-stay"));
+const rainy = tripReminders({
+  ...baseTrip,
+  weather: [{ day: 2, label: "باران", rainProbability: 80, maxC: 18 }],
+  dayOutdoors: [0.2, 0.9, 0.1],
+});
+check("rain over an outdoor day is a real reminder", rainy.some((reminder) => reminder.id === "rain-2"));
+const dryOk = tripReminders({
+  ...baseTrip,
+  weather: [{ day: 2, label: "آفتابی", rainProbability: 10, maxC: 22 }],
+  dayOutdoors: [0.9, 0.9, 0.9],
+});
+check("a dry day creates nothing", !dryOk.some((reminder) => reminder.id === "rain-2"));
+const leavingTomorrow = tripReminders({ ...baseTrip, departureDate: "2026-11-06" });
+check("leaving tomorrow produces the packing line", leavingTomorrow.some((reminder) => reminder.id === "departing"));
+check("urgent reminders come first", leavingTomorrow[0].severity === "now");
 
 check("the agent's own model chain is cheap", chainFor("agent").models.length >= 2);
 check("a tool decision costs a fraction of a cent", estimateTaskCostUsd("agent", 2_000) < 0.005);

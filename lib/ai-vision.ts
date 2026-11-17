@@ -172,3 +172,105 @@ export function normalizeTicketReading(body: Record<string, unknown>): ReadTicke
       : "بخشی از بلیت خوانا نبود؛ همان‌هایی که خوانده شد را نشان می‌دهم و بقیه را دستی کامل کن.",
   };
 }
+
+
+/* ------------------------------------------------------------------ receipts */
+
+export type ReadReceiptResult = {
+  ok: boolean;
+  fields: {
+    /** What was bought, as the receipt itself words it. */
+    title: string | null;
+    vendor: string | null;
+    toman: number | null;
+    category: "transport" | "stay" | "food" | "activity" | "shopping" | "other" | null;
+    /** Gregorian ISO date printed on the receipt, if it had one. */
+    date: string | null;
+  };
+  unread: string[];
+  note: string;
+};
+
+const CATEGORY_WORDS: { category: NonNullable<ReadReceiptResult["fields"]["category"]>; pattern: RegExp }[] = [
+  { category: "transport", pattern: /(تاکسی|اسنپ|تپسی|بلیت|پرواز|قطار|اتوبوس|بنزین|مترو|فرودگاه|سوخت)/ },
+  { category: "stay", pattern: /(هتل|اقامت|اتاق|سوئیت|ویلا|بومگردی|مینی‌بار)/ },
+  { category: "food", pattern: /(رستوران|کافه|غذا|چای|آبمیوه|بستنی|قنادی|نان|صبحانه|ناهار|شام|فست)/ },
+  { category: "activity", pattern: /(موزه|بازدید|بلیط|تفریح|تور|شهربازی|آکواریوم|پارک)/ },
+  { category: "shopping", pattern: /(سوغات|خرید|فروشگاه|بازار|پوشاک|صنایع)/ },
+];
+
+/**
+ * Reads a receipt photo. Same discipline as the ticket reader: only what is
+ * visible, every field re-checked here, and anything unclear is named instead of
+ * guessed. A receipt is written into the traveller's own book — never uploaded
+ * anywhere except the one model call that reads it.
+ */
+export async function readReceiptImage(input: { dataUrl: string; mime?: string }): Promise<ReadReceiptResult> {
+  const system =
+    "تو یک خوانندهٔ دقیق رسید و فاکتور فارسی هستی. فقط چیزی را می‌خوانی که در تصویر دیده می‌شود. اگر مبلغ یا فروشنده خوانا نیست null برمی‌گردانی و در unread می‌نویسی. مبلغ ریال را به تومان تبدیل می‌کنی (تقسیم بر ۱۰). فقط JSON معتبر می‌نویسی.";
+
+  const prompt = `این تصویر یک رسید، فاکتور یا قبض است. این فیلدها را استخراج کن:
+{"title":"شرح خرید یا خدمات"|null,
+ "vendor":"نام فروشنده یا رستوران یا تاکسی"|null,
+ "price":"مبلغ نهایی به تومان، فقط رقم"|null,
+ "category":"transport"|"stay"|"food"|"activity"|"shopping"|"other"|null,
+ "date_iso":"YYYY-MM-DD"|null,
+ "unread":["هر چیزی که خوانا نبود"]}
+
+قواعد: اگر تصویر رسید سفر نیست (مثلاً عکس شخصی)، همه را null بگذار و در unread بنویس «رسید شناسایی نشد». مبلغ کل را بده، نه جمع جزء‌ها، مگر اینکه کل خوانا نباشد.`;
+
+  const raw = await askJson({
+    task: "vision",
+    title: "Safarino Receipt Reader",
+    system,
+    prompt,
+    image: { dataUrl: input.dataUrl, mime: input.mime },
+    maxTokens: 320,
+    temperature: 0.1,
+  });
+
+  return normalizeReceiptReading((raw || {}) as Record<string, unknown>);
+}
+
+/** All the rules about a receipt reading, separated so they can be tested free. */
+export function normalizeReceiptReading(body: Record<string, unknown>): ReadReceiptResult {
+  const unread: string[] = [];
+  const reported = Array.isArray(body.unread)
+    ? body.unread.filter((item): item is string => typeof item === "string").slice(0, 5).map((item) => shortText(item, 60))
+    : [];
+
+  const toman = latinNumber(body.price);
+  const vendorText = shortText(body.vendor, 60) || null;
+  const rawTitle = shortText(body.title, 60) || null;
+
+  // The category: the model's own answer first, then the words on the receipt.
+  const haystack = `${rawTitle || ""} ${vendorText || ""}`;
+  const guessed = CATEGORY_WORDS.find((entry) => entry.pattern.test(haystack))?.category || null;
+  const allowed = ["transport", "stay", "food", "activity", "shopping", "other"];
+  const category = typeof body.category === "string" && allowed.includes(body.category)
+    ? (body.category as ReadReceiptResult["fields"]["category"])
+    : guessed;
+
+  let date: string | null = null;
+  if (typeof body.date_iso === "string" && isIsoDate(body.date_iso)) date = body.date_iso;
+
+  if (!toman) unread.push("مبلغ");
+  if (!vendorText && !rawTitle) unread.push("فروشنده یا شرح خرید");
+  if (!category) unread.push("دستهٔ خرج");
+
+  const ok = Boolean(toman);
+  return {
+    ok,
+    fields: {
+      title: rawTitle || (category ? `${vendorText || ""}`.trim() || null : null),
+      vendor: vendorText,
+      toman,
+      category: category || null,
+      date,
+    },
+    unread: Array.from(new Set([...reported, ...unread])).slice(0, 5),
+    note: ok
+      ? "مبلغ از تصویر خوانده شد؛ هر چیزی که مطمئن نبودم خالی گذاشتم."
+      : "مبلغ در این تصویر خوانا نبود؛ می‌توانی خودت عدد را بنویسی.",
+  };
+}
