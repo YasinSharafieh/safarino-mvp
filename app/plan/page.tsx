@@ -58,6 +58,7 @@ import { tripCostBreakdown, costTableFootnote } from "@/lib/trip-costs";
 import { ticketStayCheck } from "@/lib/ticket-timing";
 import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
+import TripReminders from "@/components/TripReminders";
 import { recordTaste } from "@/lib/taste-profile";
 import WeatherReorder from "@/components/plan/WeatherReorder";
 import SpeakButton from "@/components/SpeakButton";
@@ -1002,6 +1003,7 @@ export default function PlanPage() {
           </section>
 
           <div className="mt-8 print:hidden">
+            <TripReminders compact className="mb-3" />
             <BudgetBar
               itemToman={0}
               itemLabel="برنامهٔ این سفر"

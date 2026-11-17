@@ -95,6 +95,7 @@ import NextStepBar from "@/components/NextStepBar";
 import { bestStay } from "@/lib/budget-fit";
 import TripCostTable from "@/components/TripCostTable";
 import BudgetBar from "@/components/BudgetBar";
+import TripReminders from "@/components/TripReminders";
 import { recordTaste } from "@/lib/taste-profile";
 import CompanionAdvice from "@/components/CompanionAdvice";
 import PriceWatch, { type PriceTrendView } from "@/components/PriceWatch";
@@ -560,6 +561,7 @@ export default function AccommodationPage() {
                   <p className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-6 text-slate-400"><MapPin className="h-4 w-4 text-cyan-300" />مقصد: {city || travelData.destination || "انتخاب نشده"}{nights > 0 && ` · اقامت ${formatNumber(nights)} شب`} · {formatNumber(travelData.travelers + travelData.children + travelData.infants)} مسافر</p>
                 </div>
                 <div className="w-full lg:max-w-sm">
+                  <TripReminders compact className="mb-3" />
                   <BudgetBar
                     itemToman={accommodationCost}
                     itemLabel={selected ? `اقامت ${String(selected.name ?? "")}` : "این اقامتگاه"}

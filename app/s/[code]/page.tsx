@@ -12,6 +12,7 @@ import {
 } from "@/lib/share";
 import { formatJalaliDate } from "@/lib/jalali";
 import WeatherGlyph from "@/components/WeatherGlyph";
+import SpeakButton from "@/components/SpeakButton";
 import SharedPlanActions from "@/components/SharedPlanActions";
 import SiteHeader from "@/components/SiteHeader";
 
@@ -95,9 +96,14 @@ export default async function SharedPlanPage(props: PageProps) {
           {trip.intro ? (
             <div className="mt-3 rounded-2xl border border-turquoise-400/20 bg-gradient-to-l from-turquoise-400/[0.09] to-transparent p-3">
               <p className="text-[11px] leading-7 text-slate-200">{trip.intro}</p>
-              <p className="mt-1 text-[8px] text-slate-500">
-                {trip.introSource === "ai" ? "این دو جمله با هوش مصنوعی از همین برنامه نوشته شده و با اعداد برنامه بازبینی شده است." : "این دو جمله از خودِ همین برنامه ساخته شده است."}
-              </p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <SpeakButton text={trip.intro} />
+                <p className="text-[8px] text-slate-500">
+                  {trip.introSource === "ai"
+                    ? "این دو جمله با هوش مصنوعی از همین برنامه نوشته شده و با اعداد برنامه بازبینی شده است."
+                    : "این دو جمله از خودِ همین برنامه ساخته شده است."}
+                </p>
+              </div>
             </div>
           ) : null}
 

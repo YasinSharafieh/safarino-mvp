@@ -22,7 +22,9 @@
     "test:discover": "tsx scripts/test-discover.ts",
     "test:quiz-ai": "tsx scripts/test-quiz-ai.ts",
     "test:car-cost": "tsx scripts/test-car-cost.ts",
-    "test:start-flow": "tsx scripts/test-start-flow.ts"
+    "test:start-flow": "tsx scripts/test-start-flow.ts",
+    "test:coverage": "tsx scripts/test-coverage.ts",
+    "coverage:report": "tsx scripts/coverage-report.ts"
   },
   "dependencies": {
     "framer-motion": "^11.11.9",

@@ -8,6 +8,8 @@ import { drawDayMap } from "@/lib/day-map";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { formatJalaliDate } from "@/lib/jalali";
 import type { ItineraryDay } from "@/lib/itinerary";
+import { ledgerTotals, readLedger } from "@/lib/trip-ledger";
+import { tripSignature } from "@/lib/checklist";
 import { DEFAULT_BUDGET_ASSUMPTIONS, buildBudgetPlan, readBudgetAssumptions, type BudgetAssumptions } from "@/lib/budget";
 import SiteHeader from "@/components/SiteHeader";
 import { chosenTransport } from "@/lib/transport-selection";
@@ -85,6 +87,23 @@ export default function ItineraryPrintPage() {
     transport: transport ? { label: String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.kind as string) || ""), totalToman: transportCost || null } : null,
     assumptions: budgetPlanAssumptions,
   });
+
+  /**
+   * The book of real spending, the same one the trip page shows. Read from the
+   * device, matched to this trip's own signature, so the printed document and the
+   * screen never disagree.
+   */
+  const ledger = ledgerTotals(
+    readLedger(
+      tripSignature({
+        origin: travelData.origin,
+        destination: travelData.destination,
+        departureDate: travelData.departureDate,
+        days: travelData.days,
+      }),
+    ),
+    budgetToman,
+  );
 
   const checklistItems = allItems(checklist);
   const checklistDone = new Set(checklist.done);
@@ -331,6 +350,35 @@ export default function ItineraryPrintPage() {
               هر کیلومتر رانندگی در شهر {toman(budgetPlanAssumptions.cityCostPerKm)} · خوراک هر نفر در روز {toman(budgetPlanAssumptions.foodPerPersonPerDay)} · بلیت هر جاذبه برای هر نفر {toman(budgetPlanAssumptions.ticketPerStop)} · سوغات و متفرقه هر نفر در روز {toman(budgetPlanAssumptions.extrasPerPersonPerDay)}
             </p>
           </div>
+          {/* The traveller's own book, printed with the plan: the only numbers in
+              this document that are not estimates. */}
+          {ledger.entries.length ? (
+            <div className="mt-4 rounded-lg border border-slate-200 p-3">
+              <h3 className="text-sm font-black text-slate-900">خرج‌های واقعی ثبت‌شده</h3>
+              <table className="mt-2 w-full text-right text-[12px]">
+                <tbody className="text-slate-800">
+                  {ledger.byCategory.map((row) => (
+                    <tr key={row.category} className="border-b border-slate-100">
+                      <td className="py-1.5 font-bold">{row.label}</td>
+                      <td className="py-1.5">{toman(row.toman)}</td>
+                      <td className="py-1.5 text-[11px] text-slate-500">{fa(row.share)}٪ از خرج‌های ثبت‌شده</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50">
+                    <td className="py-1.5 font-black">جمع خرج‌های واقعی</td>
+                    <td className="py-1.5 font-black">{toman(ledger.totalToman)}</td>
+                    <td className={`py-1.5 font-black ${ledger.overBudget ? "text-rose-700" : "text-cyan-800"}`}>
+                      {ledger.overBudget ? `${toman(Math.abs(ledger.remainingToman))} بیشتر از بودجه` : `${toman(ledger.remainingToman)} از بودجه مانده`}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[10px] leading-5 text-slate-500">
+                این ردیف‌ها را خودتان در سفر ثبت کرده‌اید (یا از عکس رسید خوانده شده)؛ برای همین «واقعی» هستند و با تخمین‌های بالا قاطی نشده‌اند.
+              </p>
+            </div>
+          ) : null}
+
           <p className="mt-4 text-[10px] leading-6 text-slate-500">
             قیمت‌های اقامتگاه و حمل‌ونقل همان چیزی است که در لحظهٔ انتخاب از منبع اصلی خوانده شد؛ ممکن است تغییر کند. هیچ هزینه‌ای تخمینی به‌عنوان واقعیت نوشته نشده است.
           </p>

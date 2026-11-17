@@ -35,6 +35,7 @@ import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
 import BudgetBar from "@/components/BudgetBar";
+import TripReminders from "@/components/TripReminders";
 import { recordTaste } from "@/lib/taste-profile";
 import { budgetGauge } from "@/lib/budget-gauge";
 import SiteHeader from "@/components/SiteHeader";
@@ -584,6 +585,8 @@ function TransportPageContent() {
 
           {/* ------------------------------------------------ mode + budget */}
           <div className="mt-5">
+            {/* The same reminders as the trip page, thinned to what is urgent now. */}
+            <TripReminders compact className="mb-3" />
             <BudgetBar
               className="mb-4"
               itemToman={activeSelection?.cost || 0}

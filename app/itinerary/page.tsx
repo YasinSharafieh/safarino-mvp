@@ -46,6 +46,7 @@ import OfflineKeeper from "@/components/OfflineKeeper";
 import SiteHeader from "@/components/SiteHeader";
 import TripReminders from "@/components/TripReminders";
 import OfflinePackCard from "@/components/OfflinePackCard";
+import BudgetBar from "@/components/BudgetBar";
 import ExpenseLedger from "@/components/ExpenseLedger";
 import { chosenTransport } from "@/lib/transport-selection";
 import {
@@ -466,7 +467,12 @@ function ItineraryContent() {
 
         {/* What is still missing, from the trip's own conditions — and the book
             of real spending, which turns the planned budget into a true one. */}
-        <div className="mx-auto mt-4 grid max-w-6xl gap-3 lg:grid-cols-2">
+        {/* The same budget control as every other step: one number for the trip. */}
+        <div className="mx-auto mt-4 max-w-6xl">
+          <BudgetBar compact />
+        </div>
+
+        <div className="mx-auto mt-3 grid max-w-6xl gap-3 lg:grid-cols-2">
           <TripReminders />
           <ExpenseLedger />
         </div>

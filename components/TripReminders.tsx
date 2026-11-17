@@ -22,7 +22,18 @@ const STYLE: Record<Reminder["severity"], { ring: string; icon: typeof AlertTria
   info: { ring: "border-white/10 bg-white/[0.03]", icon: Info, tint: "text-slate-300" },
 };
 
-export default function TripReminders({ className = "" }: { className?: string }) {
+export default function TripReminders({
+  className = "",
+  /**
+   * «فشرده» — used inside the transport, accommodation and plan steps, where the
+   * page is already busy: only the things that must be done *now*, at most two,
+   * in one thin strip. The full list lives on the trip page.
+   */
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   const { travelData, isHydrated } = useTravel();
 
   const reminders = useMemo(() => {
@@ -61,6 +72,31 @@ export default function TripReminders({ className = "" }: { className?: string }
   }, [isHydrated, travelData]);
 
   if (!isHydrated || !travelData.destination) return null;
+
+  if (compact) {
+    const urgent = reminders.filter((reminder) => reminder.severity === "now").slice(0, 2);
+    if (!urgent.length) return null;
+    return (
+      <div className={`rounded-xl border border-rose-400/25 bg-rose-400/[0.07] px-2.5 py-1.5 ${className}`} aria-label="کارهای فوری این مرحله">
+        <ul className="space-y-1">
+          {urgent.map((reminder) => (
+            <li key={reminder.id} className="flex items-start gap-1.5">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-rose-200" />
+              <span className="min-w-0 text-[9.5px] leading-5 text-rose-50">
+                <b className="font-black">{reminder.title}: </b>
+                {reminder.detail}
+                {reminder.action ? (
+                  <Link href={reminder.action.href} className="mr-1 font-black text-cyan-200 hover:text-cyan-100">
+                    {reminder.action.label} →
+                  </Link>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   if (!reminders.length) {
     return (
