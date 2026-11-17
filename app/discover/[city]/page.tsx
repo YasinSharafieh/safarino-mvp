@@ -42,6 +42,7 @@ export function generateMetadata({ params }: PageProps): Metadata {
       description,
       type: "article",
       url: `${siteUrl()}/discover/${encodeURIComponent(city.name)}`,
+      images: [{ url: "/og.png", width: 1200, height: 630, alt: `سفر به ${city.name} با سفرینو` }],
     },
   };
 }

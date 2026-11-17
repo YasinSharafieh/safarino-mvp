@@ -25,6 +25,8 @@ type Plan = {
   travelers: number;
   children: number;
   budgetMillions: number;
+  mode?: "" | "plane" | "train" | "bus" | "car";
+  carName?: string | null;
   reason: string;
   source: "local" | "ai";
   assumed: string[];
@@ -85,8 +87,11 @@ export default function OneClickTrip({ className = "" }: { className?: string })
       travelers: plan.travelers,
       children: plan.children,
       budget: plan.budgetMillions,
-      // The travellers themselves are never invented: a date still has to be
-      // chosen, so the transport page opens with the calendar waiting.
+      // «با قطار» is an answer, so the transport page must open on the train —
+      // the vehicle a traveller named is never replaced by one of our defaults.
+      preferredMode: plan.mode || current.preferredMode,
+      // The date is never invented: it still has to be chosen, so the transport
+      // page opens with the calendar waiting.
       departureDate: current.departureDate || "",
     }));
     router.push("/transport");
@@ -168,6 +173,14 @@ export default function OneClickTrip({ className = "" }: { className?: string })
                 <b className="text-slate-400">بودجهٔ کل: </b>
                 {fa.format(plan.budgetMillions)} میلیون تومان
               </li>
+              {/* Only when the traveller named it — an empty line is a lie about
+                  something they never said. */}
+              {plan.mode ? (
+                <li>
+                  <b className="text-slate-400">وسیله: </b>
+                  {plan.mode === "car" ? `ماشین شخصی${plan.carName ? ` (${plan.carName})` : ""}` : plan.mode === "plane" ? "هواپیما" : plan.mode === "train" ? "قطار" : "اتوبوس"}
+                </li>
+              ) : null}
             </ul>
             <p className="mt-2 text-[10px] leading-6 text-slate-300">{plan.reason}</p>
             {plan.assumed.length ? (

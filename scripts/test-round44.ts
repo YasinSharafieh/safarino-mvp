@@ -11,7 +11,7 @@
  *      حساب می‌کرد و شهر را از جمله پاک می‌کرد.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseTripSentence, localProposal, acceptProposal } from "../lib/one-click";
 import { rewritePrompt, applyRewrites, QUIZ_TOPICS } from "../lib/quiz-ai";
@@ -77,6 +77,9 @@ check("«سه روز» عدد می‌شود", spoken.days === 3, String(spoken.d
 check("«دو نفر» عدد می‌شود", spoken.travelers === 2, String(spoken.travelers));
 check("«بیست میلیون» بودجه می‌شود", spoken.budgetMillions === 20, String(spoken.budgetMillions));
 check("هیچ واقعیتی جا نمی‌افتد", spoken.missing.length === 0, spoken.missing.join("، "));
+check("وسیله‌ای که مسافر گفت همان‌جا خوانده می‌شود", spoken.mode === "train", spoken.mode);
+check("وسیله به پیشنهاد سفر هم می‌رسد", localProposal(spoken, "").mode === "train");
+check("سکوت مسافر وسیله نمی‌سازد", parseTripSentence("سه روز شیراز").mode === "");
 
 const digits = parseTripSentence("۵ روز با بچه، ۴۰ میلیون، از تهران");
 check("با رقم هم همان نتیجه", digits.origin === "تهران" && digits.days === 5 && digits.budgetMillions === 40);
@@ -101,6 +104,14 @@ const invented = acceptProposal({ destination: "آتلانتیس", reason: "شه
 check("شهر ساختگی رد می‌شود", invented.destination !== "آتلانتیس");
 
 check("متن نامفهوم ادعای فهمیدن نمی‌کند", parseTripSentence("سلام").understanding.includes("نفهمیدم"));
+
+// ── 4) The share side: a link that opens with a picture and a real icon ─────
+const layout = read("app/layout.tsx");
+check("لینک اشتراکی کارت تصویری دارد", layout.includes('url: "/og.png"') && layout.includes("width: 1200"));
+check("تصویر کارت واقعاً وجود دارد", existsSync(join(process.cwd(), "public/og.png")));
+check("برای توئیتر هم همان کارت اعلام شده", layout.includes('images: ["/og.png"]'));
+check("آیکون سایت از خود سایت سرو می‌شود", existsSync(join(process.cwd(), "app/icon.png")) && existsSync(join(process.cwd(), "app/apple-icon.png")));
+check("صفحهٔ هر شهر کارت خودش را دارد", read("app/discover/[city]/page.tsx").includes('alt: `سفر به ${city.name} با سفرینو`'));
 
 console.log(failures ? `\n❌ ${failures} بررسی شکست خورد` : "\n✅ round 44: پروازها کد فرودگاه می‌گیرند، سؤال‌ها داخل سقف نوشته می‌شوند، و یک جمله واقعاً خوانده می‌شود");
 process.exit(failures ? 1 : 0);

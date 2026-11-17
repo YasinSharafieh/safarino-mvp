@@ -41,11 +41,15 @@ export const metadata: Metadata = {
     type: "website",
     locale: "fa_IR",
     siteName: "سفرینو",
+    // A shared link used to arrive as a bare text card; this is the picture that
+    // now travels with it (1200×630, the size every messenger expects).
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "سفرینو — همسفر هوشمند سفرهای ایرانی" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "سفرینو | همسفر هوشمند سفرهای ایرانی",
     description: "برنامهٔ کامل سفر در ایران: مسیر و فاصلهٔ واقعی، بلیت، اقامتگاه، بودجهٔ شفاف و دفترچهٔ سفر — بدون ثبت‌نام.",
+    images: ["/og.png"],
   },
 };
 

@@ -32,6 +32,14 @@ export type ParsedTrip = {
   moods: string[];
   /** Start date, if the sentence carried one; never guessed. */
   departureDate: string | null;
+  /**
+   * The vehicle the traveller named («با قطار»), or "" when they said nothing.
+   * It is carried to the transport page so the mode they chose is the mode that
+   * is already selected there — never a default of ours.
+   */
+  mode: "" | "plane" | "train" | "bus" | "car";
+  /** The car's name, when the sentence named a real one. */
+  carName: string | null;
   /** Facts the sentence did not contain, named in Persian. */
   missing: string[];
   /** What we understood, one line, so the traveller can correct it. */
@@ -85,6 +93,10 @@ export function parseTripSentence(input: string): ParsedTrip {
   if (voice.days) parts.push(`${fa.format(voice.days)} روز`);
   if (travelers) parts.push(`${fa.format(travelers)} نفر${voice.children ? ` (${fa.format(voice.children)} کودک)` : ""}`);
   if (voice.budgetMillions) parts.push(`بودجهٔ ${fa.format(voice.budgetMillions)} میلیون تومان`);
+  if (voice.mode) {
+    const label = voice.mode === "car" ? `ماشین شخصی${voice.carName ? ` (${voice.carName})` : ""}` : voice.mode === "plane" ? "هواپیما" : voice.mode === "train" ? "قطار" : "اتوبوس";
+    parts.push(`وسیله: ${label}`);
+  }
   if (moods.length) parts.push(`سلیقه: ${moods.join("، ")}`);
 
   return {
@@ -96,6 +108,8 @@ export function parseTripSentence(input: string): ParsedTrip {
     budgetMillions: voice.budgetMillions,
     moods,
     departureDate: voice.departureDate,
+    mode: voice.mode,
+    carName: voice.carName,
     missing,
     understanding: parts.length ? parts.join(" · ") : "از جمله‌ات چیزی نفهمیدم؛ یک بار ساده‌تر بنویس.",
   };
@@ -138,6 +152,9 @@ export type OneClickPlan = {
   travelers: number;
   children: number;
   budgetMillions: number;
+  /** What the traveller said about getting there; empty when they did not say. */
+  mode: "" | "plane" | "train" | "bus" | "car";
+  carName: string | null;
   reason: string;
   source: "local" | "ai";
   /** Anything we had to fill with a default, said out loud. */
@@ -163,6 +180,8 @@ export function localProposal(parsed: ParsedTrip, fallbackOrigin: string): OneCl
     travelers: Math.max(1, Math.min(12, parsed.travelers || 2)),
     children: Math.max(0, Math.min(6, parsed.children)),
     budgetMillions: budget,
+    mode: parsed.mode,
+    carName: parsed.carName,
     reason: parsed.destination
       ? `${parsed.destination} را خودت انتخاب کردی؛ سفر را با همین مقصد می‌چینم.`
       : `${chosen.name}: ${chosen.tagline} مناسب برای ${chosen.bestFor.slice(0, 2).join(" و ")}${parsed.moods.length ? `، و با سلیقهٔ «${parsed.moods.join("، ")}» که نوشتی می‌خواند` : ""}.`,
