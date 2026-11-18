@@ -133,6 +133,17 @@ export default function AccommodationPage() {
   const initialized = useRef(false);
   const restoredChildAges = useRef<number[] | null>(null);
   const restoredInfantAges = useRef<number[] | null>(null);
+  /**
+   * The phase opens with prices on screen, not with an empty box.
+   *
+   * The traveller already gave the city, the dates and the party in the steps
+   * before this one, so asking them to press «جستجو» again was a click too
+   * many — and a traveller who never pressed it saw «جستجو را اجرا کن» and
+   * concluded the site found nothing. Once per arriving trip the real search
+   * runs by itself; a later date or city change still needs its own press,
+   * because those are the traveller's own decisions.
+   */
+  const autoSearched = useRef("");
   const [kind, setKind] = useState<AccommodationKind>("hotel");
   const [city, setCity] = useState("");
   const [checkIn, setCheckIn] = useState("");
@@ -171,6 +182,9 @@ export default function AccommodationPage() {
   const [sort, setSort] = useState<StaySort>("cheapest");
   const [nameQuery, setNameQuery] = useState("");
   const [budgetOnly, setBudgetOnly] = useState(false);
+  /** What the automatic second search did, in plain words (or nothing). */
+  const [fallbackNote, setFallbackNote] = useState("");
+  const fallbackTried = useRef(false);
 
   const accommodation = travelData.accommodation;
   const choice = savedStatus(accommodation);
@@ -341,12 +355,50 @@ export default function AccommodationPage() {
     });
   }, [travelData.infants]);
 
+  /**
+   * The search runs itself once the page knows the trip, and a returning
+   * traveller sees the last real answer instantly instead of an empty screen.
+   */
+  useEffect(() => {
+    if (!isHydrated || !city || !checkIn || !checkOut || nights < 1) return;
+    if (choice === "reserved" || choice === "skipped") return;
+    const key = `${kind}|${city}|${checkIn}|${checkOut}|${travelData.travelers}|${travelData.children}|${travelData.infants}`;
+    if (autoSearched.current === key) return;
+    autoSearched.current = key;
+    // A saved answer for exactly this trip: show it, then refresh in the
+    // background so the numbers are today's, not yesterday's.
+    if (!groups.length) {
+      try {
+        const raw = window.sessionStorage.getItem(ACCOMMODATION_RESULTS_KEY);
+        const saved = raw ? (JSON.parse(raw) as { key?: string; groups?: AccommodationGroup[]; providerStatuses?: ProviderSearchStatus[]; fetchedAt?: string; offerCount?: number; found?: number }) : null;
+        if (saved?.groups?.length) {
+          const matches = !saved.key || saved.key === key;
+          if (matches) {
+            setGroups(saved.groups);
+            setProviderStatuses(saved.providerStatuses || []);
+            setFetchedAt(saved.fetchedAt || "");
+            setOfferCount(Number(saved.offerCount) || saved.groups.flatMap((group) => group.offers).length);
+            setFound(Number(saved.found) || saved.groups.flatMap((group) => group.offers).length);
+            setFromSavedCopy(true);
+          }
+        }
+      } catch {
+        // An unreadable cache only costs one search.
+      }
+    }
+    void searchAccommodation();
+    // The trip itself is the trigger; the function is stable enough for this use.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, city, checkIn, checkOut, kind, nights, choice, travelData.travelers, travelData.children, travelData.infants]);
+
   function clearSelection() {
     setTravelData((current) => ({ ...current, accommodation: null }));
     try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* In-memory state remains usable. */ }
   }
 
   function resetResultsForCoreChange() {
+    fallbackTried.current = false;
+    setFallbackNote("");
     setOffers([]);
     setGroups([]);
     setProviderStatuses([]);
@@ -445,6 +497,49 @@ export default function AccommodationPage() {
       if (!response.ok || !data.success) throw new Error(data.error || "جستجو انجام نشد");
       const nextOffers = data.offers || [];
       const nextGroups = data.groups || nextOffers.map((offer) => ({ id: offer.id, matchReason: "single" as const, offers: [offer] }));
+      /**
+       * A guest house is a real answer when hotels are sold out.
+       *
+       * On the live sources some cities/dates answer with a handful of hotels
+       * and hundreds of «اقامتگاه» (and the other way round). Before, that
+       * looked like «پیدا نمی‌شود» and the traveller gave up. Now the other kind
+       * is asked once, and the result is shown under a line that says exactly
+       * what happened — never presented as if it were the first search.
+       */
+      if (!nextOffers.length && !fallbackTried.current) {
+        fallbackTried.current = true;
+        const other: AccommodationKind = kind === "hotel" ? "stay" : "hotel";
+        try {
+          const second = await fetch(`/api/providers/accommodation/search${forceFresh ? "?refresh=1" : ""}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: other, city: city.trim(), checkIn, checkOut, adults: travelData.travelers, childAges, infantAges }),
+          });
+          const alt = (await second.json()) as SearchResponse;
+          const altOffers = alt.offers || [];
+          if (second.ok && alt.success && altOffers.length) {
+            const altGroups = alt.groups || altOffers.map((offer) => ({ id: offer.id, matchReason: "single" as const, offers: [offer] }));
+            setOffers(altOffers);
+            setGroups(altGroups);
+            setProviderStatuses(alt.providerStatuses || []);
+            setFound(Math.max(0, Number(alt.found) || 0));
+            setOfferCount(Math.max(altOffers.length, Number(alt.offerCount) || 0));
+            setDeduplicatedCount(Math.max(0, Number(alt.deduplicatedCount) || 0));
+            setResolvedCity(alt.city || city);
+            setFetchedAt(alt.fetchedAt || new Date().toISOString());
+            setFromSavedCopy(Boolean(alt.cached));
+            setPriceTrend(alt.priceTrend || null);
+            setKind(other);
+            setFallbackNote(
+              `برای این تاریخ و این شهر، ${kind === "hotel" ? "هتلی با اتاق خالی" : "اقامتگاهی"} پیدا نشد؛ ${other === "hotel" ? "هتل‌های" : "اقامتگاه‌های"} واقعی همین تاریخ‌ها را آوردیم.`,
+            );
+            return;
+          }
+        } catch {
+          // The empty result stands; nothing invented.
+        }
+      }
+      setFallbackNote("");
       setOffers(nextOffers);
       setGroups(nextGroups);
       setFound(Math.max(0, Number(data.found) || 0));
@@ -457,6 +552,7 @@ export default function AccommodationPage() {
       setTravelData((current) => ({ ...current, days: nights }));
       try {
         window.sessionStorage.setItem(ACCOMMODATION_RESULTS_KEY, JSON.stringify({
+          key: `${kind}|${city}|${checkIn}|${checkOut}|${travelData.travelers}|${travelData.children}|${travelData.infants}`,
           kind,
           city: data.city || city,
           checkIn,
@@ -787,7 +883,7 @@ export default function AccommodationPage() {
                         </button>
                       )}
                     </div>
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "برای دیدن قیمت و ظرفیت، جستجو را اجرا کن"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}{fromSavedCopy ? " · از نسخهٔ ذخیره‌شده" : ""}</span>}
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "قیمت‌ها همین حالا از منابع زنده خوانده می‌شود"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}{fromSavedCopy ? " · از نسخهٔ ذخیره‌شده" : ""}</span>}
                     {fetchedAt && fromSavedCopy && (
                       <button type="button" onClick={() => searchAccommodation(true)} disabled={loading} className="text-[10px] font-bold text-cyan-300 underline decoration-dotted underline-offset-4 hover:text-cyan-200 disabled:opacity-50">
                         {loading ? "در حال دریافت…" : "دریافت قیمت تازه از منابع"}
@@ -795,6 +891,11 @@ export default function AccommodationPage() {
                     )}
                     </div>
 
+                    {fallbackNote ? (
+                      <p className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-[11px] leading-6 text-amber-100">
+                        {fallbackNote}
+                      </p>
+                    ) : null}
                     {!loading && recommendation.option && filteredGroups.length ? (
                       <div className={`mb-5 rounded-2xl border p-4 ${recommendation.fits ? "border-emerald-400/25 bg-emerald-400/[0.06]" : "border-turquoise-400/30 bg-turquoise-400/[0.06]"}`}>
                         <p className="flex items-center gap-2 text-xs font-black text-white"><Sparkles className="h-4 w-4 text-emerald-300" />بهترین انتخاب برای تو</p>
@@ -809,7 +910,7 @@ export default function AccommodationPage() {
                           <AccommodationCard key={group.id} group={group} index={index} nights={nights} selectedId={selectedId} recommendedId={recommendation.option?.id} recommendReason={recommendation.reason} people={Math.max(1, travelData.travelers + travelData.children)} onSelect={selectOffer} onClear={clearSelection} detailQuery={`?kind=${kind}&city=${encodeURIComponent(city)}&checkIn=${checkIn}&checkOut=${checkOut}&adults=${travelData.travelers}`} roomBudget={stayBudget.remaining} />
                         ))}</AnimatePresence>
                       </motion.div>
-                    ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است. جستجو را اجرا کن تا قیمت کل، امتیاز واقعی و لینک رزرو همان اقامتگاه را ببینی.</p></div>}
+                    ) : groups.length ? <div className="glass p-10 text-center"><SlidersHorizontal className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">اقامتگاهی با این فیلترها پیدا نشد</h3><p className="mt-2 text-xs text-slate-500">سقف قیمت یا فیلتر امتیاز را تغییر بده.</p><button type="button" onClick={resetFilters} className="btn-ghost mt-5 !py-2.5 text-xs"><RotateCcw className="h-4 w-4" />پاک‌کردن فیلترها</button></div> : !loading && fetchedAt && !error ? <div className="glass p-10 text-center"><Building2 className="mx-auto h-8 w-8 text-slate-600" /><h3 className="mt-4 text-lg font-black text-white">برای این تاریخ و مسافران گزینه‌ای با قیمت پیدا نشد</h3><p className="mt-2 text-xs leading-6 text-slate-500">تاریخ، نوع اقامت یا مقصد نزدیک را تغییر بده؛ سفرینو قیمت جایگزین نمی‌سازد.</p></div> : <div className="glass p-10 text-center"><BedDouble className="mx-auto h-10 w-10 text-cyan-300/50" /><h3 className="mt-4 text-lg font-black text-white">هتل، ویلا یا سوئیت واقعی پیدا کن</h3><p className="mx-auto mt-2 max-w-md text-xs leading-7 text-slate-500">مقصد و تاریخ از مراحل قبل آمده است؛ قیمت‌ها به‌صورت خودکار از منابع زنده خوانده می‌شود.</p></div>}
                   </section>
                 </div>
               </motion.div>

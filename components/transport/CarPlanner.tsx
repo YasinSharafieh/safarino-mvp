@@ -69,8 +69,11 @@ export default function CarPlanner({
   onSelect,
 }: Props) {
   const [carId, setCarId] = useState(initialCarId && findCar(initialCarId) ? initialCarId : DEFAULT_CAR_ID);
+  // «بنزین آزاد، لیتری ۱۰٬۰۰۰ تومان» is the default the owner asked for: it is
+  // the option most travellers really pay, so the first number on screen is the
+  // honest one — and the price box next to it stays editable.
   const [fuelOption, setFuelOption] = useState<FuelOptionId>("free");
-  const [fuelPrice, setFuelPrice] = useState<number>(3_000);
+  const [fuelPrice, setFuelPrice] = useState<number>(FUEL_OPTIONS.find((option) => option.id === "free")?.pricePerLiter ?? 10_000);
   const [cityKmPerDay, setCityKmPerDay] = useState(DEFAULT_CITY_KM_PER_DAY);
   const [tollPerKm, setTollPerKm] = useState(DEFAULT_TOLL_PER_KM);
   const [parkingPerDay, setParkingPerDay] = useState(DEFAULT_PARKING_PER_DAY);

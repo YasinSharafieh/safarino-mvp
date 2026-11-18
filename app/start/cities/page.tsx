@@ -63,9 +63,11 @@ export default function StartCitiesPage() {
     if (["plane", "train", "bus", "car"].includes(savedMode)) setVehicle(savedMode as "plane" | "train" | "bus" | "car");
     setChildren(Math.max(0, Number(travelData.children) || 0));
     setInfants(Math.max(0, Number(travelData.infants) || 0));
-    if (travelData.departureDate) {
+    // A date saved weeks ago may already be in the past — the trip that was
+    // planned then must not be reopened as history. Only a future date is kept.
+    if (travelData.departureDate && travelData.departureDate >= todayIso()) {
       setDepartureDate(travelData.departureDate);
-      setReturnDate(travelData.returnDate || "");
+      setReturnDate(travelData.returnDate && travelData.returnDate > travelData.departureDate ? travelData.returnDate : "");
     }
     // Only once, when the saved trip is read from the device.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,8 +75,13 @@ export default function StartCitiesPage() {
 
   useEffect(() => {
     if (departureDate) return;
-    // A traveller usually starts planning for «now»: the default is today.
-    const next = todayIso();
+    /**
+     * «فردا» is the honest default, not «امروز»: on the live sources a ticket
+     * for today is already closed for almost every route (the measurement this
+     * week: 0 flights, 0 trains and 0 buses on the same day), so a calendar that
+     * opened on today pointed the traveller at a day that cannot be bought.
+     */
+    const next = addDays(todayIso(), 1);
     setDepartureDate(next);
     setReturnDate(addDays(next, 2));
   }, [departureDate]);
@@ -294,7 +301,7 @@ export default function StartCitiesPage() {
               <p className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-300">
                 <CalendarDays className="h-3.5 w-3.5 text-cyan-300" />
                 تاریخ سفر
-                <span className="mr-auto text-[9px] font-normal text-slate-500">پیش‌فرض: امروز — یک‌طرفه یا رفت‌وبرگشت، هر کدام را بخواهی</span>
+                <span className="mr-auto text-[9px] font-normal text-slate-500">پیش‌فرض: فردا — روزهای گذشته انتخاب نمی‌شوند</span>
               </p>
               <JalaliRangeCalendar
                 departureDate={departureDate}

@@ -261,8 +261,9 @@ export default function HomeDeals() {
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-6 text-slate-400">
             <span>
               مبدأ: <b className="text-white">{origin}</b>
-              {originSource === "geo" ? " (از موقعیت همین دستگاه)" : originSource === "request" ? " (شهر انتخابی شما)" : ""} · هر بسته با
+              {originSource === "geo" ? " (از موقعیت همین دستگاه)" : originSource === "request" ? " (شهر انتخابی شما)" : " (مبدأ پیش‌فرض — عوضش کن)"} · هر بسته با
               بلیت رفت‌وبرگشت واقعی و اقامت واقعی همان تاریخ‌ها، از ارزان به گران.
+              {originSource === "default" ? " تا شهری را انتخاب نکنی، این فهرست از تهران ساخته می‌شود." : ""}
             </span>
             <button
               type="button"

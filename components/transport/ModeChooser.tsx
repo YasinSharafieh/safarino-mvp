@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Bus, CarFront, Check, Plane, TrainFront, Wallet } from "lucide-react";
+import { Bus, CarFront, Check, LoaderCircle, Plane, TrainFront, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type TravelMode = "plane" | "train" | "bus" | "car";
@@ -50,11 +50,21 @@ export const MODE_OPTIONS: ModeOption[] = [
   },
 ];
 
+const faNumber = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
+
 type Props = {
   mode: TravelMode | null;
   onChoose: (mode: TravelMode) => void;
   budgetMillions: number;
   hints: Partial<Record<TravelMode, string>>;
+  /**
+   * How many real tickets each mode answered with for this exact route and
+   * date, measured by the same availability sweep the calendar uses. A mode
+   * that answered zero says so — the traveller then switches instead of
+   * waiting for a list that will never fill.
+   */
+  counts?: Partial<Record<TravelMode, number | null>>;
+  countsLoading?: boolean;
 };
 
 
@@ -63,7 +73,7 @@ type Props = {
  * داری؟». Only the chosen mode is opened afterwards, so the page never mixes a
  * train ticket list with a car calculator.
  */
-export default function ModeChooser({ mode, onChoose, budgetMillions: _budgetMillions, hints }: Props) {
+export default function ModeChooser({ mode, onChoose, budgetMillions: _budgetMillions, hints, counts, countsLoading = false }: Props) {
   const fa = new Intl.NumberFormat("fa-IR");
 
   return (
@@ -113,6 +123,24 @@ export default function ModeChooser({ mode, onChoose, budgetMillions: _budgetMil
                 {hints[option.id] ? (
                   <span className="mt-1.5 block rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[9px] font-bold text-cyan-100">
                     {hints[option.id]}
+                  </span>
+                ) : null}
+                {option.id !== "car" ? (
+                  <span className="mt-1.5 flex items-center gap-1 text-[9px] font-bold">
+                    {countsLoading && counts?.[option.id] === undefined ? (
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <LoaderCircle className="h-2.5 w-2.5 animate-spin" />
+                        شمردن بلیت‌های همین تاریخ…
+                      </span>
+                    ) : typeof counts?.[option.id] === "number" ? (
+                      (counts[option.id] as number) > 0 ? (
+                        <span className="text-emerald-300">✓ {faNumber(counts[option.id] as number)} بلیت برای همین تاریخ</span>
+                      ) : (
+                        <span className="text-amber-300">برای این تاریخ بلیت باز نیست</span>
+                      )
+                    ) : (
+                      <span className="text-slate-500">موجودی این تاریخ سنجیده نشده</span>
+                    )}
                   </span>
                 ) : null}
               </div>

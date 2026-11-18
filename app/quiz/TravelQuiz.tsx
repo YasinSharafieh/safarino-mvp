@@ -236,18 +236,23 @@ export default function TravelQuiz() {
 
   /** The closing step always opens with real dates on the calendar, never blank. */
   useEffect(() => {
-    if (!onMoneyStep || departureDate) return;
-    const base = addDaysToIso(todayIso(), 7);
+    if (!onMoneyStep) return;
+    // An old trip remembered on this device may carry a date that already
+    // passed; it is replaced rather than shown on the calendar as history.
+    if (departureDate && departureDate >= todayIso()) return;
+    const base = addDaysToIso(todayIso(), 1);
     setDepartureDate(base);
-    if (roundTrip && !returnDate) setReturnDate(addDaysToIso(base, Math.max(1, days)));
-    // Only fills an empty calendar; the traveller's own date always wins.
+    if (roundTrip && (!returnDate || returnDate <= base)) setReturnDate(addDaysToIso(base, Math.max(1, days)));
+    // Only fills an empty or expired calendar; the traveller's own date always wins.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onMoneyStep, departureDate]);
 
   const setTripDays = (value: number) => {
     setDays(value);
-    const base = departureDate || addDaysToIso(todayIso(), 7);
-    if (!departureDate) setDepartureDate(base);
+    // Always count from a day that is still ahead: a trip length chosen today
+    // must not drag an expired start date back onto the calendar.
+    const base = departureDate && departureDate >= todayIso() ? departureDate : addDaysToIso(todayIso(), 1);
+    setDepartureDate(base);
     setReturnDate(addDaysToIso(base, Math.max(1, value)));
   };
 
@@ -426,16 +431,36 @@ export default function TravelQuiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultVisible]);
 
+  /** A date remembered on this device is only reused when it is still ahead. */
+  const current_departure_is_valid = (iso: string) => Boolean(iso) && iso >= todayIso();
+
   const startTrip = (suggestion: CitySuggestion) => {
     // The traveller's own numbers win: the budget they typed and the days they
     // chose are what every later step spends.
     const tripDays = Math.max(1, days || suggestion.days || 3);
+    /**
+     * Everything the traveller just set travels with them.
+     *
+     * The budget, the party, the dates and the length of the trip are the same
+     * numbers they typed on this screen — the transport step, the room step,
+     * the plan and the PDF must open on exactly these, not on a default. Only a
+     * missing or expired date is filled, and it is filled with a day that can
+     * still be bought (tomorrow at the earliest).
+     */
+    const base =
+      departureDate && departureDate >= todayIso()
+        ? departureDate
+        : current_departure_is_valid(travelData.departureDate)
+          ? travelData.departureDate
+          : addDaysToIso(todayIso(), 1);
+    const back =
+      roundTrip && returnDate && returnDate > base ? returnDate : addDaysToIso(base, tripDays);
     setTravelData((current) => ({
       ...current,
       destination: suggestion.name,
       days: tripDays,
-      departureDate: departureDate || current.departureDate || isoIn(7),
-      returnDate: returnDate || isoIn(7 + tripDays),
+      departureDate: base,
+      returnDate: back,
       budget: budgetMillions,
       travelers: adults,
       children: kids,

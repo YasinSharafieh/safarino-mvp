@@ -30,7 +30,7 @@ import TicketSearch, { type TicketMode } from "@/components/transport/TicketSear
 import ModeChooser, { MODE_OPTIONS, type TravelMode } from "@/components/transport/ModeChooser";
 import { useTravel } from "../context/TravelContext";
 import { citiesForTransport, resolveIranianCity } from "@/lib/iran-cities";
-import { formatJalaliDate } from "@/lib/jalali";
+import { addDaysToIso, formatJalaliDate, todayIso } from "@/lib/jalali";
 import { parseTripLink, type PrefilledTicket } from "@/lib/link-prefill";
 import { tripCostBreakdown } from "@/lib/trip-costs";
 import BudgetGauge from "@/components/BudgetGauge";
@@ -126,12 +126,74 @@ function TransportPageContent() {
   const [roundTrip, setRoundTrip] = useState(false);
   /** Which of the next days really have a ticket — measured by the search below. */
   const [ticketAvailability, setTicketAvailability] = useState<Record<string, number | null>>({});
+  /**
+   * How many tickets each mode really has for the chosen day.
+   *
+   * The mode cards used to be decorative: they showed a generic line and the
+   * traveller had to open each one to learn that, say, the train has nothing on
+   * that date. One sweep of the chosen date, for the three public modes, puts
+   * the real number on the card before the choice is made.
+   */
+  const [modeCounts, setModeCounts] = useState<Partial<Record<TravelMode, number | null>>>({});
+  const [modeCountsLoading, setModeCountsLoading] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [distanceError, setDistanceError] = useState("");
   const [cheapest, setCheapest] = useState<Partial<Record<TicketMode, number | null>>>({});
   /** The ticket a home-page package was built from, shown as the chosen one. */
   const [packageTicket, setPackageTicket] = useState<PrefilledTicket | null>(null);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const origin = resolveIranianCity(travelData.origin)?.code;
+    const destination = resolveIranianCity(travelData.destination)?.code;
+    const date = travelData.departureDate;
+    if (!origin || !destination || !date || origin === destination) {
+      setModeCounts({});
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setModeCountsLoading(true);
+      const modes: TicketMode[] = ["plane", "train", "bus"];
+      Promise.all(
+        modes.map(async (item) => {
+          try {
+            const response = await fetch("/api/providers/transport/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(35_000),
+              body: JSON.stringify({
+                mode: item,
+                origin,
+                destination,
+                date,
+                adults: travelData.travelers,
+                children: travelData.children,
+                infants: travelData.infants,
+              }),
+            });
+            const payload = (await response.json()) as { offers?: unknown[] };
+            return [item, Array.isArray(payload.offers) ? payload.offers.length : 0] as const;
+          } catch {
+            // «پاسخ نداد» is not «صفر بلیت»: it stays unknown on the card.
+            return [item, null] as const;
+          }
+        }),
+      )
+        .then((rows) => {
+          if (cancelled) return;
+          const next: Partial<Record<TravelMode, number | null>> = {};
+          rows.forEach(([item, count]) => { next[item] = count; });
+          setModeCounts(next);
+        })
+        .finally(() => { if (!cancelled) setModeCountsLoading(false); });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isHydrated, travelData.origin, travelData.destination, travelData.departureDate, travelData.travelers, travelData.children, travelData.infants]);
 
   const originCity = resolveIranianCity(travelData.origin);
   const destinationCity = resolveIranianCity(travelData.destination);
@@ -414,7 +476,26 @@ function TransportPageContent() {
 
   const changeJourney = useCallback(
     (field: "origin" | "destination" | "departureDate" | "returnDate", value: string) => {
-      setTravelData((current) => ({ ...current, [field]: value }));
+      setTravelData((current) => {
+        const next = { ...current, [field]: value };
+        /**
+         * The two dates must stay a real journey. Moving the departure past the
+         * return used to leave a trip that ended before it began, which then
+         * made the ticket search ask for an impossible round trip. Here the
+         * return follows automatically, keeping the same number of nights (and
+         * never fewer than one).
+         */
+        if (field === "departureDate" && value) {
+          const nights = current.returnDate && current.returnDate > current.departureDate
+            ? Math.round((Date.parse(`${current.returnDate}T00:00:00Z`) - Date.parse(`${current.departureDate}T00:00:00Z`)) / 86_400_000)
+            : Math.max(1, Number(current.days) || 1);
+          if (!current.returnDate || current.returnDate <= value) next.returnDate = addDaysToIso(value, Math.max(1, nights));
+        }
+        if (field === "returnDate" && value && current.departureDate && value <= current.departureDate) {
+          next.departureDate = addDaysToIso(value, -1) >= todayIso() ? addDaysToIso(value, -1) : current.departureDate;
+        }
+        return next;
+      });
     },
     [setTravelData],
   );
@@ -609,6 +690,8 @@ function TransportPageContent() {
               onChoose={chooseMode}
               budgetMillions={travelData.budget}
               hints={hints}
+              counts={modeCounts}
+              countsLoading={modeCountsLoading}
             />
           </div>
 
