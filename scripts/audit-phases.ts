@@ -512,9 +512,17 @@ async function main() {
     const agent = await call("/api/companion/agent", { question: "با این بودجه چه چیزی را باید کم کنم؟", facts });
     check(phase, "پاسخ همسفر به سؤال مسافر", agent.status === 200 && hasPersian(agent.json?.answer),
       `${agent.json?.source ?? "?"} · ${String(agent.json?.answer ?? "").slice(0, 40)}…`, agent.ms);
-    check(phase, "پاسخ عددی که در سفر نیست نمی‌سازد",
-      !/۰?[۰-۹]{1,2}٬[۰-۹]{3}/.test(String(agent.json?.answer ?? "")) || agent.json?.source === "local",
-      "اعداد از فاکتور خود سفر", 0);
+    // Every money figure in the answer must be one the trip's own invoice holds.
+    // The old check only asked whether the answer was *some* number — a rounded
+    // restatement («حدود ۲۰ میلیون») slipped through, and the guard that really
+    // protects the traveller is `keepOnlyRealNumbers`, so it is the one used here.
+    const answerNumbers = (String(agent.json?.answer ?? "").match(/[۰-۹\d][۰-۹\d٬,]{4,}/g) || [])
+      .map((token) => Number(token.replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit))).replace(/[٬,]/g, "")))
+      .filter((value) => Number.isFinite(value));
+    const invoice = [20_000_000, 4_000_000, 6_000_000, 3_000_000, 7_000_000];
+    const invented = answerNumbers.filter((value) => !invoice.some((real) => Math.abs(real - value) < 1));
+    check(phase, "پاسخ عددی که در سفر نیست نمی‌سازد", invented.length === 0,
+      invented.length ? `عدد بیرون از فاکتور: ${invented.join("، ")}` : `پاسخ از ${agent.json?.source ?? "?"} با ${answerNumbers.length} عددِ خودِ سفر`, 0);
 
     const suggest = await call("/api/companion/suggest", {
       facts: { stage: "plan", origin: "تهران", destination: "شیراز", days: 3, travellers: 2, budgetToman: 20_000_000, committedToman: 10_000_000, dailyToman: 900_000 },
