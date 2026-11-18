@@ -190,6 +190,17 @@ async function main() {
       }
     }
 
+    // The one call the calendar and the mode cards both rely on: a month of
+    // real availability for the three public modes.
+    for (const mode of ["train", "plane"] as const) {
+      const sweep = await call(`/api/providers/transport/search?availability=30&mode=${mode}&origin=THR&destination=MHD&adults=2&children=0&infants=0`, undefined, "GET");
+      const dates: any[] = sweep.json?.dates || [];
+      const open = dates.filter((row) => typeof row?.cheapestToman === "number" && row.cheapestToman > 0);
+      check(phase, `تقویم موجودی ۳۰ روزه (${mode === "train" ? "قطار" : "هواپیما"})`,
+        sweep.status === 200 && dates.length >= 25,
+        `${dates.length} روز سنجیده شد · ${open.length} روز بلیت دارد`, sweep.ms);
+    }
+
     const alibabaFlight = await call("/api/providers/alibaba/flights", {
       origin: "THR", destination: "MHD", date: future(12), adults: 1,
     });
