@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Compass, LoaderCircle, MapPin, Users, Wallet } from "lucide-react";
 import CityCombobox from "@/components/CityCombobox";
 import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
@@ -29,6 +29,15 @@ function addDays(iso: string, days: number): string {
  * that starts here can actually be searched, priced and planned.
  */
 export default function StartCitiesPage() {
+  // `useSearchParams` needs a boundary so the page can still be prerendered.
+  return (
+    <Suspense fallback={null}>
+      <StartCitiesContent />
+    </Suspense>
+  );
+}
+
+function StartCitiesContent() {
   const router = useRouter();
   const { travelData, setTravelData, isHydrated } = useTravel();
   const cities = useMemo(() => orderedTravelCities(), []);
@@ -52,6 +61,17 @@ export default function StartCitiesPage() {
   const [distance, setDistance] = useState<{ km: number; minutes: number } | null>(null);
   const [distanceNote, setDistanceNote] = useState("");
   const [error, setError] = useState("");
+  /**
+   * `?to=مشهد` — a destination the traveller already chose somewhere else.
+   *
+   * The home page's «پیشنهادهای ویژه» and the shared trip links know which city
+   * the traveller wants; re-typing it here was pure friction. The parameter is
+   * read once and only fills an empty destination, so a saved trip is never
+   * overwritten by a link.
+   */
+  const searchParams = useSearchParams();
+  const askedDestination = searchParams.get("to") || "";
+  const askedOrigin = searchParams.get("from") || "";
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -69,6 +89,9 @@ export default function StartCitiesPage() {
       setDepartureDate(travelData.departureDate);
       setReturnDate(travelData.returnDate && travelData.returnDate > travelData.departureDate ? travelData.returnDate : "");
     }
+    // A destination (or origin) named in the link wins over an empty form.
+    if (askedDestination) setDestination(askedDestination);
+    if (askedOrigin) setOrigin(askedOrigin);
     // Only once, when the saved trip is read from the device.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated]);

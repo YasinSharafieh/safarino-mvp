@@ -136,7 +136,7 @@ export default function ModeChooser({ mode, onChoose, budgetMillions: _budgetMil
                       (counts[option.id] as number) > 0 ? (
                         <span className="text-emerald-300">✓ {faNumber(counts[option.id] as number)} بلیت برای همین تاریخ</span>
                       ) : (
-                        <span className="text-amber-300">برای این تاریخ بلیت باز نیست</span>
+                        <span className="text-amber-300">بلیتی برای این تاریخ نیافتیم</span>
                       )
                     ) : (
                       <span className="text-slate-500">موجودی این تاریخ سنجیده نشده</span>

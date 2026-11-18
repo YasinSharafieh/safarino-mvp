@@ -55,7 +55,7 @@ export default function OriginSwitch() {
           {plane ? "هواپیما" : "قطار"}
         </span>
       ) : null}
-      <span className="hidden shrink-0 text-slate-400 sm:inline">{people} نفر</span>
+      <span className="hidden shrink-0 text-slate-400 sm:inline">{new Intl.NumberFormat("fa-IR").format(people)} نفر</span>
       <Repeat className="h-3 w-3 shrink-0 text-cyan-200/80 transition group-hover:rotate-180" />
     </Link>
   );

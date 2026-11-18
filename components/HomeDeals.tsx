@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -458,7 +459,19 @@ export default function HomeDeals() {
 
       {packages.length ? (
         <>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+            <span className="text-[9.5px] font-bold text-slate-400">شهر مقصد را خودت انتخاب کن، نه الگوریتم:</span>
+            {["مشهد", "کیش", "شیراز", "اصفهان", "رشت", "تبریز", "یزد", "قشم"].filter((city) => city !== origin && city !== originHint).map((city) => (
+              <Link
+                key={city}
+                href={`/start/cities?to=${encodeURIComponent(city)}`}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold text-slate-200 transition hover:border-cyan-300/40 hover:bg-cyan-300/10 hover:text-white"
+              >
+                {city}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shelf.map((pkg, index) => {
               const plan =
                 budgetPlans.find((entry) => entry.pkg.id === pkg.id)?.plan ||
