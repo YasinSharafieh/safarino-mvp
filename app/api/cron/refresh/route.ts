@@ -136,12 +136,23 @@ const LOCK_SECONDS = 3_600;
  * instead of one call dying at 60 seconds.
  */
 export async function GET(request: NextRequest) {
-  return run(request, { hotels: 3, stays: 2, transports: 6, pois: 3, packages: 1, skip: 0 });
+  return run(request, { hotels: 2, stays: 1, transports: 6, pois: 3, packages: 1, skip: 0 });
 }
 
 export async function POST(request: NextRequest) {
-  return run(request, { hotels: 6, stays: 4, transports: 14, pois: 6, packages: 2, skip: 0 });
+  return run(request, { hotels: 3, stays: 2, transports: 10, pois: 4, packages: 1, skip: 0 });
 }
+
+/**
+ * The whole job must answer before the platform kills it.
+ *
+ * The live site showed exactly what happens without this: a POST asked for more
+ * than sixty seconds of provider crawling, the function was killed half-way and
+ * the owner got a 504 with no idea what had been refreshed. Now the job stops
+ * itself with time to spare, says what it did, and tells the caller where to
+ * continue (`nextSkip`).
+ */
+const MAX_WORK_MS = 34_000;
 
 /**
  * `budget*` bounds how much work one call does, so the job always finishes
@@ -152,6 +163,7 @@ async function run(
   budget: { hotels: number; stays: number; transports: number; pois: number; packages?: number; skip?: number },
 ) {
   const started = Date.now();
+  const overTime = () => Date.now() - started > MAX_WORK_MS;
   const force = request.nextUrl.searchParams.get("force") === "1";
   if (!force) {
     const locked = await getProviderCache<string>(LOCK_KEY);
@@ -173,10 +185,12 @@ async function run(
   ];
   const steps: Step[] = [];
 
-  const hotelJobs = CITIES.slice(0, budget.hotels).flatMap((city) =>
+  /** Pass 1 warms the hotels, pass 2 (called with ?pass=2) the local stays. */
+  const pass = request.nextUrl.searchParams.get("pass") === "2" ? 2 : 1;
+  const hotelJobs = (pass === 1 ? CITIES : []).slice(0, budget.hotels).flatMap((city) =>
     stayWindows.map((window) => warmAccommodation("hotel", city, window.checkIn, window.checkOut, 2)),
   );
-  const stayJobs = STAY_CITIES.slice(0, budget.stays).flatMap((city) =>
+  const stayJobs = (pass === 2 ? STAY_CITIES : []).slice(0, budget.stays).flatMap((city) =>
     stayWindows.map((window) => warmAccommodation("stay", city, window.checkIn, window.checkOut, 2)),
   );
   /**
@@ -195,12 +209,12 @@ async function run(
     if (transportCount >= budget.transports) break;
     transportCount += 1;
     transportPlan.push(await warmTransport(job.mode, job.origin, job.destination, job.date));
-    await nap(150);
-    if (Date.now() - started > 40_000) break;
+    await nap(120);
+    if (overTime()) break;
   }
-  const poiJobs = CITIES.slice(0, budget.pois).map((city) => warmPois(city));
-  // Only the two biggest origins per call: the job must stay inside the limit.
-  const packageJobs = PACKAGE_ORIGINS.slice(0, budget.packages ?? 2).map((origin) => warmPackages(origin));
+  const poiJobs = (pass === 1 ? CITIES : []).slice(0, budget.pois).map((city) => warmPois(city));
+  // Only the biggest origin per call: the job must stay inside the limit.
+  const packageJobs = (pass === 1 ? PACKAGE_ORIGINS : []).slice(0, budget.packages ?? 1).map((origin) => warmPackages(origin));
 
   const settled = await Promise.allSettled([...hotelJobs, ...stayJobs, ...poiJobs, ...packageJobs]);
   settled.forEach((item) => {
@@ -212,6 +226,7 @@ async function run(
   return NextResponse.json({
     success: true,
     ranFor: `${Date.now() - started}ms`,
+    pass,
     window: { stays: stayWindows, ticketDays: TICKET_DAYS.map(isoDate) },
     nextSkip: skip + transportCount < plan.length ? skip + transportCount : 0,
     summary: {
