@@ -119,7 +119,8 @@ export function normaliseCity(value: unknown): string | null {
 }
 
 function isoIn(days: number): string {
-  const date = new Date();
+  // Iran's date, not UTC's: a package leaving «tomorrow» must be tomorrow in Tehran.
+  const date = new Date(Date.now() + 3.5 * 3_600_000);
   date.setUTCHours(0, 0, 0, 0);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
@@ -394,7 +395,12 @@ export async function loadTripPackages(options: {
   // destinations from the same city, not the same four cards with new numbers.
   const rotation = options.force ? (await nextRotation(origin, limit)) : 0;
   const destinations = todaysPackageDestinations(origin, limit, new Date(), rotation);
-  const offsets = [3, 6, 10, 14, 18, 21];
+  /**
+   * Today, this week and next month — the three windows where ticket inventory
+   * is really open. Before this the earliest card was three days out, so a
+   * traveller who wanted to leave tomorrow never saw tomorrow's prices.
+   */
+  const offsets = [1, 2, 5, 9, 14, 21];
 
   const settled = await Promise.all(
     destinations.map((entry, index) => withDeadline(buildPackage(origin, entry, travellers, offsets[index % offsets.length], options.force), 52_000)),
