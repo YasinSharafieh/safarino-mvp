@@ -97,9 +97,20 @@ export function addDaysToIso(date: string, amount: number): string {
   return value.toISOString().slice(0, 10);
 }
 
+/**
+ * Today's date in Tehran, not in UTC.
+ *
+ * Iran is UTC+3:30 all year (no daylight saving since 2022), so a traveller at
+ * 2 a.m. on the 6th was given UTC's 5th as «today» — which made yesterday
+ * selectable in the calendar and made a flight on the real today look like the
+ * past. Every date the app reasons about is a date in Iran now.
+ */
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const TEHRAN_OFFSET_MS = 3.5 * 3_600_000;
+  return new Date(Date.now() + TEHRAN_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+export const TEHRAN_TIME_ZONE = "Asia/Tehran";
 
 export function formatJalaliDate(date: string): string {
   const value = jalaliFromGregorian(date);

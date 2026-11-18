@@ -9,15 +9,11 @@ import JalaliRangeCalendar from "@/components/JalaliRangeCalendar";
 import PassengerSelector from "@/components/PassengerSelector";
 import { useTravel } from "../../context/TravelContext";
 import { orderedTravelCities } from "@/lib/start-flow";
-import { formatJalaliDate } from "@/lib/jalali";
+import { formatJalaliDate, todayIso } from "@/lib/jalali";
 import SiteHeader from "@/components/SiteHeader";
 import CityCompare from "@/components/CityCompare";
 import { SITE_FACTS } from "@/lib/site-facts";
 import VoiceTripButton from "@/components/VoiceTripButton";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00Z`);
