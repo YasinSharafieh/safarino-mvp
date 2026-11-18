@@ -17,12 +17,14 @@ import { JOURNEY_STEPS } from "../lib/site-facts";
 const tripStatusSource = readFileSync("components/TripStatus.tsx", "utf8");
 assert.match(tripStatusSource, /const isHome = pathname === "\/"/, "the status bar must know when it is on the home page");
 assert.match(tripStatusSource, /status\.chips\.filter\(\(\) => !isHome\)/, "home must not print the trip chips");
-assert.match(tripStatusSource, /status\.progressShort/, "home keeps the progress readout");
+assert.match(tripStatusSource, /status\.stageLabel/, "home keeps the progress readout");
+assert.match(tripStatusSource, /status\.chips\.filter/, "no chip row may survive on the home page");
 
 // ۲. «X از ۵» from the shared trip.
 const stepSource = readFileSync("components/TravelSteps.tsx", "utf8");
 assert.match(stepSource, /از ۵/, "the stepper must say «X از ۵» in words");
 assert.match(stepSource, /JOURNEY_STEPS\[current - 1\]/, "the stepper must name the phase it is on");
+assert.match(stepSource, /const reached = Math\.min\(5, Math\.max\(1, current\)\)/, "the stepper counts the phase you are on, not a different number");
 
 const empty = tripStatus({ origin: "", destination: "", departureDate: "", days: 0, travelers: 1, children: 0, infants: 0, budgetMillions: 0 });
 assert.equal(empty.exists, false, "with no destination there is no status at all");
@@ -51,6 +53,9 @@ assert.equal(stayed.doneCount, 3, "«بدون اقامتگاه» is a decision a
 const planned = tripStatus({ ...base, transport: { cost: 1_200_000, mode: "train", name: "قطار" }, accommodation: { status: "skipped" }, hasPlan: true });
 assert.equal(planned.doneCount, 5, "a plan plus a ticket finishes all five steps, the book included");
 assert.equal(planned.progressShort, "۵ از ۵");
+assert.equal(routeOnly.stageLabel, "۲ از ۵", "standing on the ticket phase is «۲ از ۵» everywhere");
+assert.equal(stayed.stage, 4);
+assert.equal(planned.stage, 5, "a finished trip stands on the last phase");
 assert.equal(planned.total, JOURNEY_STEPS.length, "the counter is out of the real number of phases");
 
 // ۳. real logos, self-hosted.

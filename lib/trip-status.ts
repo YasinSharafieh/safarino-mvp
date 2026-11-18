@@ -53,6 +53,14 @@ export type TripStatus = {
   progressLabel: string;
   /** «۲ از ۵» — the same progress where there is no room for a sentence. */
   progressShort: string;
+  /**
+   * «مرحلهٔ ۲ از ۵» — the phase the traveller stands on, which is the finished
+   * steps plus one (and five once everything is done). The header pill and the
+   * stepper both print this number, so they can never disagree.
+   */
+  stage: number;
+  /** «۲ از ۵». */
+  stageLabel: string;
 };
 
 export type TripStatusInput = {
@@ -148,6 +156,7 @@ export function tripStatus(input: TripStatusInput): TripStatus {
     { id: "book", label: STEP_LABEL.book, done: bookDone, href: STEP_HREF.book },
   ];
   const doneCount = steps.filter((step) => step.done).length;
+  const stage = Math.min(steps.length, doneCount + 1);
 
   const chips: StatusChip[] = [
     {
@@ -212,6 +221,8 @@ export function tripStatus(input: TripStatusInput): TripStatus {
     next,
     progressLabel: `${fa(doneCount)} از ${fa(steps.length)} قدم انجام شده`,
     progressShort: `${fa(doneCount)} از ${fa(steps.length)}`,
+    stage,
+    stageLabel: `${fa(stage)} از ${fa(steps.length)}`,
   };
 }
 

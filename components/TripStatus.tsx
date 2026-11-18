@@ -118,7 +118,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 className={`h-1.5 w-1.5 rounded-full ${step.done ? "bg-emerald-300" : "bg-white/20"}`}
               />
             ))}
-            <b className="mr-0.5 font-black text-slate-200">{isHome ? status.progressShort : status.progressLabel}</b>
+            <b className="mr-0.5 font-black text-slate-200">{isHome ? status.stageLabel : status.progressLabel}</b>
           </span>
         </div>
 

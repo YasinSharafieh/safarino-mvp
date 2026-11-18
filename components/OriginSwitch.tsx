@@ -64,7 +64,7 @@ export default function OriginSwitch() {
     accommodation: travelData.accommodation,
     hasPlan,
   });
-  const currentStep = STEP_BY_PATH.find((entry) => pathname.startsWith(entry.prefix))?.step ?? 1;
+  const currentStep = STEP_BY_PATH.find((entry) => pathname.startsWith(entry.prefix))?.step ?? status.stage;
 
   const origin = (travelData.origin || "").trim();
   const destination = (travelData.destination || "").trim();
@@ -104,7 +104,7 @@ export default function OriginSwitch() {
         className="flex shrink-0 items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-1.5 py-0.5 text-[9.5px] font-black text-cyan-100"
         title={`مرحلهٔ ${new Intl.NumberFormat("fa-IR").format(currentStep)} از ۵ · ${status.progressLabel}`}
       >
-        {new Intl.NumberFormat("fa-IR").format(status.doneCount)} از ۵
+        {new Intl.NumberFormat("fa-IR").format(currentStep)} از ۵
       </span>
       <Repeat className="h-3 w-3 shrink-0 text-cyan-200/80 transition group-hover:rotate-180" />
     </Link>

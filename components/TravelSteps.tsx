@@ -32,8 +32,9 @@ export default function TravelSteps({
   // «۳ از ۵» — the count is the steps the traveller really finished, plus the one
   // they are standing on, capped at five. It used to be implicit (colours only),
   // so a traveller could not say in words how far along they were.
-  const completed = [1, 2, 3, 4, 5].filter((id) => id < current || done.includes(id as StepNumber));
-  const reached = Math.min(5, Math.max(completed.length, current));
+  // «X از ۵» is the phase the traveller stands on — the same number the header
+  // pill prints — so the strip and the bar above it never tell two stories.
+  const reached = Math.min(5, Math.max(1, current));
   const percent = Math.round((reached / 5) * 100);
   return (
     <nav aria-label="مراحل برنامه‌ریزی سفر" className="mx-auto mb-2 mt-8 w-full max-w-5xl print:hidden">
