@@ -11,7 +11,7 @@
  * their own marks — a choice the traveller can compare at a glance.
  */
 
-import SourceLogo, { sourceLogo } from "@/components/SourceLogo";
+import SourceLogo, { sourceLogo } from "../SourceLogo";
 
 const FALLBACK_LABELS: Record<string, string> = {
   alibaba: "علی‌بابا",
