@@ -136,11 +136,11 @@ const LOCK_SECONDS = 3_600;
  * instead of one call dying at 60 seconds.
  */
 export async function GET(request: NextRequest) {
-  return run(request, { hotels: 2, stays: 1, transports: 6, pois: 3, packages: 1, skip: 0 });
+  return run(request, { hotels: 2, stays: 1, transports: 4, pois: 2, packages: 1, skip: 0 });
 }
 
 export async function POST(request: NextRequest) {
-  return run(request, { hotels: 3, stays: 2, transports: 10, pois: 4, packages: 1, skip: 0 });
+  return run(request, { hotels: 3, stays: 2, transports: 7, pois: 3, packages: 1, skip: 0 });
 }
 
 /**
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
  * itself with time to spare, says what it did, and tells the caller where to
  * continue (`nextSkip`).
  */
-const MAX_WORK_MS = 34_000;
+const MAX_WORK_MS = 22_000;
 
 /**
  * `budget*` bounds how much work one call does, so the job always finishes
