@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTravel } from "@/app/context/TravelContext";
+import { formatJalaliDate } from "@/lib/jalali";
 import { ArrowLeft, CircleAlert, RotateCcw, Trash2 } from "lucide-react";
 
 const STORAGE_KEY = "safarino-travel-data-v1";
@@ -95,7 +96,7 @@ export default function ResumeTripPrompt({ className = "" }: { className?: strin
           <p className="mt-1 text-[11px] leading-6 text-slate-300">
             {saved.destination ? `مقصد ${saved.destination}` : "مقصدت انتخاب شده"}
             {saved.origin ? ` از ${saved.origin}` : ""}
-            {saved.departureDate ? ` · تاریخ ${saved.departureDate}` : ""}
+            {saved.departureDate ? ` · تاریخ ${formatJalaliDate(saved.departureDate)}` : ""}
             {saved.days ? ` · ${fa.format(Number(saved.days))} روز` : ""}
             {saved.budget ? ` · بودجهٔ ${fa.format(Number(saved.budget))} میلیون تومان` : ""}
             . اگر سفر تازه را شروع کنی، این اطلاعات پاک می‌شود؛ اگر ادامه بدهی، همان‌جا که بودی برمی‌گردی.

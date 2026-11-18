@@ -693,6 +693,29 @@ function TransportPageContent() {
               counts={modeCounts}
               countsLoading={modeCountsLoading}
             />
+
+            {/**
+             * «پول غذا را کنار گذاشتیم» — the same five-row table the stay, the
+             * plan and the dashboard read, shown here so the traveller sees this
+             * phase's own arithmetic before choosing: ticket, room, food,
+             * sightseeing, city transport, and what is left.
+             */}
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
+              <span className="text-[10.5px] font-black text-white">از بودجهٔ {money(budget)}:</span>
+              {[
+                { label: "بلیت", value: activeSelection ? activeSelection.cost : 0, tone: "text-cyan-200" },
+                { label: "پول غذا", value: costs.food, tone: "text-slate-300" },
+                { label: "گشت‌وگذار", value: costs.activities + costs.localTransport, tone: "text-slate-300" },
+              ].map((row) => (
+                <span key={row.label} className={`text-[10.5px] ${row.tone}`}>
+                  {row.label} <b className="text-white">{money(row.value)}</b>
+                </span>
+              ))}
+              <span className={`text-[10.5px] ${activeSelection ? "text-emerald-300" : "text-slate-400"}`}>
+                {activeSelection ? "باقی‌مانده برای اقامت" : "باقی‌مانده"} <b>{money(Math.max(0, budget - (activeSelection ? activeSelection.cost : 0) - costs.food - costs.activities - costs.localTransport))}</b>
+              </span>
+              <span className="text-[9px] text-slate-500">پول غذا و گشت‌وگذار تخمین با نرخ هر نفر هر روز است؛ بلیت واقعی است.</span>
+            </div>
           </div>
 
           {/* ------------------------------------ the package's own ticket */}

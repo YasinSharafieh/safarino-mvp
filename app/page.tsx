@@ -3,6 +3,7 @@
 import SnapshotKeeper from "@/components/SnapshotKeeper";
 import ThemeToggle from "@/components/ThemeToggle";
 import HomeDeals from "@/components/HomeDeals";
+import ResumeTripPrompt from "@/components/ResumeTripPrompt";
 import HomeReviews from "@/components/HomeReviews";
 import { SITE_FACTS, homeStats } from "@/lib/site-facts";
 
@@ -188,26 +189,26 @@ export default function HomePage() {
           </ul>
 
           <div className="flex items-center gap-2">
+            <button
+              aria-label={menuOpen ? "بستن منو" : "منو"}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 lg:hidden"
+            >
+              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
             <ThemeToggle />
             <a href="/start" className="btn-primary hidden !px-5 !py-2.5 text-xs lg:inline-flex">
               شروع برنامه‌ریزی
             </a>
           </div>
-
-          <button
-            aria-label="منو"
-            onClick={() => setMenuOpen((prev) => !prev)}
-            className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 lg:hidden"
-          >
-            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
         </nav>
 
         {menuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
-            className="border-t border-white/5 bg-night-800/90 px-5 py-4 lg:hidden"
+            className="mx-auto mt-3 max-w-7xl rounded-2xl border border-white/10 bg-night-800/95 px-5 py-4 backdrop-blur lg:hidden"
           >
             <ul className="flex flex-col gap-3">
               {NAV_LINKS.map((link) => (
@@ -290,6 +291,7 @@ export default function HomePage() {
                 <ArrowLeft className="h-4 w-4" />
               </a>
 
+
               <div className="grid w-full gap-3 sm:grid-cols-2">
                 <a
                   href="/start/cities"
@@ -323,6 +325,11 @@ export default function HomePage() {
             </div>
           </div>
         </motion.div>
+
+        {/* A trip already on this device: the traveller does not start over. */}
+        <div className="mx-auto mt-6 max-w-4xl">
+          <ResumeTripPrompt />
+        </div>
 
         {/* --------------------------------------------------- stats */}
         <div className="mx-auto mt-10 grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-4">

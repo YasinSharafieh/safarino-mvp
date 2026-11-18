@@ -329,7 +329,16 @@ export default function CarPlanner({
                     </span>
                     <b className="text-[11.5px] text-white">{toman(line.amount)}</b>
                   </div>
-                  <span className="mt-0.5 block text-[9px] leading-5 text-slate-500">{line.formula}</span>
+                  {/* The arithmetic is shown for the two lines a traveller can check
+                      on the spot — fuel and consumption. The rest keep their formula
+                      one collapse below, so the card stays readable. */}
+                  <details className="group">
+                    <summary className="mt-0.5 cursor-pointer list-none text-[9px] leading-5 text-slate-500 transition hover:text-slate-300">
+                      {line.id === "fuel" ? `${fa.format(cost.litres)} لیتر بنزین · ${faInt.format(fuelPrice)} تومان هر لیتر` : `${line.label} — چطور حساب شد؟`}
+                      <span className="mr-1 inline-block text-[8px] text-slate-600 group-open:hidden">▾</span>
+                    </summary>
+                    <span className="mt-0.5 block text-[9px] leading-5 text-slate-500">{line.formula}</span>
+                  </details>
                 </div>
               );
             })}
