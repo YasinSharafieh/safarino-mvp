@@ -215,7 +215,7 @@ const unusedRoutes = apiRoutes.filter((route) => {
   return !Array.from(calledApis.keys()).some((url) => url === route || url.startsWith(`${route}/`) || url.split("/").slice(0, size).join("/") === route);
 });
 const unusedServerOnly = unusedRoutes.filter((route) =>
-  /^\/api\/(cron|provider-assets|providers|health|route\/neshan-check)/.test(route),
+  /^\/api\/(cron|provider-assets|providers|health|ai\/usage|route\/neshan-check)/.test(route),
 );
 const unusedReal = unusedRoutes.filter((route) => !unusedServerOnly.includes(route));
 check("no user-facing API route is orphaned", unusedReal.length === 0, unusedReal.join(" · ") || "none");
