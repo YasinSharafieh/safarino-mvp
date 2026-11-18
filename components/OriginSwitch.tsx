@@ -1,9 +1,23 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, CalendarDays, MapPin, Repeat, Ticket } from "lucide-react";
 import { useTravel } from "@/app/context/TravelContext";
 import { formatJalaliDate } from "@/lib/jalali";
+import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
+import { tripStatus } from "@/lib/trip-status";
+
+/** The step each screen belongs to, so the bar can say «۳ از ۵». */
+const STEP_BY_PATH: Array<{ prefix: string; step: 1 | 2 | 3 | 4 | 5 }> = [
+  { prefix: "/start", step: 1 },
+  { prefix: "/quiz", step: 1 },
+  { prefix: "/transport", step: 2 },
+  { prefix: "/accommodation", step: 3 },
+  { prefix: "/plan", step: 4 },
+  { prefix: "/itinerary", step: 5 },
+];
 
 /**
  * نوار سفر — the trip's own identity, in the top bar of every phase.
@@ -20,7 +34,37 @@ import { formatJalaliDate } from "@/lib/jalali";
  */
 export default function OriginSwitch() {
   const { travelData, isHydrated } = useTravel();
+  const pathname = usePathname() || "/";
+  const [hasPlan, setHasPlan] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(ITINERARY_STORAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as { success?: boolean; days?: unknown[] }) : null;
+      setHasPlan(Boolean(parsed?.success && Array.isArray(parsed.days) && parsed.days.length));
+    } catch {
+      setHasPlan(false);
+    }
+  }, [pathname]);
+
   if (!isHydrated) return null;
+
+  // The same arithmetic the status strip uses, so «۲ از ۵» here and «۲ از ۵» there
+  // can never disagree.
+  const status = tripStatus({
+    origin: travelData.origin,
+    destination: travelData.destination,
+    departureDate: travelData.departureDate,
+    days: travelData.days,
+    travelers: travelData.travelers,
+    children: travelData.children,
+    infants: travelData.infants,
+    budgetMillions: travelData.budget,
+    transport: travelData.transport,
+    accommodation: travelData.accommodation,
+    hasPlan,
+  });
+  const currentStep = STEP_BY_PATH.find((entry) => pathname.startsWith(entry.prefix))?.step ?? 1;
 
   const origin = (travelData.origin || "").trim();
   const destination = (travelData.destination || "").trim();
@@ -56,6 +100,12 @@ export default function OriginSwitch() {
         </span>
       ) : null}
       <span className="hidden shrink-0 text-slate-400 sm:inline">{new Intl.NumberFormat("fa-IR").format(people)} نفر</span>
+      <span
+        className="flex shrink-0 items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-1.5 py-0.5 text-[9.5px] font-black text-cyan-100"
+        title={`مرحلهٔ ${new Intl.NumberFormat("fa-IR").format(currentStep)} از ۵ · ${status.progressLabel}`}
+      >
+        {new Intl.NumberFormat("fa-IR").format(status.doneCount)} از ۵
+      </span>
       <Repeat className="h-3 w-3 shrink-0 text-cyan-200/80 transition group-hover:rotate-180" />
     </Link>
   );

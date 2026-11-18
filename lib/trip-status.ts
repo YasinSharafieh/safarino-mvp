@@ -51,6 +51,8 @@ export type TripStatus = {
   next: NextStep;
   /** «۲ از ۵ قدم انجام شده». */
   progressLabel: string;
+  /** «۲ از ۵» — the same progress where there is no room for a sentence. */
+  progressShort: string;
 };
 
 export type TripStatusInput = {
@@ -209,6 +211,7 @@ export function tripStatus(input: TripStatusInput): TripStatus {
     total: steps.length,
     next,
     progressLabel: `${fa(doneCount)} از ${fa(steps.length)} قدم انجام شده`,
+    progressShort: `${fa(doneCount)} از ${fa(steps.length)}`,
   };
 }
 

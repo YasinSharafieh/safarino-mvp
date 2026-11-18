@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 import ProviderLogo from "@/components/ProviderLogo";
+import SourceLogo from "@/components/SourceLogo";
+import ProviderTag, { AlsoAvailable } from "@/components/transport/ProviderTag";
 import { useTravel } from "@/app/context/TravelContext";
 import { bestForBudget, estimateBudget } from "@/lib/budget-fit";
 import { resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
@@ -558,6 +560,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                 status.status === "ok" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/[0.03] text-slate-400"
               }`}
             >
+              <SourceLogo id={status.provider} size={13} rounded />
               <span className={`h-1.5 w-1.5 rounded-full ${status.status === "ok" ? "bg-emerald-300" : "bg-slate-500"}`} />
               {status.label}
               <b className="text-white">{status.status === "ok" ? `${fa.format(status.count)} بلیت` : status.message || "در دسترس نیست"}</b>
@@ -764,12 +767,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                     <b className="text-[12.5px] text-white">{offer.title}</b>
                     {sort === "cheapest" && index === 0 ? <span className="badge-turquoise !py-0.5 !text-[8.5px]">ارزان‌ترین</span> : null}
                     {recommendation.option?.id === offer.id ? <span className="rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 py-0.5 text-[8.5px] font-black text-emerald-200">بهترین انتخاب برای تو</span> : null}
-                    {offer.provider ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[8.5px] font-bold text-slate-300">
-                        <span className="grid h-3 w-3 place-items-center rounded-full bg-cyan-400/20 text-[6.5px] text-cyan-200">{PROVIDER_MARKS[offer.provider]}</span>
-                        {PROVIDER_LABELS[offer.provider]}
-                      </span>
-                    ) : null}
+                    {offer.provider ? <ProviderTag provider={offer.provider} label={PROVIDER_LABELS[offer.provider]} /> : null}
                   </div>
                   {offer.subtitle ? <span className="mt-0.5 block text-[10px] text-slate-400">{offer.subtitle}</span> : null}
                   {offer.details?.length ? (
@@ -777,20 +775,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                       {offer.details.filter((detail) => detail && !offer.subtitle?.includes(detail)).join(" · ")}
                     </span>
                   ) : null}
-                  {offer.alsoAvailableAt?.length ? (
-                    <span className="mt-1 block text-[9.5px] leading-5 text-slate-400">
-                      همین بلیت در{" "}
-                      {offer.alsoAvailableAt.map((alternate, alternateIndex) => (
-                        <span key={`${alternate.provider}-${alternateIndex}`}>
-                          {alternateIndex > 0 ? " و " : ""}
-                          <a href={alternate.bookingUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-cyan-200 underline decoration-cyan-400/40 underline-offset-4">
-                            {alternate.providerLabel}
-                          </a>{" "}
-                          ({money(alternate.priceToman)})
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
+                  {offer.alsoAvailableAt?.length ? <AlsoAvailable items={offer.alsoAvailableAt} money={money} /> : null}
                 </div>
               </div>
 

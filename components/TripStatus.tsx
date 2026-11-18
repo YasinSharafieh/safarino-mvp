@@ -13,7 +13,12 @@
  *  - it is hidden on the printed book, the offline reader and a shared link,
  *    where a traveller's own status does not belong;
  *  - it never floats over content (no fixed positioning) — the assistant keeps the
- *    corner, this keeps the top of the page.
+ *    corner, this keeps the top of the page;
+ *  - on the home page the trip chips are deliberately **not** shown: the home page
+ *    is where a trip is started, and a traveller who has not chosen anything yet
+ *    was greeted by a strip of «انتخاب نشده» before they had even seen the site.
+ *    Only the step progress («۱ از ۵») stays there, so a returning traveller still
+ *    knows where the trip stands.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -73,12 +78,14 @@ export default function TripStatus({ className = "" }: { className?: string }) {
 
   if (!isHydrated || !status.exists) return null;
   if (HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
+  // The home page shows the progress only — no route/date/budget strip.
+  const isHome = pathname === "/";
 
   return (
     <section aria-label="وضعیت سفر" className={`mx-auto mt-3 w-full max-w-6xl px-4 print:hidden sm:px-6 ${className}`}>
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 backdrop-blur">
+      <div className={`rounded-2xl border border-white/10 backdrop-blur ${isHome ? "bg-white/[0.02] px-2.5 py-1.5" : "bg-white/[0.03] px-3 py-2"}`}>
         <div className="flex flex-wrap items-center gap-1.5">
-          {status.chips.map((chip) => {
+          {status.chips.filter(() => !isHome).map((chip) => {
             const Icon = ICONS[chip.id];
             return (
               <span
@@ -98,7 +105,12 @@ export default function TripStatus({ className = "" }: { className?: string }) {
           })}
 
           {/* How far along the five steps are — dots, not a number to decode. */}
-          <span className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[9px] text-slate-300" title={status.progressLabel}>
+          <span
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] text-slate-300 ${
+              isHome ? "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-100" : "border-white/10 bg-black/20"
+            }`}
+            title={status.progressLabel}
+          >
             {status.steps.map((step) => (
               <span
                 key={step.id}
@@ -106,7 +118,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 className={`h-1.5 w-1.5 rounded-full ${step.done ? "bg-emerald-300" : "bg-white/20"}`}
               />
             ))}
-            <b className="mr-0.5 font-black text-slate-200">{status.progressLabel}</b>
+            <b className="mr-0.5 font-black text-slate-200">{isHome ? status.progressShort : status.progressLabel}</b>
           </span>
         </div>
 

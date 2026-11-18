@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, Route } from "lucide-react";
 import { JOURNEY_STEPS } from "@/lib/site-facts";
 
 /**
@@ -18,6 +18,9 @@ import { JOURNEY_STEPS } from "@/lib/site-facts";
  */
 export type StepNumber = 1 | 2 | 3 | 4 | 5;
 
+const FA_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵"];
+const fa = (value: number) => FA_DIGITS[value] ?? String(value);
+
 export default function TravelSteps({
   current,
   /** Which steps the traveller has really completed, from the shared trip. */
@@ -26,8 +29,28 @@ export default function TravelSteps({
   current: StepNumber;
   done?: StepNumber[];
 }) {
+  // «۳ از ۵» — the count is the steps the traveller really finished, plus the one
+  // they are standing on, capped at five. It used to be implicit (colours only),
+  // so a traveller could not say in words how far along they were.
+  const completed = [1, 2, 3, 4, 5].filter((id) => id < current || done.includes(id as StepNumber));
+  const reached = Math.min(5, Math.max(completed.length, current));
+  const percent = Math.round((reached / 5) * 100);
   return (
     <nav aria-label="مراحل برنامه‌ریزی سفر" className="mx-auto mb-2 mt-8 w-full max-w-5xl print:hidden">
+      <div className="mb-1.5 flex items-center justify-between gap-3 px-1">
+        <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-400">
+          <Route className="h-3 w-3 text-cyan-300" />
+          مرحلهٔ <b className="font-black text-cyan-200">{fa(current)}</b> از ۵ — {JOURNEY_STEPS[current - 1]?.label}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="hidden h-1 w-24 overflow-hidden rounded-full bg-white/10 sm:block">
+            <span className="block h-full rounded-full bg-gradient-to-l from-cyan-300 to-teal-400 transition-all duration-500" style={{ width: `${percent}%` }} />
+          </span>
+          <b className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black tabular-nums text-cyan-100">
+            {fa(reached)} از ۵
+          </b>
+        </span>
+      </div>
       <ol className="glass grid grid-cols-5 gap-1 p-2 sm:gap-2 sm:p-3">
         {JOURNEY_STEPS.map((step, index) => {
           const id = (index + 1) as StepNumber;

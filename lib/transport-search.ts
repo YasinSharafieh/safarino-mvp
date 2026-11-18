@@ -196,6 +196,13 @@ function fromAlibabaGround(rows: unknown, mode: "train" | "bus", bookingUrl: str
 const STATUS_MESSAGES: Record<string, string> = {
   PROVIDER_RATE_LIMIT_EXCEEDED: "سهمیهٔ جستجوی این منبع پر شده است؛ کمی بعد دوباره تلاش کنید.",
   ALIBABA_HTTP_403: "علی‌بابا در حال حاضر به این سرور پاسخ نمی‌دهد.",
+  // These two are not outages: the provider accepted the search but had not
+  // finished answering within the time we wait. Saying «پاسخ نداد» made a
+  // traveller think the site was down and give up on a date that was fine.
+  ALIBABA_SEARCH_INCOMPLETE: "علی‌بابا فهرست این تاریخ را هنوز کامل نکرده؛ چند لحظه بعد دوباره بزن.",
+  ALIBABA_MISSING_REQUEST_ID: "علی‌بابا این جست‌وجو را نپذیرفت؛ یک بار دیگر یا با تاریخ دیگری امتحان کن.",
+  ALIBABA_BUS_CITY_NOT_FOUND: "این شهر در فهرست اتوبوس علی‌بابا نیست.",
+  ALIBABA_REQUEST_FAILED: "ارتباط با علی‌بابا برقرار نشد؛ شبکه یا فیلتر را بررسی کن.",
 };
 
 function statusFor(provider: TransportProviderId, count: number, found: number, error?: unknown): ProviderStatus {
