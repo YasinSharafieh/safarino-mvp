@@ -504,6 +504,14 @@ function TransportPageContent() {
     // A real decision, remembered in this browser only — the taste profile's food.
     recordTaste("mode", next);
     setMode(next);
+    /**
+     * The vehicle chosen here is the trip's vehicle from now on: the stay step,
+     * the plan and the shared link all read `preferredMode`, and it is what the
+     * header prints. Only the four real modes are ever stored.
+     */
+    if (next !== (travelData.preferredMode as TravelMode)) {
+      setTravelData((current) => ({ ...current, preferredMode: next }));
+    }
     if (next === "car" && selection.vehicleId !== "car") return;
     if (next !== "car" && selection.vehicleId === "car") return;
   };
