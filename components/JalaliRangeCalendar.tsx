@@ -22,11 +22,17 @@ type Props = {
   onRoundTripChange: (value: boolean) => void;
   onChange: (field: "departureDate" | "returnDate", isoDate: string) => void;
   mode?: "journey" | "stay";
+  /**
+   * Days that really have a ticket, as the ticket search measured them. A day
+   * that is absent stays selectable — the map may still be loading — but a day
+   * that is present with `null` was asked and had nothing.
+   */
+  availability?: Record<string, number | null>;
 };
 
 const WEEKDAYS = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 
-export default function JalaliRangeCalendar({ departureDate, returnDate, roundTrip, onRoundTripChange, onChange, mode = "journey" }: Props) {
+export default function JalaliRangeCalendar({ departureDate, returnDate, roundTrip, onRoundTripChange, onChange, mode = "journey", availability }: Props) {
   const initial = jalaliFromGregorian(departureDate || addDaysToIso(todayIso(), 7));
   const [activeField, setActiveField] = useState<Field | null>(null);
   const [view, setView] = useState({ year: initial.year, month: initial.month });
@@ -38,6 +44,14 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
     if (value) setView(jalaliFromGregorian(value));
     setError("");
   }, [activeField, departureDate, returnDate]);
+
+  const nearestOpen = useMemo(() => {
+    if (!availability) return "";
+    const today = todayIso();
+    return Object.keys(availability)
+      .filter((iso) => availability[iso] !== null && iso >= today)
+      .sort()[0] || "";
+  }, [availability]);
 
   const days = useMemo(() => {
     const count = jalaliMonthDays(view.year, view.month);
@@ -125,17 +139,49 @@ export default function JalaliRangeCalendar({ departureDate, returnDate, roundTr
               const iso = gregorianFromJalali(view.year, view.month, day);
               const selected = iso === (activeField === "departure" ? departureDate : returnDate);
               const disabled = iso < todayIso() || activeField === "return" && Boolean(departureDate) && (mode === "stay" ? iso <= departureDate : iso < departureDate);
+              const price = availability?.[iso];
+              const open = typeof price === "number";
+              const soldOut = price === null;
               return (
                 <button
                   key={day}
                   type="button"
                   disabled={disabled}
                   onClick={() => choose(day)}
-                  className={`aspect-square rounded-xl text-xs font-bold transition ${selected ? "bg-cyan-300 text-slate-950" : "text-white hover:bg-cyan-300/15"} disabled:cursor-not-allowed disabled:text-slate-700`}
-                >{toPersianDigits(day)}</button>
+                  title={open ? `از ${new Intl.NumberFormat("fa-IR").format(price)} تومان` : soldOut ? "برای این روز بلیتی باز نشده" : undefined}
+                  className={`relative aspect-square rounded-xl text-xs font-bold transition ${
+                    selected
+                      ? "bg-cyan-300 text-slate-950"
+                      : open
+                        ? "bg-emerald-400/10 text-white ring-1 ring-emerald-400/30 hover:bg-emerald-400/20"
+                        : "text-white hover:bg-cyan-300/15"
+                  } ${soldOut ? "text-slate-600" : ""} disabled:cursor-not-allowed disabled:text-slate-700`}
+                >
+                  {toPersianDigits(day)}
+                  {open ? <span className="absolute inset-x-0 bottom-0.5 mx-auto h-1 w-1 rounded-full bg-emerald-300" /> : null}
+                </button>
               );
             })}
           </div>
+          {availability && activeField === "departure" ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2">
+              <span className="flex items-center gap-1 text-[9px] text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> روزی که واقعاً بلیت دارد
+              </span>
+              {nearestOpen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange("departureDate", nearestOpen);
+                    setActiveField(null);
+                  }}
+                  className="mr-auto rounded-lg border border-emerald-300/40 bg-emerald-300/10 px-2 py-1 text-[9.5px] font-bold text-emerald-100 transition hover:bg-emerald-300/20"
+                >
+                  نزدیک‌ترین روز باز: {formatJalaliDate(nearestOpen)}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <p className={`mt-3 min-h-5 text-[11px] ${error ? "text-rose-300" : "text-slate-500"}`}>
             {error || `انتخاب ${activeField === "departure" ? mode === "stay" ? "تاریخ ورود" : "تاریخ رفت" : mode === "stay" ? "تاریخ خروج" : "تاریخ برگشت"}`}
           </p>

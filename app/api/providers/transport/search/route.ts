@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { priceWatchKey, readPriceTrend, recordPrice } from "@/lib/price-watch";
-import { searchTransport, type TransportSearchInput } from "../../../../../lib/transport-search";
+import { searchTransport, ticketAvailability, type TransportSearchInput } from "../../../../../lib/transport-search";
 import type { TransportMode } from "../../../../../lib/transport-types";
 
 export const runtime = "nodejs";
@@ -31,6 +31,37 @@ function parseInput(body: unknown): TransportSearchInput | null {
   const children = integer(input.children, 0, 0, 9);
   const infants = integer(input.infants, 0, 0, adults);
   return { mode: mode as TransportMode, origin, destination, date, adults, children, infants, ...(returnDate ? { returnDate } : {}) };
+}
+
+/**
+ * `GET /api/providers/transport/search?availability=30&mode=…&origin=…&destination=…`
+ * answers which of the next days really have a ticket, measured one real search
+ * per day. Anything the providers fail on is left out rather than guessed.
+ */
+export async function GET(request: NextRequest) {
+  const params = request.nextUrl.searchParams;
+  const base = parseInput({
+    mode: params.get("mode"),
+    origin: params.get("origin"),
+    destination: params.get("destination"),
+    date: params.get("date") || new Date(Date.now() + 3.5 * 3_600_000).toISOString().slice(0, 10),
+    adults: params.get("adults"),
+    children: params.get("children"),
+    infants: params.get("infants"),
+  });
+  if (!base) return NextResponse.json({ success: false, error: "مسیر یا وسیلهٔ سفر معتبر نیست." }, { status: 400 });
+  const days = Math.min(45, Math.max(7, Math.round(Number(params.get("availability")) || 30)));
+  const { dates, checked } = await ticketAvailability(base, days);
+  return NextResponse.json({
+    success: true,
+    mode: base.mode,
+    origin: base.origin,
+    destination: base.destination,
+    days,
+    dates,
+    checked,
+    note: "هر روز با یک جست‌وجوی واقعی از منبع بلیت بررسی شده؛ روزی که در این فهرست نیست یا بلیت نداشته یا منبع پاسخ نداده است.",
+  });
 }
 
 export async function POST(request: NextRequest) {

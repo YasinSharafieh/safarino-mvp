@@ -23,7 +23,7 @@ import ProviderLogo from "@/components/ProviderLogo";
 import { useTravel } from "@/app/context/TravelContext";
 import { bestForBudget, estimateBudget } from "@/lib/budget-fit";
 import { resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
-import { formatJalaliDate, formatProviderDateTime } from "@/lib/jalali";
+import { addDaysToIso, formatJalaliDate, formatProviderDateTime, todayIso } from "@/lib/jalali";
 
 export type TicketMode = "plane" | "train" | "bus";
 
@@ -99,6 +99,12 @@ type Props = {
   onFixDate?: () => void;
   onSelect: (selection: TicketSelection) => void;
   onCheapestChange: (mode: TicketMode, unitPrice: number | null) => void;
+  /**
+   * Real per-day availability for this route, party and mode. The calendar above
+   * uses it to mark the days that actually have a ticket — a price, or `null`
+   * when the provider answered with nothing.
+   */
+  onAvailability?: (map: Record<string, number | null>) => void;
 };
 
 const fa = new Intl.NumberFormat("fa-IR");
@@ -144,7 +150,7 @@ const normalise = (value: string) =>
  * and the results list has its own search box (company, service, time, source),
  * sorting and a price ceiling, exactly like the accommodation list.
  */
-export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange, onFixDate }: Props) {
+export default function TicketSearch({ mode, roundTrip, active, selectedId, onSelect, onCheapestChange, onFixDate, onAvailability }: Props) {
   const { travelData, setTravelData } = useTravel();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
   const [priceTrend, setPriceTrend] = useState<PriceTrendView | null>(null);
@@ -278,16 +284,94 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [travelData.departureDate]);
 
+  /**
+   * Which of the coming days really have a ticket?
+   *
+   * Ticket windows open in waves: on the live site, trains had nothing today
+   * and nothing seven days out, but plenty two days out and again a month
+   * later. The old helper looked only seven days around the chosen date, so a
+   * traveller whose date was just past the window was told «nothing at all» when
+   * a real ticket existed ten days away. Now a month is swept — one real search
+   * per day, all in parallel — and the calendar marks the days that answered.
+   *
+   * The map is keyed by route + mode + party, so switching dates reuses what was
+   * already measured instead of asking the providers again.
+   */
+  const [availability, setAvailability] = useState<Record<string, number | null>>({});
+  const [availabilityKey, setAvailabilityKey] = useState("");
+  const availabilityPlan = useMemo(() => {
+    const days: string[] = [];
+    const today = todayIso();
+    for (let offset = 0; offset < 31; offset += 1) days.push(addDaysToIso(today, offset));
+    return days;
+  }, []);
+  const routeKey = originCity && destinationCity ? `${mode}|${originCity.code}|${destinationCity.code}|${travelData.travelers}|${travelData.children}|${travelData.infants}` : "";
+
+  useEffect(() => {
+    if (!routeKey || !availabilityPlan.length || !originCity || !destinationCity) return;
+    let cancelled = false;
+    setAvailabilityKey(routeKey);
+    setAvailability({});
+    void (async () => {
+      try {
+        /**
+         * One request, not thirty: the server measures every day with a real
+         * provider search and answers with the days that actually have tickets.
+         */
+        const query = new URLSearchParams({
+          mode,
+          origin: transportCityCode(originCity, mode),
+          destination: transportCityCode(destinationCity, mode),
+          adults: String(travelData.travelers),
+          children: String(travelData.children),
+          infants: String(travelData.infants),
+          availability: "30",
+        });
+        const response = await fetch(`/api/providers/transport/search?${query.toString()}`, {
+          signal: AbortSignal.timeout(45_000),
+        });
+        const payload = (await response.json()) as { dates?: { date: string; cheapestToman: number | null }[] };
+        if (cancelled) return;
+        const next: Record<string, number | null> = {};
+        for (const row of payload.dates || []) next[row.date] = row.cheapestToman ?? null;
+        setAvailability(next);
+      } catch {
+        // A failed sweep only means the calendar shows no markers; nothing else breaks.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey]);
+
+  /** The calendar above the list marks the same real days this search measured. */
+  useEffect(() => {
+    if (!onAvailability) return;
+    onAvailability(availability);
+  }, [availability, onAvailability]);
+
+  const availableDays = useMemo(
+    () => Object.keys(availability).filter((date) => availability[date] !== null).sort(),
+    [availability],
+  );
+
   /** Looks at the days around the chosen one and keeps the ones with tickets. */
   const findNearbyDates = useCallback(async () => {
     if (!originCity || !destinationCity || !travelData.departureDate) return;
     setNearbyLoading(true);
-    const offsets = [-7, -3, -1, 1, 3, 7, 10];
+    // ±3 weeks around the chosen date, not ±1: that is where the open windows are.
+    const offsets = [-21, -14, -10, -7, -3, -1, 1, 3, 7, 10, 14, 21];
     const base = Date.parse(`${travelData.departureDate}T00:00:00Z`);
+    const today = todayIso();
     try {
       const results = await Promise.all(
         offsets.map(async (offset) => {
           const date = new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
+          if (date < today) return null;
+          if (availabilityKey === routeKey && availability[date] !== undefined) {
+            return availability[date] === null ? null : { date, cheapest: availability[date] };
+          }
           try {
             const response = await fetch("/api/providers/transport/search", {
               method: "POST",
@@ -314,11 +398,19 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
           }
         }),
       );
-      setNearbyDates(results.filter((entry): entry is { date: string; cheapest: number } => Boolean(entry)).sort((a, b) => a.date.localeCompare(b.date)));
+      const fresh = results.filter((entry): entry is { date: string; cheapest: number } => Boolean(entry));
+      // If the chosen date is outside the sweep, the nearest open days still help.
+      const withSweep = [...fresh];
+      for (const date of availableDays) {
+        if (withSweep.length >= 8) break;
+        if (withSweep.some((entry) => entry.date === date)) continue;
+        if (availability[date] !== null) withSweep.push({ date, cheapest: availability[date] as number });
+      }
+      setNearbyDates(withSweep.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12));
     } finally {
       setNearbyLoading(false);
     }
-  }, [destinationCity, mode, originCity, travelData.children, travelData.departureDate, travelData.infants, travelData.travelers]);
+  }, [availability, availabilityKey, availableDays, destinationCity, mode, originCity, routeKey, travelData.children, travelData.departureDate, travelData.infants, travelData.travelers]);
 
   useEffect(() => {
     setNearbyDates([]);

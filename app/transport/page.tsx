@@ -124,6 +124,8 @@ function TransportPageContent() {
   const [mode, setMode] = useState<TravelMode | null>(null);
   const [editingTrip, setEditingTrip] = useState(false);
   const [roundTrip, setRoundTrip] = useState(false);
+  /** Which of the next days really have a ticket — measured by the search below. */
+  const [ticketAvailability, setTicketAvailability] = useState<Record<string, number | null>>({});
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [distanceError, setDistanceError] = useState("");
@@ -558,6 +560,7 @@ function TransportPageContent() {
                           if (!value) changeJourney("returnDate", "");
                         }}
                         onChange={(field, value) => changeJourney(field, value)}
+                        availability={mode !== "car" ? ticketAvailability : undefined}
                       />
                       <PassengerSelector
                         adults={travelData.travelers}
@@ -675,6 +678,7 @@ function TransportPageContent() {
               <TicketSearch
                 key={mode}
                 onFixDate={() => setEditingTrip(true)}
+                onAvailability={setTicketAvailability}
                 mode={mode}
                 roundTrip={roundTrip}
                 active

@@ -50,6 +50,47 @@ export type TransportSearchPayload = {
 };
 
 /** The live answer, served from the shared snapshot store when one exists. */
+/**
+ * The days around today that the providers actually have open for this route.
+ *
+ * Ticket windows open in waves — on the live site the same route had fifty
+ * flights two days out, one flight forty-five days out and nothing today — so
+ * the answer is measured, never assumed. One real search per day, run in small
+ * parallel batches; anything that fails is simply left out of the answer.
+ */
+export async function ticketAvailability(
+  input: Omit<TransportSearchInput, "date">,
+  days = 30,
+): Promise<{ dates: { date: string; cheapestToman: number | null; offers: number }[]; checked: number }> {
+  const today = new Date(Date.now() + 3.5 * 3_600_000).toISOString().slice(0, 10);
+  const dates: string[] = [];
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = new Date(`${today}T00:00:00Z`);
+    day.setUTCDate(day.getUTCDate() + offset);
+    dates.push(day.toISOString().slice(0, 10));
+  }
+  const rows: { date: string; cheapestToman: number | null; offers: number }[] = [];
+  for (let start = 0; start < dates.length; start += 8) {
+    const batch = dates.slice(start, start + 8);
+    const answers = await Promise.all(
+      batch.map(async (date) => {
+        try {
+          const { payload } = await searchTransport({ ...input, date });
+          const cheapest = payload.offers.reduce<number | null>(
+            (best, offer) => (best === null || offer.priceToman < best ? offer.priceToman : best),
+            null,
+          );
+          return { date, cheapestToman: cheapest, offers: payload.offers.length };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const answer of answers) if (answer) rows.push(answer);
+  }
+  return { dates: rows, checked: rows.length };
+}
+
 export async function searchTransport(input: TransportSearchInput): Promise<{ payload: TransportSearchPayload; source: string; savedAt?: string }> {
   // v3 throws away copies saved while the flight search was still broken.
   const base = snapshotKey("transport-v3", {
