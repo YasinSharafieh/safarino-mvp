@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const raw = await askJson({
+      // توضیح بسته‌ای که کد ساخته: انتخاب + دلیل — the task names the model chain and the token ceiling.
+      task: "suggest",
       title: "Safarino Deals",
       maxTokens: 600,
       temperature: 0.5,

@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const raw = await askJson({
+      // «از همسفر بپرس»: یک بازنویسی کوتاه — the task names the model chain and the token ceiling.
+      task: "chat",
       title: "Safarino Companion",
       maxTokens: 220,
       temperature: 0.6,

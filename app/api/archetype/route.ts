@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const raw = await askJson({
+      // کارت تیپ سفر یک پاراگراف نوشتاری است، نه یک انتخاب — the task names the model chain and the token ceiling.
+      task: "write",
       title: "Safarino Archetype",
       maxTokens: 260,
       temperature: 0.7,

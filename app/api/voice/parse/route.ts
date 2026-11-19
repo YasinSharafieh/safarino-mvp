@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const raw = await askJson({
+      // استخراج دقیق فیلدها از جملهٔ مسافر، بدون تخیل — the task names the model chain and the token ceiling.
+      task: "parse",
       title: "Safarino Voice",
       maxTokens: 260,
       temperature: 0.1,
