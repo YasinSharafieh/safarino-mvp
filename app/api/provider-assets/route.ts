@@ -12,7 +12,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "آدرس تصویر معتبر نیست." }, { status: 400 });
   }
   const allowedHost =
-    imageUrl.hostname === "cdn.alibaba.ir" && /^\/(?:static\/img|ostorage)\//.test(imageUrl.pathname) ||
+    // cdn.alibaba.ir publishes the operators' own marks: airlines under
+    // /static/img/airlines/, rail companies under /static/img/train/ and the bus
+    // cooperatives under /static/img/bus/. The bus paths are not always .png/.jpg
+    // (some are extension-less), so the extension rule below allows those three
+    // app folders explicitly.
+    (imageUrl.hostname === "cdn.alibaba.ir" && /^\/(?:static\/img|ostorage)\//.test(imageUrl.pathname)) ||
     imageUrl.hostname === "cdn.jabama.com" && imageUrl.pathname.startsWith("/image/") ||
     imageUrl.hostname === "storage.jajiga.com" && imageUrl.pathname.startsWith("/public/pictures/medium/") ||
     imageUrl.hostname === "cdn.otaghak.com" && imageUrl.pathname.startsWith("/otg-images-new/X500/") ||
@@ -25,7 +30,13 @@ export async function GET(request: NextRequest) {
     (imageUrl.hostname === "commons.wikimedia.org" && imageUrl.pathname.startsWith("/wiki/Special:FilePath/"));
   if (
     source.length > 4096 || imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password || imageUrl.port ||
-    !allowedHost || !/\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname)
+    !allowedHost ||
+    !(
+      /\.(?:png|jpe?g|webp)$/i.test(imageUrl.pathname) ||
+      // Airline / rail / bus operator marks live under fixed folders and are
+      // always images, even when the CDN serves them without an extension.
+      (imageUrl.hostname === "cdn.alibaba.ir" && /^\/static\/img\/(?:airlines|train|bus)\/[-\w./]+$/.test(imageUrl.pathname))
+    )
   ) {
     return NextResponse.json({ success: false, error: "آدرس تصویر معتبر نیست." }, { status: 400 });
   }

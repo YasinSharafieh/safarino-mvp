@@ -1,4 +1,5 @@
 import { jalaliFromGregorian } from "./jalali";
+import { cleanFacts, pickText } from "./service-facts";
 import { citySlug, type TransportOffer, type TransportSearchResult } from "./transport-types";
 import { siteReference } from "./site";
 
@@ -101,6 +102,20 @@ type Safar724Item = {
   busType?: string;
   busClassName?: string;
   duration?: string | number;
+  /** The coach's own published facilities, when the service list carries them. */
+  hasAirCondition?: boolean;
+  hasWifi?: boolean;
+  hasPower?: boolean;
+  hasVideo?: boolean;
+  hasSnack?: boolean;
+  hasBlanket?: boolean;
+  isVip?: boolean;
+  capacity?: number;
+  discount?: number;
+  companyRate?: number;
+  /** Some listings describe the coach in one free-text field. */
+  description?: string;
+  services?: string[];
 };
 
 /**
@@ -179,10 +194,41 @@ export function normalizeSafar724Items(
       childPriceToman: null,
       infantPriceToman: null,
       seatsLeft: Math.round(seats),
-      details: [
-        terminal(item.originTerminalName, item.originTerminal?.name, item.originTerminal?.persianName, item.originTerminal?.engName),
-        terminal(item.destinationTerminalName, item.destinationTerminal?.name, item.destinationTerminal?.persianName, item.destinationTerminal?.engName),
-      ].filter(Boolean),
+      ...(() => {
+        const originName = terminal(item.originTerminalName, item.originTerminal?.name, item.originTerminal?.persianName, item.originTerminal?.engName);
+        const destinationName = terminal(item.destinationTerminalName, item.destinationTerminal?.name, item.destinationTerminal?.persianName, item.destinationTerminal?.engName);
+        const busType = pickText(item as unknown as Record<string, unknown>, ["busType", "busClassName", "vehicleModel"]);
+        /**
+         * Whatever this operator published about its own coach — cooling, wifi,
+         * a socket, a film, a VIP layout, capacity, discount — kept as chips so a
+         * Safar724 row is as informative as an Alibaba one. Nothing is assumed.
+         */
+        const amenities = cleanFacts([
+          item.description ? String(item.description) : "",
+          ...(Array.isArray(item.services) ? item.services.map(String) : []),
+          item.hasAirCondition ? "سرمایش و گرمایش" : "",
+          item.hasWifi ? "وای‌فای" : "",
+          item.hasPower ? "شارژ موبایل" : "",
+          item.hasVideo ? "نمایش فیلم" : "",
+          item.hasSnack ? "پذیرایی" : "",
+          item.hasBlanket ? "پتو" : "",
+          item.isVip ? "VIP" : "",
+          Number(item.capacity) > 0 ? `ظرفیت ${Number(item.capacity)} نفر` : "",
+          Number(item.discount) > 0 ? `${Number(item.discount)}٪ تخفیف` : "",
+          Number(item.companyRate) > 0 ? `امتیاز شرکت ${Number(item.companyRate)}` : "",
+        ], { drop: [busType] });
+        return {
+          companyName: operator,
+          ...(originName ? { originStation: originName } : {}),
+          ...(destinationName ? { destinationStation: destinationName } : {}),
+          amenities,
+          details: cleanFacts([
+            originName ? `مبدأ: ${originName}` : "",
+            destinationName ? `مقصد: ${destinationName}` : "",
+            ...amenities,
+          ]),
+        };
+      })(),
       bookingUrl,
       bookingNote: "قیمت هر صندلی در فهرست عمومی سفر۷۲۴ منتشر شده و به تومان تبدیل شده است؛ ظرفیت و مبلغ نهایی را پیش از پرداخت در همان صفحه کنترل کنید.",
     }];

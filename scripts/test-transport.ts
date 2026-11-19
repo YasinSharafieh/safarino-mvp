@@ -114,6 +114,10 @@ const safarSlug = normalizeSafar724Items(
   "2026-11-18",
   "https://www.safar724.com/bus/tehran-mashhad",
 );
-assert.deepEqual(safarSlug[0].details, ["پایانهٔ جنوب (خزانه)", "پایانهٔ امام رضا"]);
+// The terminals are now also stated as origin/destination, and the details line
+// says which is which instead of leaving two bare names.
+assert.equal(safarSlug[0].originStation, "پایانهٔ جنوب (خزانه)");
+assert.equal(safarSlug[0].destinationStation, "پایانهٔ امام رضا");
+assert.deepEqual(safarSlug[0].details, ["مبدأ: پایانهٔ جنوب (خزانه)", "مقصد: پایانهٔ امام رضا"]);
 
 console.log("Transport completeness tests passed.");

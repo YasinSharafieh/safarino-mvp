@@ -7,6 +7,7 @@
  */
 
 import { readWithRefresh, snapshotKey, writeSnapshot } from "./snapshot-store";
+import { cleanFacts } from "./service-facts";
 import { searchAlibabaFlights } from "./alibaba-flights";
 import { searchAlibabaTrains, searchAlibabaBuses } from "./alibaba-ground";
 import { searchSafar724Buses } from "./safar724-bus";
@@ -154,11 +155,16 @@ function fromAlibabaFlights(rows: unknown): TransportOffer[] {
       childPriceToman: Number.isFinite(Number(row.childPriceToman)) ? Number(row.childPriceToman) : null,
       infantPriceToman: Number.isFinite(Number(row.infantPriceToman)) ? Number(row.infantPriceToman) : null,
       seatsLeft: Number.isFinite(Number(row.seatsLeft)) ? Number(row.seatsLeft) : null,
-      details: [
+      companyName: airline,
+      amenities: Array.isArray(row.amenities) ? row.amenities.map(String) : [],
+      ...(row.destinationTerminal ? { destinationStation: String(row.destinationTerminal) } : {}),
+      ...(row.terminal !== null && row.terminal !== undefined && String(row.terminal).trim() ? { originStation: `ترمینال ${String(row.terminal)}` } : {}),
+      details: cleanFacts([
+        ...(Array.isArray(row.amenities) ? row.amenities.map(String) : []),
         row.fareClass ? String(row.fareClass) : "",
         row.aircraft ? String(row.aircraft) : "",
         row.baggageKg ? `${String(row.baggageKg)} کیلوگرم بار` : "",
-      ].filter(Boolean),
+      ], { drop: [String(row.fareClass || ""), String(row.aircraft || ""), row.baggageKg ? `${String(row.baggageKg)} کیلوگرم بار` : ""] }),
       bookingUrl: "",
       bookingNote: "",
     }];
@@ -186,6 +192,10 @@ function fromAlibabaGround(rows: unknown, mode: "train" | "bus", bookingUrl: str
       childPriceToman: null,
       infantPriceToman: null,
       seatsLeft: Number.isFinite(Number(row.seatsLeft)) ? Number(row.seatsLeft) : null,
+      companyName: String(row.companyName || row.title || ""),
+      amenities: Array.isArray(row.amenities) ? row.amenities.map(String) : [],
+      ...(row.originStation ? { originStation: String(row.originStation) } : {}),
+      ...(row.destinationStation ? { destinationStation: String(row.destinationStation) } : {}),
       details: Array.isArray(row.details) ? row.details.map(String) : [],
       bookingUrl,
       bookingNote: "این بلیت در فهرست عمومی علی‌بابا است؛ با باز شدن صفحه، همان مسیر و تاریخ را ببین و شرکت و ساعت ردیف را تطبیق بده.",
@@ -329,15 +339,31 @@ function faDigits(value: string): string {
 }
 
 function readableOffer(offer: TransportOffer): TransportOffer & { title: string; subtitle: string; logoUrl: string | null } {
+  const subtitle = faDigits(offer.serviceLabel || "");
+  const amenities = cleanFacts((offer.amenities || []).map(faDigits), { drop: [subtitle] });
+  const station = (value: string | undefined, prefix: string) => (value ? `${prefix}: ${faDigits(value)}` : "");
   return {
     ...offer,
     operator: offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما"),
     title: faDigits(offer.operator || (offer.mode === "train" ? "قطار" : offer.mode === "bus" ? "اتوبوس" : "هواپیما")),
-    subtitle: faDigits(offer.serviceLabel || ""),
-    // The service line already says the wagon/class; repeating it is noise.
-    details: offer.details
-      .map((detail) => faDigits(detail).trim())
-      .filter((detail, index, all) => detail && !detail.includes(faDigits(offer.serviceLabel || "\u0000")) && all.indexOf(detail) === index),
+    subtitle,
+    companyName: offer.companyName ? faDigits(offer.companyName) : undefined,
+    ...(offer.originStation ? { originStation: faDigits(offer.originStation) } : {}),
+    ...(offer.destinationStation ? { destinationStation: faDigits(offer.destinationStation) } : {}),
+    amenities,
+    /**
+     * One readable line per ticket: where it leaves from, the provider's own
+     * facilities, and nothing that merely repeats the headline or the subtitle.
+     */
+    details: cleanFacts(
+      [
+        station(offer.originStation, "ایستگاه مبدأ"),
+        station(offer.destinationStation, "ایستگاه مقصد"),
+        ...amenities,
+        ...offer.details.map((detail) => faDigits(detail).trim()),
+      ],
+      { drop: [subtitle, faDigits(offer.operator || "")] },
+    ),
     logoUrl: offer.logoUrl || null,
   };
 }

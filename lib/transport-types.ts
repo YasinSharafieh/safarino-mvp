@@ -22,6 +22,13 @@ export type TransportOffer = {
   /** null when the public listing does not state the remaining capacity. */
   seatsLeft: number | null;
   details: string[];
+  /** The provider's own facility list, for chips on the card (never invented). */
+  amenities?: string[];
+  /** The company alone (no service number), so grouping and search stay honest. */
+  companyName?: string;
+  /** The real station/terminal the service leaves from and reaches. */
+  originStation?: string;
+  destinationStation?: string;
   /** Link to the exact service or, when the provider has no per-service page, to its dated route page. */
   bookingUrl: string;
   bookingNote: string;

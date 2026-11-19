@@ -43,6 +43,12 @@ export type LiveOffer = {
   details: string[];
   provider?: "alibaba" | "safar724";
   bookingUrl?: string;
+  /** The operator's own facts and stations, straight from the provider response. */
+  amenities?: string[];
+  companyName?: string;
+  originStation?: string;
+  destinationStation?: string;
+  bookingNote?: string;
   alsoAvailableAt?: {
     provider: "alibaba" | "safar724";
     providerLabel: string;
@@ -122,6 +128,21 @@ const MODE_COPY: Record<TicketMode, { title: string; unit: string; emoji: string
 
 type SortKey = "cheapest" | "earliest" | "latest" | "seats";
 
+/**
+ * Measured availability, remembered for the session.
+ *
+ * The sweep costs thirty real provider searches; the answer is identical for
+ * every panel of the same route, mode and party. Keeping it in a module-level
+ * map means switching between the plane, train and bus lists (or leaving the
+ * page and coming back) shows the same measured days immediately, instead of
+ * crawling again and risking a rate-limited, thinner answer.
+ */
+const AVAILABILITY_TTL_MS = 10 * 60_000;
+const AVAILABILITY_MEMORY = new Map<
+  string,
+  { at: number; map: Record<string, number | null>; counts: Record<string, number> }
+>();
+
 const SORTS: { id: SortKey; label: string }[] = [
   { id: "cheapest", label: "ارزان‌ترین" },
   { id: "earliest", label: "زودترین حرکت" },
@@ -141,6 +162,25 @@ function journeyLength(departure: string, arrival: string | null): string {
   if (!hours) return `${fa.format(rest)} دقیقه`;
   return rest ? `${fa.format(hours)} ساعت و ${fa.format(rest)} دقیقه` : `${fa.format(hours)} ساعت`;
 }
+
+/**
+ * The chips under a ticket.
+ *
+ * A row used to print every fact as one long sentence, so «کوپهٔ ۴ نفره» and
+ * «غذای رایگان» and «۱۴٪ تخفیف» became a paragraph nobody reads. The chips are
+ * grouped by what they are about — the service, the comfort, the money — and
+ * each keeps the provider's own words. Nothing is added: an empty group simply
+ * does not render.
+ */
+const FACT_TONES: { test: RegExp; tone: string }[] = [
+  { test: /تخفیف|٪/, tone: "border-rose-400/30 bg-rose-400/10 text-rose-100" },
+  { test: /استرداد|کنسل/, tone: "border-amber-400/25 bg-amber-400/10 text-amber-100" },
+  { test: /کوپه|صندلی|کلاس|درجه|ستاره|VIP|تخت/, tone: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100" },
+  { test: /غذا|پذیرایی/, tone: "border-emerald-400/25 bg-emerald-400/10 text-emerald-100" },
+  { test: /ایستگاه|ترمینال|پایانه|استان/, tone: "border-white/15 bg-white/[0.06] text-slate-200" },
+];
+
+const factTone = (fact: string) => FACT_TONES.find((entry) => entry.test.test(fact))?.tone || "border-white/10 bg-white/[0.04] text-slate-300";
 
 const normalise = (value: string) =>
   value.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ");
@@ -300,6 +340,14 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
    * already measured instead of asking the providers again.
    */
   const [availability, setAvailability] = useState<Record<string, number | null>>({});
+  /** How many real departures the sweep found on each measured day. */
+  const [availabilityOffers, setAvailabilityOffers] = useState<Record<string, number>>({});
+  /**
+   * What this panel has already swept. The component's state is not enough: two
+   * panels of the same mode share a route key, and a remount would start the
+   * whole thirty-day sweep again. One measurement per route+mode+party is kept
+   * here and shown instantly the next time.
+   */
   const [availabilityKey, setAvailabilityKey] = useState("");
   const availabilityPlan = useMemo(() => {
     const days: string[] = [];
@@ -310,10 +358,27 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   const routeKey = originCity && destinationCity ? `${mode}|${originCity.code}|${destinationCity.code}|${travelData.travelers}|${travelData.children}|${travelData.infants}` : "";
 
   useEffect(() => {
+    /**
+     * Only the mode the traveller is actually looking at sweeps the providers.
+     * Every mode panel stays mounted, so without this guard a single visit asked
+     * علی‌بابا for thirty days × three modes — ninety real searches — and the
+     * mode on screen was the one most likely to come back rate-limited and thin.
+     * One panel, one sweep: the results a traveller sees are the rich ones.
+     */
+    if (!active) return;
     if (!routeKey || !availabilityPlan.length || !originCity || !destinationCity) return;
     let cancelled = false;
+    const sweepId = `${routeKey}|${mode}`;
+    const remembered = AVAILABILITY_MEMORY.get(sweepId);
+    if (remembered && Date.now() - remembered.at < AVAILABILITY_TTL_MS) {
+      setAvailability(remembered.map);
+      setAvailabilityOffers(remembered.counts);
+      setAvailabilityKey(routeKey);
+      return;
+    }
     setAvailabilityKey(routeKey);
     setAvailability({});
+    setAvailabilityOffers({});
     void (async () => {
       try {
         /**
@@ -332,11 +397,19 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
         const response = await fetch(`/api/providers/transport/search?${query.toString()}`, {
           signal: AbortSignal.timeout(45_000),
         });
-        const payload = (await response.json()) as { dates?: { date: string; cheapestToman: number | null }[] };
+        const payload = (await response.json()) as { dates?: { date: string; cheapestToman: number | null; offers?: number }[] };
         if (cancelled) return;
         const next: Record<string, number | null> = {};
-        for (const row of payload.dates || []) next[row.date] = row.cheapestToman ?? null;
+        const counts: Record<string, number> = {};
+        for (const row of payload.dates || []) {
+          next[row.date] = row.cheapestToman ?? null;
+          counts[row.date] = Number(row.offers) || 0;
+        }
         setAvailability(next);
+        setAvailabilityOffers(counts);
+        if (Object.keys(next).length) {
+          AVAILABILITY_MEMORY.set(sweepId, { at: Date.now(), map: next, counts });
+        }
       } catch {
         // A failed sweep only means the calendar shows no markers; nothing else breaks.
       }
@@ -345,7 +418,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeKey]);
+  }, [routeKey, active]);
 
   /** The calendar above the list marks the same real days this search measured. */
   useEffect(() => {
@@ -460,6 +533,47 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
     });
     return sorted;
   }, [legOffers, maxPrice, needle, sort]);
+
+  /**
+   * Who is actually operating the tickets in this list — one real mark per
+   * company, with how many departures it has. On a full train day this is the
+   * fastest way to see «رجا، فدک، نورالرضا…» at a glance, and tapping one asks
+   * the same search box to narrow to that operator.
+   */
+  /**
+   * The measured ticket board.
+   *
+   * The 30-day sweep behind the calendar already runs one real provider search
+   * per day, so we know exactly which days have a ticket and what the cheapest
+   * one costs. That knowledge used to be spent on calendar dots only; here it
+   * becomes a row of real days a traveller can jump straight into.
+   */
+  const boardDays = useMemo(() => {
+    const today = todayIso();
+    return Object.entries(availability)
+      .filter(([date, cheapest]) => cheapest !== null && date >= today)
+      .map(([date, cheapest]) => ({ date, cheapest: cheapest as number }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 14)
+      .map((day) => ({ ...day, offers: availabilityOffers[day.date] || 0 }));
+  }, [availability, availabilityOffers]);
+
+  const operators = useMemo(() => {
+    const seen = new Map<string, { name: string; logoUrl: string | null; count: number; cheapest: number }>();
+    for (const offer of legOffers) {
+      const name = (offer.companyName || offer.title || "").trim();
+      if (!name) continue;
+      const key = normalise(name);
+      const current = seen.get(key);
+      if (current) {
+        current.count += 1;
+        current.cheapest = Math.min(current.cheapest, offer.priceToman);
+      } else {
+        seen.set(key, { name, logoUrl: offer.logoUrl || null, count: 1, cheapest: offer.priceToman });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => b.count - a.count || a.cheapest - b.cheapest);
+  }, [legOffers]);
 
   // The money side of the list: what is left for tickets once the rest of the
   // trip has a realistic share.
@@ -585,6 +699,87 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
           >
             برگشت · {fa.format(returnOffers.length)}
           </button>
+        </div>
+      ) : null}
+
+      {boardDays.length ? (
+        <div className="border-b border-white/10 bg-white/[0.015] px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[9.5px] font-bold text-slate-400">
+              <CalendarDays className="h-3 w-3 text-cyan-300" />
+              {mode === "train" ? "روزهایی که واقعاً قطار دارد" : mode === "plane" ? "روزهایی که واقعاً پرواز دارد" : "روزهایی که واقعاً اتوبوس دارد"}
+              <span className="text-slate-500">— هر روز با یک جست‌وجوی واقعی اندازه‌گیری شده</span>
+            </span>
+            <span className="text-[9px] text-slate-500">
+              {fa.format(boardDays.length)} روز از {fa.format(Object.keys(availability).length)} روز بررسی‌شده
+            </span>
+          </div>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+            {boardDays.map((day) => {
+              const active = day.date === travelData.departureDate;
+              return (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => void searchForDate(day.date)}
+                  aria-pressed={active}
+                  className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-right transition ${
+                    active ? "border-cyan-300/60 bg-cyan-300/15" : "border-white/10 bg-white/[0.04] hover:border-cyan-300/30"
+                  }`}
+                >
+                  <span className={`block text-[9px] font-bold ${active ? "text-cyan-100" : "text-slate-300"}`}>
+                    {formatJalaliDate(day.date)}
+                  </span>
+                  <span className="block text-[9px] font-black text-turquoise-200">{money(day.cheapest)}</span>
+                  <span className="block text-[8px] text-slate-500">{fa.format(day.offers)} بلیت</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {operators.length > 1 ? (
+        <div className="border-b border-white/10 bg-white/[0.02] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[9.5px] font-bold text-slate-400">
+              {mode === "plane" ? "شرکت‌های هواپیمایی این فهرست" : mode === "train" ? "شرکت‌های ریلی این فهرست" : "شرکت‌های اتوبوسرانی این فهرست"}
+            </span>
+            {operators.map((operator) => (
+              <button
+                key={operator.name}
+                type="button"
+                onClick={() => setQuery(operator.name)}
+                title={`${operator.name} — ${fa.format(operator.count)} سرویس، از ${money(operator.cheapest)}`}
+                className={`flex items-center gap-1.5 rounded-full border px-1.5 py-1 text-[9px] font-bold transition ${
+                  normalise(query.trim()) === normalise(operator.name)
+                    ? "border-cyan-300/50 bg-cyan-300/12 text-cyan-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-300/30 hover:text-white"
+                }`}
+              >
+                <span className="grid h-6 w-6 place-items-center overflow-hidden rounded-full bg-white p-0.5">
+                  {operator.logoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={/^https:\/\/cdn\.alibaba\.ir\/static\/img\/(?:airlines|train|bus)\//.test(operator.logoUrl)
+                        ? operator.logoUrl.replace(/^https:\/\/cdn\.alibaba\.ir\/static\/img\/airlines\/[^/]+\//, "/airlines/").replace(/^https:\/\/cdn\.alibaba\.ir\/static\/img\/train\//, "/rail/").replace(/^https:\/\/cdn\.alibaba\.ir\/static\/img\/bus\//, "/bus/")
+                        : `/api/provider-assets?src=${encodeURIComponent(operator.logoUrl)}`}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-contain"
+                      onError={(event) => {
+                        (event.currentTarget as HTMLImageElement).style.visibility = "hidden";
+                      }}
+                    />
+                  ) : (
+                    <copy.Icon className="h-3 w-3 text-slate-600" />
+                  )}
+                </span>
+                {operator.name}
+                <span className="text-[8.5px] text-slate-500">{fa.format(operator.count)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -758,6 +953,33 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
         {visible.map((offer, index) => {
           const isSelected = selectedId === offer.id;
           const total = totalFor(offer);
+          /**
+           * Everything the provider published about this row, in one list: the
+           * station it leaves from, the operator's own facilities, then any
+           * remaining detail. The subtitle is already on screen, so it is not
+           * repeated here.
+           */
+          const facts = Array.from(
+            new Set(
+              [
+                offer.originStation ? `از ${offer.originStation}` : "",
+                ...(offer.amenities?.length ? offer.amenities : []),
+                ...(offer.details || []),
+              ]
+                .map((fact) => (fact || "").trim())
+                .filter((fact) => fact && !(offer.subtitle || "").includes(fact) && !offer.title.includes(fact)),
+            ),
+          );
+          /** The live response states how many seats are left; a low number is a real warning. */
+          const fewSeats = typeof offer.seatsLeft === "number" && offer.seatsLeft > 0 && offer.seatsLeft <= 8;
+          /** An overnight service arrives the next day — say it, do not make the traveller subtract dates. */
+          const arrivalDay = (() => {
+            if (!offer.arrival) return "";
+            const days = Math.round(
+              (Date.parse(`${offer.arrival.slice(0, 10)}T00:00:00Z`) - Date.parse(`${offer.departure.slice(0, 10)}T00:00:00Z`)) / 86_400_000,
+            );
+            return days > 0 ? `${fa.format(days)} روز بعد` : "";
+          })();
           return (
             <div key={offer.id} className="flex flex-col gap-3 p-4 transition-colors hover:bg-white/[0.02] lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
@@ -770,10 +992,17 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                     {offer.provider ? <ProviderTag provider={offer.provider} label={PROVIDER_LABELS[offer.provider]} /> : null}
                   </div>
                   {offer.subtitle ? <span className="mt-0.5 block text-[10px] text-slate-400">{offer.subtitle}</span> : null}
-                  {offer.details?.length ? (
-                    <span className="mt-0.5 block text-[9.5px] leading-5 text-slate-500">
-                      {offer.details.filter((detail) => detail && !offer.subtitle?.includes(detail)).join(" · ")}
-                    </span>
+                  {facts.length ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {facts.map((fact) => (
+                        <span
+                          key={fact}
+                          className={`rounded-full border px-2 py-0.5 text-[9px] font-bold leading-4 ${factTone(fact)}`}
+                        >
+                          {fact}
+                        </span>
+                      ))}
+                    </div>
                   ) : null}
                   {offer.alsoAvailableAt?.length ? <AlsoAvailable items={offer.alsoAvailableAt} money={money} /> : null}
                 </div>
@@ -783,7 +1012,12 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                 <div className="text-left">
                   <span className="block text-[9px] text-slate-500">حرکت</span>
                   <b className="block text-[11.5px] leading-6 text-white">{formatProviderDateTime(offer.departure)}</b>
-                  {offer.arrival ? <span className="block text-[9px] text-slate-500">رسیدن: {formatProviderDateTime(offer.arrival)}</span> : null}
+                  {offer.arrival ? (
+                    <span className="block text-[9px] text-slate-500">
+                      رسیدن: {formatProviderDateTime(offer.arrival)}
+                      {arrivalDay ? <span className="text-amber-300/90"> · {arrivalDay}</span> : null}
+                    </span>
+                  ) : null}
                   {journeyLength(offer.departure, offer.arrival) ? (
                     <span className="mt-0.5 block text-[9px] font-bold text-cyan-300/80">مدت سفر: {journeyLength(offer.departure, offer.arrival)}</span>
                   ) : null}
@@ -794,8 +1028,10 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                   {total !== null && (travelData.travelers + travelData.children + travelData.infants) > 1 ? (
                     <span className="block text-[9px] text-slate-400">کل گروه: {money(total)}</span>
                   ) : null}
-                  <span className="block text-[9px] text-slate-500">
-                    {typeof offer.seatsLeft === "number" && offer.seatsLeft > 0 ? `${fa.format(offer.seatsLeft)} صندلی` : "ظرفیت اعلام نشده"}
+                  <span className={`block text-[9px] ${fewSeats ? "font-bold text-amber-300" : "text-slate-500"}`}>
+                    {typeof offer.seatsLeft === "number" && offer.seatsLeft > 0
+                      ? `${fa.format(offer.seatsLeft)} صندلی${fewSeats ? " — در حال پر شدن" : " خالی"}`
+                      : "ظرفیت اعلام نشده"}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -821,6 +1057,14 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
                       خرید از {PROVIDER_LABELS[offer.provider || "alibaba"]}
                       <ExternalLink className="h-3 w-3" />
                     </a>
+                  ) : null}
+                  {offer.companyName ? (
+                    <span className="text-center text-[8.5px] leading-4 text-slate-500">
+                      اپراتور: {offer.companyName}
+                      {offer.originStation && offer.destinationStation
+                        ? ` · ${offer.originStation} ← ${offer.destinationStation}`
+                        : ""}
+                    </span>
                   ) : null}
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { alibabaJalaliDate, alibabaRequest } from "./alibaba-flights";
 import type { FlightSearchInput } from "./alibaba-flights";
 import { resolveIranianCity } from "./iran-cities";
 import { alibabaCdnUrl, alibabaTrainLogo } from "./alibaba-assets";
+import { cleanFacts, flagOn, flagStated, pickFlag, pickText } from "./service-facts";
 
 export type GroundOffer = {
   id: string;
@@ -13,6 +14,13 @@ export type GroundOffer = {
   priceToman: number;
   seatsLeft: number;
   details: string[];
+  /** The provider's own facility list, so a card can show chips, not one run-on line. */
+  amenities?: string[];
+  /** Station/terminal the service really leaves from and reaches. */
+  originStation?: string;
+  destinationStation?: string;
+  /** The company alone, without the service number, for grouping and search. */
+  companyName?: string;
 };
 
 function text(value: unknown): string {
@@ -58,43 +66,84 @@ async function poll(path: string): Promise<Record<string, unknown>> {
   return result;
 }
 
-function normalizeTrains(rows: unknown): GroundOffer[] {
+/**
+ * Everything علی‌بابا publishes about one train, in the traveller's language.
+ *
+ * The live payload carries far more than «company + number + price»: compartment
+ * size and class, air conditioning, entertainment, free food, a wifi network
+ * name, whether the seats are flat, the platform change option, the refund rule,
+ * the province the service starts in, discounts. The old normaliser kept four of
+ * those and dropped the rest, which is why a rich train list looked thin. Every
+ * fact below is read from the provider's own response and nothing else — a
+ * missing field means the chip is simply not shown.
+ */
+function trainFacts(train: Record<string, unknown>, company: string, wagon: string): string[] {
+  const capacity = Number(train.compartmentCapacity ?? train.coupCapacity ?? train.cabinCapacity);
+  const wagonClass = pickText(train, ["wagonClass", "wagonClassTitle", "classTitle", "classTypeName", "cabinClass"]);
+  const seatType = pickText(train, ["seatTypeTitle", "seatTypeName", "cabinTypeTitle", "wagonTypeTitle"]);
+  const province = pickText(train, ["originProvince", "provinceName", "province"]);
+  const wifi = pickText(train, ["wifiName", "wifiSSID", "wifiSsid", "wifi"]);
+  const maxDiscount = Number(train.maxDiscount ?? train.discountPercent ?? train.specialOfferPercent);
+  const offers = Array.isArray(train.specialOfferTexts) ? train.specialOfferTexts.map((line) => String(line)).join(" ") : "";
+
+  return cleanFacts([
+    flagOn(train.isCompartment ?? train.isCoup) && Number.isFinite(capacity) && capacity > 0 ? `کوپهٔ ${capacity} نفره` : "",
+    wagon,
+    // A bare code such as "S" tells the traveller nothing — kept only when readable.
+    wagonClass.length > 2 ? wagonClass : "",
+    seatType,
+    flagOn(train.hasAirCondition ?? train.hasAircondition ?? train.airCondition) ? "سرمایش و گرمایش" : "",
+    flagOn(train.hasMedia ?? train.hasMediaEntertainment) ? "نمایشگر و سرگرمی" : "",
+    flagOn(train.hasWifi ?? train.wifiAvailable) ? (wifi ? `وای‌فای «${wifi}»` : "وای‌فای") : "",
+    flagOn(train.hasFreeFood) ? "غذای رایگان" : flagOn(train.hasFoodOffer ?? train.foodSell) ? "امکان خرید غذا" : "",
+    flagOn(train.hasPowerOutlet ?? train.hasPower) ? "پریز برق" : "",
+    flagOn(train.hasToilet ?? train.hasRestroom) ? "سرویس بهداشتی" : "",
+    flagOn(train.isFlat ?? train.isFlatSeat ?? train.hasBed) ? "صندلی تخت‌شو" : "",
+    flagOn(train.isCharter) ? "چارتری" : "",
+    flagOn(train.changePlatform ?? train.canChangePlatform) ? "امکان تغییر سکو" : "",
+    flagStated(train.nonRefundable) ? (flagOn(train.nonRefundable) ? "غیرقابل استرداد" : "قابل استرداد") : "",
+    flagOn(train.isFullyRefundable ?? train.refundable) && !flagStated(train.nonRefundable) ? "قابل استرداد" : "",
+    Number.isFinite(maxDiscount) && maxDiscount > 0 ? `${maxDiscount}٪ تخفیف` : "",
+    // Provider-written discount copy is kept as-is only when it adds a number or
+    // a name we did not already state above.
+    offers && !/%/.test(offers) ? offers : "",
+    province ? `مبدأ در استان ${province}` : "",
+    company && wagon ? "" : "",
+  ]);
+}
+
+export function normalizeTrains(rows: unknown): GroundOffer[] {
   return (Array.isArray(rows) ? rows : []).flatMap((value, index): GroundOffer[] => {
     if (!value || typeof value !== "object") return [];
     const train = value as Record<string, unknown>;
-    const priceToman = toman(train.cost);
-    const seatsLeft = Number(train.seat);
-    const departure = text(train.departureDateTime);
-    if (priceToman === null || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
-    const company = text(train.companyName) || "قطار";
-    const trainNumber = text(train.trainNumber);
+    const priceToman = toman(train.cost ?? train.price ?? train.priceAdult);
+    const seatsLeft = Number(train.seat ?? train.remainingSeat ?? train.availableSeat);
+    const departure = text(train.departureDateTime ?? train.departure);
+    if (priceToman === null || priceToman <= 0 || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
+    const company = text(train.companyName ?? train.company) || "قطار";
+    const trainNumber = text(train.trainNumber ?? train.number);
+    const wagon = pickText(train, ["wagonName", "wagonType", "coupName", "cabinName"]);
+    const originStation = pickText(train, ["originStationName", "orginStationName", "originStation", "orginStation", "departureStation"]);
+    const destinationStation = pickText(train, ["destinationStationName", "destinationStation", "arrivalStation"]);
     return [{
       id: text(train.proposalId) || `${company}-${trainNumber}-${departure}-${index}`,
-      logoUrl: alibabaTrainLogo(train.logoSuffix),
+      logoUrl: alibabaTrainLogo(train.logoSuffix ?? train.companyLogo ?? train.logo),
       title: trainNumber ? `${company} · قطار ${trainNumber}` : company,
-      subtitle: text(train.wagonName) || "گزارش‌دهنده علی‌بابا",
+      subtitle: wagon || "گزارش‌دهنده علی‌بابا",
       departure,
-      arrival: text(train.arrivalDateTime) || null,
+      arrival: text(train.arrivalDateTime ?? train.arrival) || null,
       priceToman,
       seatsLeft: Math.round(seatsLeft),
-      /**
-       * Everything the provider actually published about this train, in the
-       * traveller's language: compartment size, class, air conditioning, media,
-       * food, discounts and the refund rule. Nothing is added that the API
-       * did not send.
-       */
-      details: [
-        train.isCompartment === true && Number(train.compartmentCapacity) > 0 ? `کوپهٔ ${Number(train.compartmentCapacity)} نفره` : "",
-        text(train.wagonName),
-        // A bare code such as "S" tells the traveller nothing — kept only when readable.
-        text(train.wagonClass).length > 2 ? text(train.wagonClass) : "",
-        train.hasAirCondition === true ? "سرمایش و گرمایش" : "",
-        train.hasMedia === true ? "نمایشگر و سرگرمی" : "",
-        train.hasFreeFood === true ? "غذای رایگان" : train.hasFoodOffer === true ? "امکان خرید غذا" : "",
-        ...(Array.isArray(train.specialOfferTexts) ? train.specialOfferTexts.map((line) => text(line)) : []),
-        train.isCharter === true ? "چارتری" : "",
-        train.nonRefundable === true ? "غیرقابل استرداد" : "قابل استرداد",
-      ].filter(Boolean),
+      companyName: company,
+      ...(originStation ? { originStation } : {}),
+      ...(destinationStation ? { destinationStation } : {}),
+      amenities: trainFacts(train, company, wagon),
+      /** Kept for every existing consumer: the same facts as one ordered list. */
+      details: cleanFacts([
+        originStation ? `ایستگاه مبدأ: ${originStation}` : "",
+        destinationStation ? `ایستگاه مقصد: ${destinationStation}` : "",
+        ...trainFacts(train, company, wagon),
+      ]),
     }];
   }).sort((a, b) => a.priceToman - b.priceToman);
 }
@@ -169,25 +218,55 @@ async function searchBusOffers(input: FlightSearchInput): Promise<GroundOffer[]>
   const offers = rows.flatMap((value, index): GroundOffer[] => {
     if (!value || typeof value !== "object") return [];
     const bus = value as Record<string, unknown>;
-    const priceToman = toman(bus.price);
-    const seatsLeft = Number(bus.availableSeats);
-    const departure = text(bus.departureDateTime);
-    if (priceToman === null || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
+    const priceToman = toman(bus.price ?? bus.priceToman ?? bus.cost);
+    const seatsLeft = Number(bus.availableSeats ?? bus.seat ?? bus.remainingSeats);
+    const departure = text(bus.departureDateTime ?? bus.departure);
+    if (priceToman === null || priceToman <= 0 || !Number.isFinite(seatsLeft) || seatsLeft <= 0 || !departure) return [];
+    const company = text(bus.companyName ?? bus.company) || "اتوبوس";
+    const busType = text(bus.busType ?? bus.vehicleType ?? bus.busClassName) || "اتوبوس بین‌شهری";
+    const originTerminal = pickText(bus, ["orginTerminal", "originTerminal", "orginTerminalName", "originTerminalName"]);
+    const destinationTerminal = pickText(bus, ["destinationTerminal", "destinationTerminalName"]);
+    const companyRate = Number(bus.companyRate ?? bus.rate ?? bus.score);
+    const discount = Number(bus.discount ?? bus.discountPercent);
+    /**
+     * What the operator itself publishes about the coach: seat class, cooling,
+     * wifi, a socket, the movie, blankets, whether the seats recline. The public
+     * bus list used to be reduced to two terminal names, which made every row
+     * look identical; these are the operator's own claims, nothing added.
+     */
+    const amenities = cleanFacts([
+      busType,
+      flagOn(bus.hasAirCondition ?? bus.hasAircondition ?? bus.airCondition) ? "سرمایش و گرمایش" : "",
+      flagOn(bus.hasWifi ?? bus.wifiAvailable) ? "وای‌فای" : "",
+      flagOn(bus.hasPowerOutlet ?? bus.hasPower ?? bus.hasCharger) ? "شارژ موبایل" : "",
+      flagOn(bus.hasMedia ?? bus.hasVideo ?? bus.hasMovie) ? "نمایش فیلم" : "",
+      flagOn(bus.hasFood ?? bus.hasSnack) ? "پذیرایی" : "",
+      flagOn(bus.hasBlanket) ? "پتو" : "",
+      flagOn(bus.isRecliner ?? bus.recliningSeats) ? "صندلی تخت‌شو" : "",
+      flagOn(bus.isVip) ? "VIP" : "",
+      Number.isFinite(discount) && discount > 0 ? `${discount}٪ تخفیف` : "",
+      Number.isFinite(companyRate) && companyRate > 0 ? `امتیاز شرکت ${companyRate}` : "",
+    ]);
     return [{
       // The provider id is an unreadable token; a short stable key is enough —
       // the purchase link is the dated route page, not this id.
       id: `alibaba-bus-${originCode}-${destinationCode}-${departure}-${index}`,
-      logoUrl: alibabaCdnUrl(bus.logoPath),
-      title: text(bus.companyName) || "اتوبوس",
-      subtitle: text(bus.busType) || "اتوبوس بین‌شهری",
+      logoUrl: alibabaCdnUrl(bus.logoPath ?? bus.logo ?? bus.companyLogo),
+      title: company,
+      subtitle: busType,
       departure,
-      arrival: null,
+      arrival: text(bus.arrivalDateTime ?? bus.arrival) || null,
       priceToman,
       seatsLeft: Math.round(seatsLeft),
-      details: [
-        text(bus.orginTerminal) ? `مبدأ: ${text(bus.orginTerminal)}` : "",
-        text(bus.destinationTerminal) ? `مقصد: ${text(bus.destinationTerminal)}` : "",
-      ].filter(Boolean),
+      companyName: company,
+      ...(originTerminal ? { originStation: originTerminal } : {}),
+      ...(destinationTerminal ? { destinationStation: destinationTerminal } : {}),
+      amenities,
+      details: cleanFacts([
+        originTerminal ? `مبدأ: ${originTerminal}` : "",
+        destinationTerminal ? `مقصد: ${destinationTerminal}` : "",
+        ...amenities,
+      ]),
     }];
   });
 

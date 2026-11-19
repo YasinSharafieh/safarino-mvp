@@ -1,4 +1,5 @@
 import { alibabaCdnUrl } from "./alibaba-assets";
+import { cleanFacts, flagOn, pickText } from "./service-facts";
 import { resolveIranianCity, transportCityCode } from "./iran-cities";
 import { siteReference } from "./site";
 
@@ -34,6 +35,11 @@ export type FlightOffer = {
   refundable: boolean | null;
   charter: boolean;
   terminal: string | number | null;
+  /** Everything else the airline/agent published, ready for chips. */
+  amenities?: string[];
+  destinationTerminal?: string | null;
+  cabinClass?: string | null;
+  baggageAllowance?: string | null;
 };
 
 function cleanText(value: unknown, fallback = ""): string {
@@ -125,22 +131,62 @@ export async function alibabaRequest(path: string, init?: { body?: unknown }): P
   throw new Error("ALIBABA_REQUEST_FAILED");
 }
 
-function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
+/**
+ * Every published fact about one flight.
+ *
+ * A domestic fare is not just a price and a time: the cabin the seat is in, how
+ * much luggage it includes, whether the ticket can be refunded, the aircraft,
+ * the terminal, the number of stops and the agency selling it all travel in the
+ * same response. They were dropped on the way to the screen, so the flight list
+ * read «شرکت + ساعت + قیمت» and nothing else. This keeps them, in Persian, and
+ * only when the provider actually sent them.
+ */
+function flightFacts(flight: Record<string, unknown>): string[] {
+  const baggage = Number(flight.maxAllowedBaggage ?? flight.baggage ?? flight.freeBaggage);
+  const cabinBaggage = Number(flight.maxAllowedCabinBaggage ?? flight.cabinBaggage ?? flight.handBaggage);
+  const cabin = pickText(flight, ["classTypeName", "cabinTypeName", "cabinClass", "classType"]);
+  const aircraft = pickText(flight, ["aircraft", "aircraftName", "airplane", "planeType"]);
+  const fareName = pickText(flight, ["fareName", "fareType", "fareTitle", "tariffName"]);
+  const vendor = pickText(flight, ["vendorName", "sellerName", "agencyName", "agentName"]);
+  const stopCount = Number(flight.stopCount ?? flight.stops ?? flight.transitCount);
+  const terminal = pickText(flight, ["terminal", "originTerminal"]);
+  const flightTime = Number(flight.flightTime ?? flight.duration);
+  const seatsLeft = Number(flight.seat ?? flight.remainingSeat);
+
+  return cleanFacts([
+    cabin && cabin.length > 1 ? cabin : "",
+    fareName,
+    aircraft,
+    Number.isFinite(baggage) && baggage > 0 ? `${baggage} کیلوگرم بار` : "",
+    Number.isFinite(cabinBaggage) && cabinBaggage > 0 ? `${cabinBaggage} کیلوگرم بار دستی` : "",
+    typeof flight.isRefundable === "boolean" ? (flight.isRefundable ? "قابل استرداد" : "غیرقابل استرداد") : "",
+    flagOn(flight.isCharter) ? "چارتری" : "",
+    Number.isFinite(stopCount) && stopCount > 0 ? `${stopCount} توقف` : flagOn(flight.isDirect ?? flight.direct) ? "پرواز مستقیم" : "",
+    terminal ? `ترمینال ${terminal}` : "",
+    Number.isFinite(flightTime) && flightTime > 0 ? `${flightTime} دقیقه پرواز` : "",
+    Number.isFinite(seatsLeft) && seatsLeft > 0 && seatsLeft <= 9 ? `تنها ${seatsLeft} صندلی` : "",
+    // An agency name is only interesting when it is not the airline itself.
+    vendor && vendor !== pickText(flight, ["airlineName"]) ? `فروشنده: ${vendor}` : "",
+  ]);
+}
+
+export function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
   if (!raw || typeof raw !== "object") return null;
   const flight = raw as Record<string, unknown>;
-  const priceToman = toman(flight.priceAdult);
-  const seatsLeft = Number(flight.seat);
-  const departure = cleanText(flight.leaveDateTime);
-  const arrival = cleanText(flight.arrivalDateTime);
-  if (priceToman === null || !Number.isFinite(seatsLeft) || !departure || !arrival) return null;
+  const priceToman = toman(flight.priceAdult ?? flight.price ?? flight.adultPrice);
+  const seatsLeft = Number(flight.seat ?? flight.remainingSeat ?? flight.availableSeat);
+  const departure = cleanText(flight.leaveDateTime ?? flight.departureDateTime ?? flight.departure);
+  const arrival = cleanText(flight.arrivalDateTime ?? flight.arrival);
+  if (priceToman === null || priceToman <= 0 || !Number.isFinite(seatsLeft) || !departure || !arrival) return null;
 
   const airlineCode = cleanText(flight.airlineCode);
   const flightNumber = cleanText(flight.flightNumber);
+  const baggage = Number(flight.maxAllowedBaggage ?? flight.baggage ?? flight.freeBaggage);
   return {
     id: cleanText(flight.flightId, `${airlineCode}${flightNumber}-${departure}-${index}`),
     proposalId: cleanText(flight.proposalId),
-    logoUrl: alibabaCdnUrl(flight.airlineLogo),
-    airline: cleanText(flight.airlineName, airlineCode),
+    logoUrl: alibabaCdnUrl(flight.airlineLogo ?? flight.airlineLogoPath ?? flight.logo),
+    airline: cleanText(flight.airlineName ?? flight.airline, airlineCode),
     airlineCode,
     flightNumber: `${airlineCode}${flightNumber}`,
     departure,
@@ -151,10 +197,14 @@ function normalizeFlight(raw: unknown, index: number): FlightOffer | null {
     childPriceToman: toman(flight.priceChild),
     infantPriceToman: toman(flight.priceInfant),
     seatsLeft: Math.max(0, Math.round(seatsLeft)),
-    baggageKg: Number.isFinite(Number(flight.maxAllowedBaggage)) ? Number(flight.maxAllowedBaggage) : null,
+    baggageKg: Number.isFinite(baggage) ? baggage : null,
     refundable: typeof flight.isRefundable === "boolean" ? flight.isRefundable : null,
     charter: flight.isCharter === true,
     terminal: typeof flight.terminal === "string" || typeof flight.terminal === "number" ? flight.terminal : null,
+    amenities: flightFacts(flight),
+    destinationTerminal: cleanText(flight.destinationTerminal) || null,
+    cabinClass: cleanText(flight.classTypeName) || null,
+    baggageAllowance: Number.isFinite(baggage) && baggage > 0 ? `${baggage} کیلوگرم` : null,
   };
 }
 
