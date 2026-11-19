@@ -93,8 +93,13 @@ export async function ticketAvailability(
 }
 
 export async function searchTransport(input: TransportSearchInput): Promise<{ payload: TransportSearchPayload; source: string; savedAt?: string }> {
-  // v3 throws away copies saved while the flight search was still broken.
-  const base = snapshotKey("transport-v3", {
+  /**
+   * v4 throws away every copy saved before the ticket lists learned to carry the
+   * operator's own facts. A snapshot is a payload, not a query: without this the
+   * twelve-hour copy of an old-shape answer would keep the enrichment invisible
+   * for hours after the deploy, on exactly the routes people look at most.
+   */
+  const base = snapshotKey("transport-v4", {
     mode: input.mode,
     origin: input.origin,
     destination: input.destination,
