@@ -99,6 +99,8 @@ assert.match(ticketSearch, /listMode\.current !== mode/, "بلیت یک وسیل
 const accommodationPage = readFileSync(new URL("../app/accommodation/page.tsx", import.meta.url), "utf8");
 assert.match(accommodationPage, /autoAppliedStay/, "پیشنهاد اقامتگاه باید یک بار و واقعاً انتخاب شود");
 assert.match(accommodationPage, /sameRoom/, "اتاقِ بسته باید با نامش به انتخاب واقعی تبدیل شود");
+assert.match(accommodationPage, /setSelectionMissing\(true\)/, "اتاقی که در این جست‌وجو نیامد پاک نشود، فقط گفته شود");
+assert.match(accommodationPage, /if \(selectedId\) return;/, "انتخاب خود مسافر هرگز با پیشنهاد خودکار عوض نشود");
 
 const transportPage = readFileSync(new URL("../app/transport/page.tsx", import.meta.url), "utf8");
 assert.match(transportPage, /providerStatuses/, "شمارش بلیت باید وضعیت منابع را هم بخواند");

@@ -187,6 +187,8 @@ export default function AccommodationPage() {
   const [budgetOnly, setBudgetOnly] = useState(false);
   /** What the automatic second search did, in plain words (or nothing). */
   const [fallbackNote, setFallbackNote] = useState("");
+  /** The chosen room was not among the rows this particular search returned. */
+  const [selectionMissing, setSelectionMissing] = useState(false);
   const fallbackTried = useRef(false);
 
   const accommodation = travelData.accommodation;
@@ -395,6 +397,7 @@ export default function AccommodationPage() {
   }, [isHydrated, city, checkIn, checkOut, kind, nights, choice, travelData.travelers, travelData.children, travelData.infants]);
 
   function clearSelection() {
+    setSelectionMissing(false);
     setTravelData((current) => ({ ...current, accommodation: null }));
     try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* In-memory state remains usable. */ }
   }
@@ -461,6 +464,7 @@ export default function AccommodationPage() {
 
   function selectOffer(offer: AccommodationOffer, selectionFetchedAt = fetchedAt) {
     recordTaste("stay", kind);
+    setSelectionMissing(false);
     const selection = buildAccommodationSelection(offer, {
       city, checkIn, checkOut, nights,
       adults: travelData.travelers,
@@ -591,8 +595,20 @@ export default function AccommodationPage() {
           const sameRoom = chosenName
             ? flat.find((offer) => String(offer.name || "").trim() === chosenName)
             : undefined;
-          if (sameRoom) selectOffer(sameRoom, data.fetchedAt || new Date().toISOString());
-          else clearSelection();
+          if (sameRoom) {
+            selectOffer(sameRoom, data.fetchedAt || new Date().toISOString());
+          } else {
+            /**
+             * The chosen room is not in this answer — but that is not a reason to
+             * throw it away. It used to be cleared here, and the automatic
+             * recommendation then filled the gap with a completely different
+             * hotel: the traveller's own room was replaced, with a green
+             * «انتخاب شد» on somebody else's name. A choice is only replaced by
+             * the traveller. We keep it, and the banner below says plainly that
+             * this particular search did not list it.
+             */
+            setSelectionMissing(true);
+          }
         }
       }
     } catch (caught) {
@@ -671,6 +687,12 @@ export default function AccommodationPage() {
     const offer = filteredGroups.flatMap((group) => group.offers).find((row) => row.id === best.id);
     if (!offer) return;
     if (selectedId && filteredGroups.some((group) => group.offers.some((row) => row.id === selectedId))) return;
+    /**
+     * A room the traveller already chose — from a package, or from an earlier
+     * search — is a decision, even when this particular answer does not list it.
+     * Nothing automatic may replace it.
+     */
+    if (selectedId) return;
     const key = `${kind}:${city}:${checkIn}:${checkOut}:${filteredGroups.length}:${best.id}`;
     if (autoAppliedStay.current === key) return;
     autoAppliedStay.current = key;
@@ -961,6 +983,11 @@ export default function AccommodationPage() {
                     )}
                     </div>
 
+                    {selectionMissing && selected ? (
+                      <p className="mb-4 rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.07] px-4 py-3 text-[11px] leading-6 text-cyan-100">
+                        <b className="font-black">«{String(selected.name || "")}»</b> هنوز برای این سفر انتخاب شده است، ولی در این جست‌وجو نیامد — منبع آن را برای این تاریخ در فهرستش نگذاشته. انتخاب تو را عوض نکردم؛ اگر می‌خواهی اتاق دیگری بگیری، یکی از کارت‌های زیر را انتخاب کن.
+                      </p>
+                    ) : null}
                     {fallbackNote ? (
                       <p className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-[11px] leading-6 text-amber-100">
                         {fallbackNote}
