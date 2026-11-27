@@ -90,7 +90,21 @@ export function sessionVerdict(input: SessionInput): SessionVerdict {
  * the same situation the same way — a second wording is how two screens end up
  * telling a traveller two different stories.
  */
-export function verdictCopy(verdict: SessionVerdict, stage: number): { tone: "info" | "warn" | "ok"; title: string; body: string } | null {
+export function verdictCopy(
+  verdict: SessionVerdict,
+  stage: number,
+): {
+  tone: "info" | "warn" | "ok";
+  title: string;
+  /** The title with the clause a phone cannot afford cut off. */
+  titleShort: string;
+  body: string;
+  /**
+   * The same fact in one line, for the width of a phone: at 390px the full body
+   * wrapped to four lines and pushed the whole home page below the fold.
+   */
+  short: string;
+} | null {
   const fa = (value: number) => String(value).replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
   switch (verdict) {
     case "fresh-load": {
@@ -99,6 +113,8 @@ export function verdictCopy(verdict: SessionVerdict, stage: number): { tone: "in
       return {
         tone: "info",
         title: "سفر تازه را از مرحلهٔ ۱ شروع کن",
+        titleShort: "سفر تازه از مرحلهٔ ۱؟",
+        short: "سفر نیمه‌کاره؛ ادامه بده",
         body: `روی این دستگاه یک سفر نیمه‌کاره هست: ${done > 0 ? `${fa(done)} قدم از ۵ انجام شده و مرحلهٔ ${fa(phase)} از ۵` : "هنوز در مرحلهٔ ۱ از ۵"} بوده. می‌توانی همان را ادامه بدهی یا از نو شروع کنی.`,
       };
     }
@@ -106,6 +122,8 @@ export function verdictCopy(verdict: SessionVerdict, stage: number): { tone: "in
       return {
         tone: "ok",
         title: "سفر قبلی‌ات کامل شده",
+        titleShort: "سفر قبلی کامل شده",
+        short: "هر پنج مرحله انجام شده است.",
         body: "همهٔ پنج مرحله انجام شده است. یک سفر تازه بساز یا برنامهٔ قبلی را ببین.",
       };
     case "resume": {
@@ -119,6 +137,8 @@ export function verdictCopy(verdict: SessionVerdict, stage: number): { tone: "in
       return {
         tone: "info",
         title: `شما داشتی این سفر را برنامه‌ریزی می‌کردی، می‌توانی برگردی و ادامه بدهی`,
+        titleShort: "داشتی این سفر را برنامه‌ریزی می‌کردی",
+        short: "سفر نیمه‌کاره؛ ادامه بده",
         /**
          * The body carries the two numbers a traveller actually needs — where the
          * trip stands now and how much of it is behind them — without repeating

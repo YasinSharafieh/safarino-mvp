@@ -124,14 +124,17 @@ export default function TripStatus({ className = "" }: { className?: string }) {
             }`}
           >
             <span className="min-w-0 flex-1">
-              <b className="block text-[10.5px] font-black text-white">{copy.title}</b>
-              <span className="block text-[9px] leading-5 text-slate-300">{copy.body}</span>
+              <b className="block text-[10.5px] font-black text-white sm:hidden">{copy.titleShort}</b>
+              <b className="hidden text-[10.5px] font-black text-white sm:block">{copy.title}</b>
+              {/* One line on a phone, the whole explanation when there is width for it. */}
+              <span className="block text-[9px] leading-5 text-slate-300 sm:hidden">{copy.short}</span>
+              <span className="hidden text-[9px] leading-5 text-slate-300 sm:block">{copy.body}</span>
             </span>
             {verdict === "fresh-load" ? (
               <>
                 <Link
                   href={status.next.href}
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-3 py-1.5 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
                   title={`برگرد به مرحلهٔ ${status.stage} از ۵`}
                 >
                   ادامهٔ همین سفر
@@ -147,7 +150,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                     // A new trip starts at step ۱, so take them where step ۱ lives.
                     router.push("/start/cities");
                   }}
-                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
                 >
                   سفر تازه از مرحلهٔ ۱
                 </button>
@@ -162,7 +165,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 <Link
                   href={status.next.href}
                   onClick={() => setDismissed(true)}
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-3 py-1.5 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
                   title={`برگرد به مرحلهٔ ${status.stage} از ۵`}
                 >
                   ادامهٔ همین سفر
@@ -171,7 +174,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 <Link
                   href="/start/cities"
                   onClick={() => setDismissed(true)}
-                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
                 >
                   سفر تازه
                 </Link>
@@ -180,7 +183,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
               <Link
                 href="/start/cities"
                 onClick={() => setDismissed(true)}
-                className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+                className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-3 py-1.5 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
               >
                 سفر تازه بساز
                 <ArrowLeft className="h-2.5 w-2.5" />
@@ -193,7 +196,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 if (verdict === "fresh-load") writeFlag(SESSION_KEYS.resume, true);
               }}
               aria-label="بستن این پیام"
-              className="shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              className="shrink-0 rounded-full p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
             >
               <X className="h-3 w-3" />
             </button>
@@ -250,7 +253,7 @@ export default function TripStatus({ className = "" }: { className?: string }) {
           </span>
           <Link
             href={status.next.href}
-            className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-3 py-1.5 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
           >
             {status.next.cta}
             <ArrowLeft className="h-2.5 w-2.5" />
