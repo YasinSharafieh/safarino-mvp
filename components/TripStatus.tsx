@@ -89,6 +89,8 @@ export default function TripStatus({ className = "" }: { className?: string }) {
    */
   const verdict = useSessionVerdict({ hasTrip: isHydrated && status.exists, stage: status.stage });
   const [dismissed, setDismissed] = useState(false);
+  /** A new screen is a new moment: a question dismissed on one page is not dismissed everywhere. */
+  useEffect(() => setDismissed(false), [pathname]);
   const copy = verdictCopy(verdict, status.stage);
 
   if (!isHydrated || !status.exists) return null;
@@ -149,6 +151,30 @@ export default function TripStatus({ className = "" }: { className?: string }) {
                 >
                   سفر تازه از مرحلهٔ ۱
                 </button>
+              </>
+            ) : verdict === "resume" ? (
+              /**
+               * The sentence says «برگرد و ادامه بده», so the button must actually
+               * continue — to the very step this trip stands on, which is the same
+               * `next.href` the strip underneath would send them to.
+               */
+              <>
+                <Link
+                  href={status.next.href}
+                  onClick={() => setDismissed(true)}
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+                  title={`برگرد به مرحلهٔ ${status.stage} از ۵`}
+                >
+                  ادامهٔ همین سفر
+                  <ArrowLeft className="h-2.5 w-2.5" />
+                </Link>
+                <Link
+                  href="/start/cities"
+                  onClick={() => setDismissed(true)}
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
+                >
+                  سفر تازه
+                </Link>
               </>
             ) : (
               <Link

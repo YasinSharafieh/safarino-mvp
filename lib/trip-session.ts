@@ -44,7 +44,7 @@ export type SessionInput = {
    * `"back_forward"` (the browser back button from another site).
    */
   navigationType: "navigate" | "reload" | "back_forward" | "unknown";
-  /** The app already recorded at least one in-site navigation in this tab. */
+  /** The traveller already moved inside the site *in the document that is open now*. */
   insideNavigation: boolean;
   /** The traveller pressed «سفر تازه» in this tab, so the question is settled. */
   startFreshChosen: boolean;
@@ -64,18 +64,24 @@ export function sessionVerdict(input: SessionInput): SessionVerdict {
    */
   if (input.navigationType === "back_forward") return "resume";
   /**
-   * A reload is the case the owner named explicitly: «وقتی رفرش کرده باید از اول
-   * نمایش داده بشه». Even if the tab had in-site navigation before, the reload
-   * itself is the boundary — the traveller asked for a fresh screen.
-   */
-  if (input.navigationType === "reload") return "fresh-load";
-  /**
-   * A plain `"navigate"`: a typed address or a bookmark is a fresh load too,
-   * **unless** the app itself recorded an in-site move in this tab (which can
-   * only happen after the page is already open, so a navigate cannot follow it
-   * in the same document).
+   * An in-site move **inside the document that is now open** is a continuation,
+   * and it outranks the document's own load type.
+   *
+   * This ordering is the whole point, and it was wrong at first: after a reload
+   * the document keeps reporting `"reload"` for its entire life, so a traveller
+   * who pressed F5 and then walked to the home page was still being told «سفر تازه
+   * را از مرحلهٔ ۱ شروع کن» on a screen they had merely navigated to. The signal
+   * that a reload can never produce is the in-site move, so it decides — and the
+   * client clears the signal whenever a *new* document loads, which is what keeps
+   * the owner's rule intact: right after F5 the traveller sees step ۱ again.
    */
   if (input.insideNavigation) return "resume";
+  /**
+   * A reload is the case the owner named explicitly: «وقتی رفرش کرده باید از اول
+   * نمایش داده بشه» — a fresh document with no in-site move behind it.
+   */
+  if (input.navigationType === "reload") return "fresh-load";
+  /** A typed address or a bookmark is a fresh load too. */
   return "fresh-load";
 }
 
@@ -87,24 +93,43 @@ export function sessionVerdict(input: SessionInput): SessionVerdict {
 export function verdictCopy(verdict: SessionVerdict, stage: number): { tone: "info" | "warn" | "ok"; title: string; body: string } | null {
   const fa = (value: number) => String(value).replace(/[0-9]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
   switch (verdict) {
-    case "fresh-load":
+    case "fresh-load": {
+      const phase = Math.min(5, Math.max(1, stage));
+      const done = phase - 1;
       return {
         tone: "info",
         title: "سفر تازه را از مرحلهٔ ۱ شروع کن",
-        body: `یک سفر نیمه‌کاره روی این دستگاه مانده و تا مرحلهٔ ${fa(Math.min(5, Math.max(1, stage)))} از ۵ رفته بود. می‌توانی همان را ادامه بدهی یا از نو شروع کنی.`,
+        body: `روی این دستگاه یک سفر نیمه‌کاره هست: ${done > 0 ? `${fa(done)} قدم از ۵ انجام شده و مرحلهٔ ${fa(phase)} از ۵` : "هنوز در مرحلهٔ ۱ از ۵"} بوده. می‌توانی همان را ادامه بدهی یا از نو شروع کنی.`,
       };
+    }
     case "finished":
       return {
         tone: "ok",
         title: "سفر قبلی‌ات کامل شده",
         body: "همهٔ پنج مرحله انجام شده است. یک سفر تازه بساز یا برنامهٔ قبلی را ببین.",
       };
-    case "resume":
+    case "resume": {
+      /**
+       * The owner's sentence, nearly verbatim — it is the one place where the site
+       * speaks to the traveller in the second person about what they were doing,
+       * so it is not paraphrased into something more formal.
+       */
+      const phase = Math.min(5, Math.max(1, stage));
+      const done = phase - 1;
       return {
         tone: "info",
-        title: `داشتی سفر را برنامه‌ریزی می‌کردی — مرحلهٔ ${fa(Math.min(5, Math.max(1, stage)))} از ۵`,
-        body: "از همان‌جایی که بودی ادامه بده؛ چیزی از دست نرفته است.",
+        title: `شما داشتی این سفر را برنامه‌ریزی می‌کردی، می‌توانی برگردی و ادامه بدهی`,
+        /**
+         * The body carries the two numbers a traveller actually needs — where the
+         * trip stands now and how much of it is behind them — without repeating
+         * the phase twice in one sentence.
+         */
+        body:
+          done > 0
+            ? `مرحلهٔ ${fa(phase)} از ۵، و ${fa(done)} قدم از ۵ انجام شده. از همان‌جایی که بودی ادامه بده؛ چیزی از دست نرفته است.`
+            : `سفر در مرحلهٔ ۱ از ۵ است و هنوز قدمی انجام نشده. از همان‌جایی که بودی ادامه بده؛ چیزی از دست نرفته است.`,
       };
+    }
     default:
       return null;
   }

@@ -9,6 +9,13 @@
 import assert from "node:assert/strict";
 import { demandKey, freshnessOf, parseDemandKey } from "../lib/freshness";
 import { SESSION_KEYS, sessionVerdict, verdictCopy, type SessionInput } from "../lib/trip-session";
+import { tripStatus } from "../lib/trip-status";
+
+// The phase the strip prints must be the step the traveller is actually on.
+assert.equal(tripStatus({ origin: "تهران", destination: "مشهد", departureDate: "2026-12-13", travelers: 1, days: 3 }).stage, 2, "only the route is done → the traveller stands on step ۲");
+assert.equal(tripStatus({ destination: "مشهد" }).stage, 1, "a destination without a date is not a finished route — the traveller still stands on step ۱");
+assert.equal(tripStatus({ origin: "تهران", destination: "مشهد", departureDate: "2026-12-13", transport: { mode: "train", cost: 900000 }, accommodation: { status: "skipped" } }).stage, 4, "route, ticket and stay decided → the traveller stands on the days plan");
+assert.equal(tripStatus({}).stage, 1, "nothing chosen → step ۱");
 
 const base: SessionInput = {
   hasTrip: true,
@@ -25,8 +32,18 @@ assert.equal(sessionVerdict({ ...base, navigationType: "navigate", insideNavigat
 assert.equal(sessionVerdict({ ...base, navigationType: "navigate", insideNavigation: false }), "fresh-load", "a typed address is a new visit");
 assert.equal(sessionVerdict({ ...base, navigationType: "back_forward" }), "resume", "the browser back button is not abandonment");
 
-/* 2. A refresh wins over an earlier in-site move: the reload is the boundary. */
-assert.equal(sessionVerdict({ ...base, navigationType: "reload", insideNavigation: true }), "fresh-load");
+/**
+ * 2. A refresh is the boundary, and the in-site signal is scoped to one document.
+ *
+ *    The client clears the signal whenever a new document loads, so a reload
+ *    always arrives here with `insideNavigation: false` → «fresh-load». The case
+ *    below — reload *and* an in-site move — is the one that is actually reachable
+ *    after the reload, on a screen the traveller then walked to. It must read as a
+ *    continuation; before this rule it still said «سفر تازه را از مرحلهٔ ۱ شروع کن»
+ *    on the home page of someone who had only tapped a link.
+ */
+assert.equal(sessionVerdict({ ...base, navigationType: "reload", insideNavigation: false }), "fresh-load", "F5 with no move behind it starts over");
+assert.equal(sessionVerdict({ ...base, navigationType: "reload", insideNavigation: true }), "resume", "after F5, walking to another screen is a continuation");
 
 /* 3. Choices the traveller made in this tab are respected. */
 assert.equal(sessionVerdict({ ...base, startFreshChosen: true }), "empty", "«سفر تازه» clears the strip");
@@ -44,7 +61,11 @@ assert.equal(sessionVerdict({ ...base, stage: 5 }), "finished");
 const fresh = verdictCopy("fresh-load", 3)!;
 assert.match(fresh.body, /۳ از ۵/, "the phase the traveller stood on is named");
 assert.match(fresh.title, /۱/, "the new trip is offered from step ۱");
-assert.match(verdictCopy("resume", 2)!.title, /۲ از ۵/);
+assert.match(verdictCopy("resume", 2)!.title, /شما داشتی این سفر را برنامه‌ریزی می‌کردی/, "the owner's sentence, in his words");
+assert.match(verdictCopy("resume", 2)!.title, /برگردی و ادامه بدهی/);
+assert.match(verdictCopy("resume", 3)!.body, /۳ از ۵/, "the current phase is named");
+assert.match(verdictCopy("resume", 3)!.body, /۲ قدم از ۵/, "and how much is behind it");
+assert.match(verdictCopy("fresh-load", 3)!.body, /۲ قدم از ۵ انجام شده و مرحلهٔ ۳ از ۵/, "a refresh names the previous trip's progress and phase");
 assert.equal(verdictCopy("empty", 1), null, "no saved trip → no copy at all");
 for (const stage of [0, 1, 3, 5, 99]) {
   const copy = verdictCopy("fresh-load", stage)!;

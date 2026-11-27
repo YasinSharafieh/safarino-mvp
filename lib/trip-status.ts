@@ -156,7 +156,14 @@ export function tripStatus(input: TripStatusInput): TripStatus {
     { id: "book", label: STEP_LABEL.book, done: bookDone, href: STEP_HREF.book },
   ];
   const doneCount = steps.filter((step) => step.done).length;
-  const stage = Math.min(steps.length, doneCount + 1);
+  /**
+   * The phase the traveller *stands on*, which is the first step that is not done.
+   * `doneCount + 1` looked right and was not: a trip with only the route chosen
+   * printed «۲ از ۵» and then asked the traveller to choose their ticket — the
+   * number claimed step ۲ was under way when step ۲ was exactly what was missing.
+   */
+  const firstOpen = steps.findIndex((step) => !step.done);
+  const stage = firstOpen === -1 ? steps.length : firstOpen + 1;
 
   const chips: StatusChip[] = [
     {
