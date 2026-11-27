@@ -19,8 +19,10 @@ import {
   RefreshCw,
   Route,
   Sparkles,
+  Ticket,
   UtensilsCrossed,
 } from "lucide-react";
+import { formatToman } from "@/lib/budget";
 import TravelSteps from "@/components/TravelSteps";
 import NextStepBar from "@/components/NextStepBar";
 import { useTravel } from "../context/TravelContext";
@@ -369,7 +371,9 @@ function ItineraryContent() {
     const stayNights = Number(stay?.nights);
     const transport = chosenTransport(travelData.transport)?.raw ?? null;
     const transportLabel = transport
-      ? String((transport.providerLabel as string) || (transport.offerTitle as string) || (transport.title as string) || (transport.kind as string) || "وسیلهٔ انتخاب‌شده")
+      ? [String((transport.offerTitle as string) || (transport.title as string) || ""), String((transport.providerLabel as string) || "")]
+          .filter(Boolean)
+          .join(" · ") || "وسیلهٔ انتخاب‌شده"
       : "";
     return buildBudgetPlan({
       days: daysOnScreen,
@@ -383,6 +387,14 @@ function ItineraryContent() {
       assumptions,
     });
   }, [assumptions, data, stay, travelData.budget, travelData.children, travelData.transport, travelData.travelers]);
+
+  /**
+   * The ticket the trip really holds, in the same shape every other page reads.
+   * It was missing from this page entirely: the book showed the room, the money
+   * and the days, but never the train the traveller picked — so a ticket could
+   * look «selected» on the transport page and simply vanish from the plan.
+   */
+  const chosen = useMemo(() => chosenTransport(travelData.transport), [travelData.transport]);
 
   /** The real time audit of every day: start, drive, finish, and what does not fit. */
   const dayTimings = useMemo(() => (data?.days || []).map((day) => itineraryDayTiming(day)), [data]);
@@ -958,6 +970,41 @@ function ItineraryContent() {
                     </div>
                   </motion.div>
                 )}
+
+                {chosen ? (
+                  <section className="glass mt-5 p-4 sm:p-5" aria-label="بلیت انتخاب‌شده">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-cyan-400/15 text-cyan-200">
+                            <Ticket className="h-4 w-4" />
+                          </span>
+                          <h2 className="text-sm font-black text-white">بلیت انتخاب‌شده برای این سفر</h2>
+                          <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-black text-emerald-200">
+                            {chosen.modeLabel}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[12px] font-bold leading-6 text-slate-200">{chosen.title}</p>
+                        <p className="mt-1 text-[10px] leading-6 text-slate-400">
+                          {chosen.departure ? `حرکت ${formatJalaliDate(chosen.departure.slice(0, 10))}${chosen.departure.length > 10 ? ` ساعت ${chosen.departure.slice(11, 16)}` : ""}` : "ساعت حرکت در بلیت ثبت نشده"}
+                          {chosen.arrival ? ` · رسیدن ${formatJalaliDate(chosen.arrival.slice(0, 10))}${chosen.arrival.length > 10 ? ` ساعت ${chosen.arrival.slice(11, 16)}` : ""}` : ""}
+                          {" · "}
+                          {travelData.origin || "—"} ← {travelData.destination || "—"}
+                          {chosen.providerLabel ? ` · منبع ${chosen.providerLabel}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+                        <b className="text-lg font-black text-cyan-200">{formatToman(chosen.cost)}</b>
+                        <div className="flex gap-2">
+                          <Link href="/transport?change=ticket" className="btn-ghost !py-2 text-[10px]">تغییر بلیت</Link>
+                          {chosen.bookingUrl ? (
+                            <a href={chosen.bookingUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-2 text-[10px]">دیدن در منبع</a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
 
                 <BudgetBreakdown plan={budgetPlan} assumptions={assumptions} onAssumptionsChange={applyAssumptions} />
                 {sharePayload ? <ShareTrip trip={sharePayload} /> : null}

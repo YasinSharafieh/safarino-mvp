@@ -281,6 +281,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       const outbound = (data.offers || []).map(label);
       const returning = (data.returningOffers || []).map(label);
       setOffers(outbound);
+      listMode.current = mode;
       setReturnOffers(returning);
       setStatuses(data.providerStatuses || []);
       setDuplicates(data.duplicateCount || 0);
@@ -313,6 +314,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       }
     } catch (caught) {
       setOffers([]);
+      listMode.current = mode;
       setReturnOffers([]);
       onCheapestChange(mode, null);
       const timedOut = caught instanceof Error && (caught.name === "TimeoutError" || caught.name === "AbortError");
@@ -617,6 +619,56 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       .filter((offer) => Number.isFinite(offer.price));
     return bestForBudget(priced, { remaining: Math.max(0, ticketBudget.remaining) });
   }, [mode, ticketBudget.remaining, visible]);
+
+  /**
+   * «بهترین انتخاب برای تو» must be a real chose, not a badge.
+   *
+   * The list used to recommend a ticket with a green label while the trip kept
+   * whatever was stored before — so the site said «پیشنهاد من» about a row that
+   * was not in the itinerary, and a traveller who pressed «ادامه» carried a
+   * different (or no) ticket into the next five steps. Now the recommendation is
+   * written into the shared trip exactly once per search, and only when the
+   * traveller has not already picked something themselves for this very list.
+   */
+  const autoApplied = useRef<string>("");
+  /**
+   * The mode whose results are currently in `offers`.
+   *
+   * Switching from bus to plane re-renders this component with the old list still
+   * in state for one beat; without this stamp the automatic choice could pick a
+   * *bus* row while the plane panel was opening, and the trip would be marked
+   * «plane» with a bus ticket inside. The stamp makes that impossible: we only
+   * choose from a list we know belongs to the vehicle on screen.
+   */
+  const listMode = useRef<string>("");
+  useEffect(() => {
+    if (loading || error || !visible.length) return;
+    if (listMode.current !== mode) return;
+    const best = recommendation.option;
+    if (!best) return;
+    const offer = visible.find((row) => row.id === best.id);
+    if (!offer) return;
+    // A search the traveller has already answered is not overwritten by us.
+    if (selectedId && visible.some((row) => row.id === selectedId)) return;
+    // One automatic choice per search — after that the traveller is in charge.
+    const searchKey = `${mode}:${travelData.departureDate}:${activeLeg}:${visible.length}:${best.id}`;
+    if (autoApplied.current === searchKey) return;
+    const total = totalFor(offer);
+    if (total === null) return;
+    autoApplied.current = searchKey;
+    onSelect({
+      mode,
+      total,
+      unitPrice: offer.priceToman,
+      offerId: offer.id,
+      offerTitle: `${activeLeg === "return" ? "برگشت · " : ""}${offer.title}`,
+      provider: offer.provider || "alibaba",
+      providerLabel: PROVIDER_LABELS[offer.provider || "alibaba"],
+      bookingUrl: offer.bookingUrl,
+      fetchedAt: fetchedAt || undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, error, visible, recommendation.option?.id, selectedId, mode, activeLeg, travelData.departureDate]);
 
   const priceCeiling = useMemo(
     () => legOffers.reduce((max, offer) => Math.max(max, offer.priceToman), 0),

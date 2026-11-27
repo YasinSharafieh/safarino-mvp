@@ -8,6 +8,7 @@ import {
   ArrowRight,
   BedDouble,
   Camera,
+  Ticket,
   CarFront,
   Check,
   Clock3,
@@ -1200,6 +1201,48 @@ export default function PlanPage() {
               </Link>
             </div>
           </section>
+
+          {/*
+            The chosen ticket, next to the chosen stay.
+            The plan used to show the room in full and the train only inside the
+            money table, so a traveller who had just picked a ۳٫۷ میلیون train
+            arrived here and could not see it. Same object, same price, and a way
+            to change it without touching the rest of the trip.
+          */}
+          {(() => {
+            const picked = chosenTransport(transportDetails);
+            if (!picked) return null;
+            return (
+              <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="بلیت انتخاب‌شده">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Ticket className="h-5 w-5 text-cyan-300" />
+                      <h2 className="text-xl font-black text-white">بلیت انتخاب‌شده برای این سفر</h2>
+                      <span className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2.5 py-0.5 text-[9.5px] font-black text-cyan-200">{picked.modeLabel}</span>
+                    </div>
+                    <h3 className="mt-4 text-lg font-black text-white">{picked.title}</h3>
+                    <p className="mt-2 text-xs leading-7 text-slate-400">
+                      {picked.departure ? `حرکت ${formatJalaliDate(picked.departure.slice(0, 10))}${picked.departure.length > 10 ? ` ساعت ${picked.departure.slice(11, 16)}` : ""}` : "ساعت حرکت در بلیت ثبت نشده"}
+                      {picked.arrival ? ` · رسیدن ${formatJalaliDate(picked.arrival.slice(0, 10))}${picked.arrival.length > 10 ? ` ساعت ${picked.arrival.slice(11, 16)}` : ""}` : ""}
+                      {picked.providerLabel ? ` · منبع ${picked.providerLabel}` : ""}
+                    </p>
+                    {picked.fetchedAt && <p className="mt-3 rounded-xl bg-white/[0.035] p-3 text-[11px] leading-6 text-slate-400">این قیمت همان مبلغی است که در مرحلهٔ بلیت از منبع خوانده شد؛ پیش از پرداخت دوباره کنترلش کن.</p>}
+                  </div>
+                  <div className="shrink-0 sm:text-left">
+                    <span className="block text-[10px] text-slate-500">قیمت ثبت‌شده در برنامه</span>
+                    <b className="mt-2 block text-xl font-black text-cyan-200">{formatToman(picked.cost)}</b>
+                    <div className="mt-3 flex gap-2 sm:justify-end">
+                      <Link href="/transport?change=ticket" className="btn-ghost !py-2 text-[10px]">تغییر بلیت</Link>
+                      {picked.bookingUrl ? (
+                        <a href={picked.bookingUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-2 text-[10px]">دیدن در منبع</a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
 
           {accommodationDetails.status === "selected" && typeof accommodationDetails.name === "string" && (
             <section className="glass print-card mt-6 p-5 sm:p-7" aria-label="اقامت انتخاب‌شده">

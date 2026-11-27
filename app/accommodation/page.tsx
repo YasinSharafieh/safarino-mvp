@@ -573,9 +573,27 @@ export default function AccommodationPage() {
         }));
       } catch { /* The page still works without the snapshot. */ }
       if (selectedId) {
-        const refreshed = nextGroups.flatMap((group) => group.offers).find((offer) => offer.id === selectedId);
-        if (refreshed) selectOffer(refreshed, data.fetchedAt || new Date().toISOString());
-        else clearSelection();
+        const flat = nextGroups.flatMap((group) => group.offers);
+        const refreshed = flat.find((offer) => offer.id === selectedId);
+        if (refreshed) {
+          selectOffer(refreshed, data.fetchedAt || new Date().toISOString());
+        } else {
+          /**
+           * A stay that came from a home-page package carries an id Safarino made
+           * up (`pkg-…`), because the package never had the provider's own id.
+           * Matching on that id could only ever fail, so the same room was shown
+           * as «پیشنهاد من» while the trip believed nothing was chosen. The real
+           * offer is found by what the traveller can see: the same name. When it
+           * is found, the trip is pointed at the *real* id — from then on it is an
+           * ordinary selection that can be changed or cancelled like any other.
+           */
+          const chosenName = String(accommodation?.name || "").trim();
+          const sameRoom = chosenName
+            ? flat.find((offer) => String(offer.name || "").trim() === chosenName)
+            : undefined;
+          if (sameRoom) selectOffer(sameRoom, data.fetchedAt || new Date().toISOString());
+          else clearSelection();
+        }
       }
     } catch (caught) {
       setOffers([]);
@@ -635,6 +653,30 @@ export default function AccommodationPage() {
     );
     return bestStay(offers, { remaining: Math.max(0, stayBudget.remaining) });
   }, [filteredGroups, stayBudget.remaining]);
+
+  /**
+   * «پیشنهاد من» is a real decision, recorded where the rest of the site reads it.
+   *
+   * It used to be a badge on a card: the list named a best room while the trip
+   * still said «اقامتگاه هنوز انتخاب نشده», so the next step opened with nothing
+   * and the price never reached the budget. The best room is now written into the
+   * shared trip once per list — never over a choice the traveller already made,
+   * and only while the recommendation is still inside the filtered list on screen.
+   */
+  const autoAppliedStay = useRef<string>("");
+  useEffect(() => {
+    if (loading || error || !filteredGroups.length || fromSavedCopy) return;
+    const best = recommendation.option;
+    if (!best) return;
+    const offer = filteredGroups.flatMap((group) => group.offers).find((row) => row.id === best.id);
+    if (!offer) return;
+    if (selectedId && filteredGroups.some((group) => group.offers.some((row) => row.id === selectedId))) return;
+    const key = `${kind}:${city}:${checkIn}:${checkOut}:${filteredGroups.length}:${best.id}`;
+    if (autoAppliedStay.current === key) return;
+    autoAppliedStay.current = key;
+    selectOffer(offer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, error, filteredGroups, recommendation.option?.id, selectedId, fromSavedCopy, kind, city, checkIn, checkOut]);
 
   function resetFilters() {
     setNameQuery("");

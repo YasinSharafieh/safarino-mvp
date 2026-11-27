@@ -173,7 +173,21 @@ function TransportPageContent() {
                 infants: travelData.infants,
               }),
             });
-            const payload = (await response.json()) as { offers?: unknown[] };
+            const payload = (await response.json()) as {
+              offers?: unknown[];
+              providerStatuses?: { status?: string }[];
+            };
+            /**
+             * «۰ بلیت» و «منبع پاسخ نداد» دو چیز کاملاً متفاوت‌اند.
+             *
+             * The card used to read only the offer list, so a provider that timed
+             * out — which happens for whole modes on some days — printed «بلیتی
+             * برای این تاریخ نیافتیم» about a mode nobody had actually measured.
+             * A mode is only counted as empty when every provider really answered.
+             */
+            const statuses = Array.isArray(payload.providerStatuses) ? payload.providerStatuses : [];
+            const answered = statuses.length > 0 && statuses.every((row) => row.status === "ok");
+            if (!response.ok || !answered) return [item, null] as const;
             return [item, Array.isArray(payload.offers) ? payload.offers.length : 0] as const;
           } catch {
             // «پاسخ نداد» is not «صفر بلیت»: it stays unknown on the card.
@@ -302,6 +316,16 @@ function TransportPageContent() {
       setMode(prefill.ticket.mode);
     } else if (prefill.mode) {
       setMode(prefill.mode);
+      /**
+       * A package that names a vehicle must leave that vehicle *recorded*, not
+       * only selected on this screen. Otherwise the next step (and the packing
+       * list, and the plan) falls back to whatever was there before, and the
+       * traveller sees the train they clicked silently turn into a plane.
+       */
+      const askedMode = prefill.mode;
+      if (askedMode !== "car") {
+        setTravelData((current) => (current.preferredMode === askedMode ? current : { ...current, preferredMode: askedMode }));
+      }
     }
     if (prefill.roundTrip) setRoundTrip(true);
     try {
