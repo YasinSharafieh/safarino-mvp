@@ -578,10 +578,15 @@ function TransportPageContent() {
           <section className="glass overflow-hidden p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2.5">
-                <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  مرحلهٔ دوم: حمل‌ونقل
-                </span>
+                <h1 className="flex w-full flex-wrap items-center gap-2 text-lg font-black text-white sm:w-auto sm:text-xl">
+                  <span className="chip border-cyan-400/25 bg-cyan-400/10 !text-cyan-200">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    مرحلهٔ دوم: حمل‌ونقل
+                  </span>
+                  <span>
+                    بلیت {travelData.origin || "مبدأ"} به {travelData.destination || "مقصد"}
+                  </span>
+                </h1>
                 <span className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px]">
                   <MapPin className="h-3.5 w-3.5 text-cyan-300" />
                   <b className="text-white">{travelData.origin || "مبدأ؟"}</b>

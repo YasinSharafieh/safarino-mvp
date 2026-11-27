@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { priceWatchKey, readPriceTrend, recordPrice } from "@/lib/price-watch";
 import { searchTransport, ticketAvailability, type TransportSearchInput } from "../../../../../lib/transport-search";
 import type { TransportMode } from "../../../../../lib/transport-types";
+import { freshnessOf, recordDemand } from "../../../../../lib/freshness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,11 @@ export async function POST(request: NextRequest) {
   }
 
   const started = Date.now();
+  /**
+   * Remember *what* was searched so the hourly warm-up heats this route for the
+   * next traveller instead of a guessed list. No user data ever enters this key.
+   */
+  void recordDemand("ticket", { mode: input.mode, origin: input.origin, destination: input.destination, date: input.date, adults: input.adults });
   try {
     const { payload, source, savedAt } = await searchTransport(input);
 
@@ -122,6 +128,11 @@ export async function POST(request: NextRequest) {
         cached: source !== "live",
         fromStore: source === "live" ? "crawled-now" : source === "stale-cache" ? "last-saved" : "just-fetched",
         ...(savedAt ? { savedAt } : {}),
+        /**
+         * How old this answer really is, in the traveller's words. The interface
+         * prints it instead of implying every price was fetched this second.
+         */
+        freshness: freshnessOf("ticket", savedAt || payload.fetchedAt),
       },
       { headers: { "Cache-Control": "no-store", "X-Safarino-Source": source, "X-Safarino-Ms": String(Date.now() - started) } },
     );

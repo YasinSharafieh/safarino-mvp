@@ -26,8 +26,16 @@ import { useTravel } from "@/app/context/TravelContext";
 import { bestForBudget, estimateBudget } from "@/lib/budget-fit";
 import { resolveIranianCity, transportCityCode } from "@/lib/iran-cities";
 import { addDaysToIso, formatJalaliDate, formatProviderDateTime, todayIso } from "@/lib/jalali";
+import { useAutoRefreshOnReturn } from "@/lib/use-auto-refresh";
 
 export type TicketMode = "plane" | "train" | "bus";
+
+/**
+ * How old the answer is, straight from the server (`lib/freshness.ts`). A price
+ * that is 40 minutes old is still useful, but it must say so instead of implying
+ * it was fetched this second.
+ */
+export type FreshnessView = { ageSeconds: number | null; comfortable: boolean; ageing: boolean; stale: boolean; label: string };
 
 export type LiveOffer = {
   id: string;
@@ -84,6 +92,7 @@ type SearchResponse = {
   returningOffers?: LiveOffer[];
   duplicateCount?: number;
   providerStatuses?: ProviderStatus[];
+  freshness?: FreshnessView;
 };
 
 export type TicketSelection = {
@@ -206,11 +215,23 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const [duplicates, setDuplicates] = useState(0);
+  const [freshness, setFreshness] = useState<FreshnessView | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [nearbyDates, setNearbyDates] = useState<{ date: string; cheapest: number }[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const autoSearched = useRef(false);
   const lastSearchedDate = useRef<string | null>(null);
+
+  /**
+   * A traveller who comes back to the tab gets a fresh list without pressing
+   * anything — but only when the answer has actually aged, and never twice in a
+   * row. The rule lives in `lib/use-auto-refresh.ts`, not here.
+   */
+  useAutoRefreshOnReturn({
+    shouldRefresh: Boolean(freshness && (freshness.ageing || freshness.stale)),
+    busy: loading,
+    refresh: () => void search(),
+  });
 
   const originCity = resolveIranianCity(travelData.origin);
   const destinationCity = resolveIranianCity(travelData.destination);
@@ -264,6 +285,7 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       setStatuses(data.providerStatuses || []);
       setDuplicates(data.duplicateCount || 0);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
+      setFreshness(data.freshness || null);
       setPriceTrend(data.priceTrend || null);
       setActiveLeg("outbound");
       setHasSearched(true);
@@ -1074,9 +1096,38 @@ export default function TicketSearch({ mode, roundTrip, active, selectedId, onSe
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-white/[0.02] px-4 py-3">
-        <p className="flex items-center gap-1.5 text-[9.5px] text-slate-400">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[9.5px] text-slate-400">
           <Clock3 className="h-3 w-3 text-turquoise-300" />
           {fetchedAt ? `دریافت: ${new Date(fetchedAt).toLocaleString("fa-IR")}` : "هنوز جست‌وجو نشده"}
+          {freshness ? (
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[8.5px] font-bold ${
+                freshness.stale
+                  ? "border-rose-400/30 bg-rose-400/10 text-rose-100"
+                  : freshness.ageing
+                    ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                    : "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+              }`}
+              title={
+                freshness.stale
+                  ? "این یک نسخهٔ ذخیره‌شده است، نه پاسخ همین لحظه."
+                  : freshness.ageing
+                    ? "کمی قدیمی شده؛ با «جست‌وجوی دوباره» تازه‌اش کن."
+                    : "تازه است."
+              }
+            >
+              {freshness.label}
+            </span>
+          ) : null}
+          {freshness && (freshness.ageing || freshness.stale) && !loading ? (
+            <button
+              type="button"
+              onClick={() => void search()}
+              className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[8.5px] font-black text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              تازه‌سازی
+            </button>
+          ) : null}
         </p>
         {visible.length ? (
           <p className="flex items-center gap-1.5 text-[9px] text-slate-500">

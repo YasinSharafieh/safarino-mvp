@@ -3,6 +3,7 @@ import type { AccommodationSearchInput } from "../../../../../lib/accommodation-
 import { searchMultiProviderAccommodation } from "../../../../../lib/accommodation-search";
 import { assertProviderRateLimit } from "../../../../../lib/provider-cache";
 import { readWithRefresh, snapshotKey, writeSnapshot } from "../../../../../lib/snapshot-store";
+import { freshnessOf, recordDemand } from "../../../../../lib/freshness";
 import { priceWatchKey, readPriceTrend, recordPrice } from "@/lib/price-watch";
 
 /**
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "مقصد، تاریخ و مسافران را بررسی کنید؛ اقامت بین ۱ تا ۳۰ شب پشتیبانی می‌شود." }, { status: 400 });
   }
 
+  void recordDemand("room", { kind: input.kind, city: input.city, checkIn: input.checkIn, checkOut: input.checkOut, adults: input.adults });
   try {
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     await assertProviderRateLimit(ip, "multi-accommodation");
@@ -83,7 +85,14 @@ export async function POST(request: NextRequest) {
         await writeSnapshot(base, liveNow as unknown as Record<string, unknown>, FRESH_SECONDS, KEEP_SECONDS);
       }
       return NextResponse.json(
-        { success: !liveNow.allProvidersFailed, cached: false, fromStore: "refreshed-now", ...liveNow, ...(liveNow.allProvidersFailed ? { error: "هیچ‌یک از منابع اقامت پاسخ معتبر نداد؛ کمی بعد دوباره تلاش کنید." } : {}) },
+        {
+          success: !liveNow.allProvidersFailed,
+          cached: false,
+          fromStore: "refreshed-now",
+          ...liveNow,
+          freshness: freshnessOf("room", new Date().toISOString()),
+          ...(liveNow.allProvidersFailed ? { error: "هیچ‌یک از منابع اقامت پاسخ معتبر نداد؛ کمی بعد دوباره تلاش کنید." } : {}),
+        },
         { status: liveNow.allProvidersFailed ? 502 : 200, headers: { "Cache-Control": "no-store", "X-Safarino-Source": "forced-live", "X-Safarino-Ms": String(Date.now() - started) } },
       );
     }
@@ -120,6 +129,7 @@ export async function POST(request: NextRequest) {
           fromStore: source === "stale-cache" ? "last-saved" : "just-fetched",
           savedAt: snapshot.storedAt,
           ...snapshot.value,
+          freshness: freshnessOf("room", snapshot.storedAt),
         },
         {
           status: saved.allProvidersFailed ? 502 : 200,
@@ -138,7 +148,14 @@ export async function POST(request: NextRequest) {
       await writeSnapshot(base, result as unknown as Record<string, unknown>, FRESH_SECONDS, KEEP_SECONDS);
     }
     return NextResponse.json(
-      { success: !result.allProvidersFailed, cached: false, fromStore: "crawled-now", ...result, ...(result.allProvidersFailed ? { error: "هیچ‌یک از منابع اقامت پاسخ معتبر نداد؛ کمی بعد دوباره تلاش کنید." } : {}) },
+      {
+        success: !result.allProvidersFailed,
+        cached: false,
+        fromStore: "crawled-now",
+        ...result,
+        freshness: freshnessOf("room", new Date().toISOString()),
+        ...(result.allProvidersFailed ? { error: "هیچ‌یک از منابع اقامت پاسخ معتبر نداد؛ کمی بعد دوباره تلاش کنید." } : {}),
+      },
       {
         status: result.allProvidersFailed ? 502 : 200,
         headers: { "Cache-Control": "no-store", "X-Safarino-Source": "live", "X-Safarino-Ms": String(Date.now() - started) },

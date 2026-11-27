@@ -23,12 +23,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ArrowLeft, CalendarDays, Check, CircleAlert, MapPin, Route, Users, Wallet } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, CalendarDays, Check, CircleAlert, MapPin, Route, Users, Wallet, X } from "lucide-react";
 import { useTravel } from "@/app/context/TravelContext";
 import { formatJalaliDate } from "@/lib/jalali";
 import { ITINERARY_STORAGE_KEY } from "@/lib/itinerary-storage";
 import { tripStatus, type StatusChip } from "@/lib/trip-status";
+import { verdictCopy, SESSION_KEYS } from "@/lib/trip-session";
+import { useSessionVerdict, writeFlag } from "@/lib/trip-session-client";
 
 const ICONS = {
   route: Route,
@@ -42,8 +44,9 @@ const ICONS = {
 const HIDDEN_PREFIXES = ["/s/", "/itinerary/print", "/offline"];
 
 export default function TripStatus({ className = "" }: { className?: string }) {
-  const { travelData, isHydrated } = useTravel();
+  const { travelData, isHydrated, resetTravelData } = useTravel();
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const [hasPlan, setHasPlan] = useState(false);
 
   // A plan is real when this device kept one — read, never assumed.
@@ -76,14 +79,100 @@ export default function TripStatus({ className = "" }: { className?: string }) {
     [hasPlan, travelData],
   );
 
+  /**
+   * «رفرش» یا «قدم زدن داخل سایت»؟
+   *
+   * A traveller who reloaded the page starts over — the strip says so and offers
+   * a new trip from step ۱. A traveller who only moved to the home page keeps
+   * seeing the trip and the phase they stand on. The decision lives in
+   * `lib/trip-session.ts` so it can be tested without a browser.
+   */
+  const verdict = useSessionVerdict({ hasTrip: isHydrated && status.exists, stage: status.stage });
+  const [dismissed, setDismissed] = useState(false);
+  const copy = verdictCopy(verdict, status.stage);
+
   if (!isHydrated || !status.exists) return null;
   if (HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
   // The home page shows the progress only — no route/date/budget strip.
   const isHome = pathname === "/";
 
+  /**
+   * A reload asks one question, once: continue the trip that is still on this
+   * device, or start a new one? Everything else about the strip stays as it was.
+   */
+  /**
+   * The panel has two jobs, and they are not the same size:
+   *  - after a reload it asks the one question that must be asked: continue, or
+   *    start a new trip from step ۱;
+   *  - on the home page, a traveller who walked here from another screen is told
+   *    «داشتی این سفر را برنامه‌ریزی می‌کردی» with a way back. On the other phases
+   *    that sentence would only repeat the strip that is already under it.
+   */
+  const showChoice = !dismissed && (verdict === "fresh-load" || verdict === "finished" || (isHome && verdict === "resume"));
+
   return (
     <section aria-label="وضعیت سفر" className={`mx-auto mt-3 w-full max-w-6xl px-4 print:hidden sm:px-6 ${className}`}>
       <div className={`rounded-2xl border border-white/10 backdrop-blur ${isHome ? "bg-white/[0.02] px-2.5 py-1.5" : "bg-white/[0.03] px-3 py-2"}`}>
+        {showChoice && copy ? (
+          <div
+            className={`mb-1.5 flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 ${
+              copy.tone === "ok"
+                ? "border-emerald-300/25 bg-emerald-300/[0.07]"
+                : "border-cyan-300/25 bg-cyan-300/[0.07]"
+            }`}
+          >
+            <span className="min-w-0 flex-1">
+              <b className="block text-[10.5px] font-black text-white">{copy.title}</b>
+              <span className="block text-[9px] leading-5 text-slate-300">{copy.body}</span>
+            </span>
+            {verdict === "fresh-load" ? (
+              <>
+                <Link
+                  href={status.next.href}
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+                  title={`برگرد به مرحلهٔ ${status.stage} از ۵`}
+                >
+                  ادامهٔ همین سفر
+                  <ArrowLeft className="h-2.5 w-2.5" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetTravelData();
+                    writeFlag(SESSION_KEYS.startFresh, true);
+                    writeFlag(SESSION_KEYS.resume, false);
+                    setDismissed(true);
+                    // A new trip starts at step ۱, so take them where step ۱ lives.
+                    router.push("/start/cities");
+                  }}
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[9.5px] font-bold text-slate-200 transition hover:bg-white/10"
+                >
+                  سفر تازه از مرحلهٔ ۱
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/start/cities"
+                onClick={() => setDismissed(true)}
+                className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-300 px-2.5 py-1 text-[9.5px] font-black text-slate-950 transition hover:bg-cyan-200"
+              >
+                سفر تازه بساز
+                <ArrowLeft className="h-2.5 w-2.5" />
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setDismissed(true);
+                if (verdict === "fresh-load") writeFlag(SESSION_KEYS.resume, true);
+              }}
+              aria-label="بستن این پیام"
+              className="shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-1.5">
           {status.chips.filter(() => !isHome).map((chip) => {
             const Icon = ICONS[chip.id];

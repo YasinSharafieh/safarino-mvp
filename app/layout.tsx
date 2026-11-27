@@ -5,6 +5,7 @@ import { TravelProvider } from "./context/TravelContext";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import TripCompanion from "@/components/TripCompanion";
 import TripStatus from "@/components/TripStatus";
+import InsideNavigationWatcher from "@/components/InsideNavigationWatcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -84,6 +85,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen bg-night-900 text-slate-100 antialiased">
         <ServiceWorkerRegistrar />
         <TravelProvider>
+          {/* Distinguishes «رفرش» from «رفتن به صفحهٔ دیگر» — one place, one listener. */}
+          <InsideNavigationWatcher />
           {/* «کجای سفری؟» — one bar, on every phase, built from the shared trip. */}
           <TripStatus />
           {children}

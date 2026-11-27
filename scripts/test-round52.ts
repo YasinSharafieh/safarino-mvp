@@ -1,0 +1,89 @@
+/**
+ * Round 52 — «refresh starts over, walking around continues».
+ *
+ * The owner's rule has four cases and they pull in opposite directions, so the
+ * decision lives in `lib/trip-session.ts` as a pure function and every case is
+ * pinned here. If a future change makes a refresh resume a trip, or makes a
+ * back-button look like a new trip, this file fails.
+ */
+import assert from "node:assert/strict";
+import { demandKey, freshnessOf, parseDemandKey } from "../lib/freshness";
+import { SESSION_KEYS, sessionVerdict, verdictCopy, type SessionInput } from "../lib/trip-session";
+
+const base: SessionInput = {
+  hasTrip: true,
+  stage: 3,
+  navigationType: "navigate",
+  insideNavigation: false,
+  startFreshChosen: false,
+  resumeChosen: false,
+};
+
+/* 1. The four cases the owner named. */
+assert.equal(sessionVerdict({ ...base, navigationType: "reload" }), "fresh-load", "F5 asks the question again");
+assert.equal(sessionVerdict({ ...base, navigationType: "navigate", insideNavigation: true }), "resume", "a tap inside the site continues the trip");
+assert.equal(sessionVerdict({ ...base, navigationType: "navigate", insideNavigation: false }), "fresh-load", "a typed address is a new visit");
+assert.equal(sessionVerdict({ ...base, navigationType: "back_forward" }), "resume", "the browser back button is not abandonment");
+
+/* 2. A refresh wins over an earlier in-site move: the reload is the boundary. */
+assert.equal(sessionVerdict({ ...base, navigationType: "reload", insideNavigation: true }), "fresh-load");
+
+/* 3. Choices the traveller made in this tab are respected. */
+assert.equal(sessionVerdict({ ...base, startFreshChosen: true }), "empty", "«سفر تازه» clears the strip");
+assert.equal(sessionVerdict({ ...base, navigationType: "reload", resumeChosen: true }), "resume", "«ادامه» survives a reload in the same tab");
+assert.equal(sessionVerdict({ ...base, resumeChosen: true }), "resume");
+
+/* 4. Nothing to resume, nothing to say. */
+assert.equal(sessionVerdict({ ...base, hasTrip: false }), "empty");
+assert.equal(sessionVerdict({ ...base, hasTrip: false, navigationType: "reload" }), "empty");
+
+/* 5. A finished trip is not offered as «continue». */
+assert.equal(sessionVerdict({ ...base, stage: 5 }), "finished");
+
+/* 6. The wording states the real phase, in Persian digits, and never invents one. */
+const fresh = verdictCopy("fresh-load", 3)!;
+assert.match(fresh.body, /۳ از ۵/, "the phase the traveller stood on is named");
+assert.match(fresh.title, /۱/, "the new trip is offered from step ۱");
+assert.match(verdictCopy("resume", 2)!.title, /۲ از ۵/);
+assert.equal(verdictCopy("empty", 1), null, "no saved trip → no copy at all");
+for (const stage of [0, 1, 3, 5, 99]) {
+  const copy = verdictCopy("fresh-load", stage)!;
+  assert.match(copy.body, /[۱۲۳۴۵] از ۵/, `stage ${stage} must still read as a real phase`);
+}
+
+/* 7. The demand key is stable, and carries no user identity. */
+const a = demandKey("ticket", { mode: "train", origin: "THR", destination: "MHD", date: "2026-12-13", adults: 2 });
+const b = demandKey("ticket", { adults: 2, date: "2026-12-13", destination: "MHD", origin: "THR", mode: "train" });
+assert.equal(a, b, "the same search always yields the same key");
+assert.doesNotMatch(a, /cookie|user|session|email/i);
+// Keys are normalised to lower-case so «THR» and «thr» are one search; the
+// warm-up turns them back into provider codes before searching.
+assert.deepEqual(parseDemandKey(a)?.parts, { adults: "2", date: "2026-12-13", destination: "mhd", mode: "train", origin: "thr" });
+assert.equal(parseDemandKey(demandKey("ticket", { origin: "thr" }))?.parts.origin, parseDemandKey(demandKey("ticket", { origin: "THR" }))?.parts.origin);
+assert.equal(parseDemandKey("nonsense"), null);
+
+/* 8. Freshness tells the truth about age and never guesses a timestamp. */
+const now = Date.parse("2026-11-19T12:00:00Z");
+assert.equal(freshnessOf("ticket", "2026-11-19T11:59:40Z", now).label, "همین حالا");
+assert.equal(freshnessOf("ticket", "2026-11-19T11:48:00Z", now).label, "۱۲ دقیقه پیش");
+assert.equal(freshnessOf("ticket", "2026-11-19T09:00:00Z", now).label, "۳ ساعت پیش");
+assert.equal(freshnessOf("ticket", "2026-11-17T12:00:00Z", now).label, "۲ روز پیش");
+const freshTicket = freshnessOf("ticket", "2026-11-19T11:50:00Z", now);
+assert.equal(freshTicket.comfortable, true);
+assert.equal(freshTicket.stale, false);
+// 20 minutes old: outside the 15-minute comfort window, inside the 30-minute stale one.
+const oldTicket = freshnessOf("ticket", "2026-11-19T11:40:00Z", now);
+assert.equal(oldTicket.ageing, true, "an hour-old ticket list is ageing");
+assert.equal(oldTicket.stale, false);
+const ancientTicket = freshnessOf("ticket", "2026-11-19T09:00:00Z", now);
+assert.equal(ancientTicket.stale, true, "three hours old is a saved copy, not a live answer");
+assert.equal(freshnessOf("room", "2026-11-19T09:00:00Z", now).stale, false, "rooms age more slowly than tickets");
+const unknown = freshnessOf("ticket", null, now);
+assert.equal(unknown.ageSeconds, null);
+assert.equal(unknown.comfortable, false, "an unknown age is not called fresh");
+assert.match(unknown.label, /نامعلوم/);
+
+/* 9. The keys are namespaced so nothing generic is overwritten. */
+for (const key of Object.values(SESSION_KEYS)) assert.match(key, /^safarino:/);
+
+console.log("✅ round 52: a refresh starts a new trip, walking inside the site continues the old one — and freshness is stated, never implied");

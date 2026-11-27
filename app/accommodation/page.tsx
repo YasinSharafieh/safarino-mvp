@@ -1,5 +1,6 @@
 "use client";
 
+import { useAutoRefreshOnReturn } from "@/lib/use-auto-refresh";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
@@ -171,6 +172,8 @@ export default function AccommodationPage() {
   const [resolvedCity, setResolvedCity] = useState("");
   const [fetchedAt, setFetchedAt] = useState("");
   const [fromSavedCopy, setFromSavedCopy] = useState(false);
+  /** The server's own age report for this answer (`lib/freshness.ts`). */
+  const [freshness, setFreshness] = useState<{ label: string; ageing: boolean; stale: boolean; comfortable: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [legacyTransportCost, setLegacyTransportCost] = useState(0);
@@ -548,6 +551,7 @@ export default function AccommodationPage() {
       setResolvedCity(data.city || city);
       setFetchedAt(data.fetchedAt || new Date().toISOString());
       setFromSavedCopy(Boolean(data.cached));
+      setFreshness((data as { freshness?: typeof freshness }).freshness || null);
       setPriceTrend(data.priceTrend || null);
       setTravelData((current) => ({ ...current, days: nights }));
       try {
@@ -584,6 +588,17 @@ export default function AccommodationPage() {
       setLoading(false);
     }
   }
+
+  /**
+   * Returning to the tab re-reads an ageing list by itself (the rule lives in
+   * `lib/use-auto-refresh.ts`). A saved copy is never auto-refreshed: that would
+   * hide the fact that the traveller is looking at yesterday's prices.
+   */
+  useAutoRefreshOnReturn({
+    shouldRefresh: Boolean(freshness?.ageing) && !fromSavedCopy,
+    busy: loading,
+    refresh: () => void searchAccommodation(),
+  });
 
   const filteredGroups = useMemo(() => {
     const filtered = groups.flatMap((group) => {
@@ -883,8 +898,21 @@ export default function AccommodationPage() {
                         </button>
                       )}
                     </div>
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "قیمت‌ها همین حالا از منابع زنده خوانده می‌شود"}</p></div>{fetchedAt && <span className="chip border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"><Check className="h-3.5 w-3.5" />به‌روزرسانی {new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}{fromSavedCopy ? " · از نسخهٔ ذخیره‌شده" : ""}</span>}
-                    {fetchedAt && fromSavedCopy && (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-white">اقامتگاه‌های واقعی {resolvedCity || city}</h2><p className="mt-1 text-xs text-slate-500">{groups.length ? `${formatNumber(filteredGroups.length)} اقامتگاه از ${formatNumber(groups.length)} نتیجهٔ یکتا · ${formatNumber(offerCount)} پیشنهاد منابع${found > offerCount ? ` · ${formatNumber(found)} مورد اعلام‌شده در منابع` : ""}` : "قیمت‌ها همین حالا از منابع زنده خوانده می‌شود"}</p></div>{fetchedAt && <span
+                      className={`chip ${
+                        freshness?.stale
+                          ? "border-rose-400/25 bg-rose-400/10 !text-rose-100"
+                          : freshness?.ageing
+                            ? "border-amber-400/25 bg-amber-400/10 !text-amber-100"
+                            : "border-emerald-400/20 bg-emerald-400/10 !text-emerald-200"
+                      }`}
+                      title={freshness?.stale ? "این یک نسخهٔ ذخیره‌شده است، نه پاسخ همین لحظه." : "زمان دریافت این قیمت‌ها"}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {freshness ? freshness.label : `به‌روزرسانی ${new Date(fetchedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}`}
+                      {fromSavedCopy && !freshness ? " · از نسخهٔ ذخیره‌شده" : ""}
+                    </span>}
+                    {fetchedAt && (fromSavedCopy || freshness?.ageing || freshness?.stale) && (
                       <button type="button" onClick={() => searchAccommodation(true)} disabled={loading} className="text-[10px] font-bold text-cyan-300 underline decoration-dotted underline-offset-4 hover:text-cyan-200 disabled:opacity-50">
                         {loading ? "در حال دریافت…" : "دریافت قیمت تازه از منابع"}
                       </button>

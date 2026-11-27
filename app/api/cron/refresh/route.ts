@@ -5,6 +5,8 @@ import { searchCityPois } from "../../../../lib/poi-search";
 import { readFreshSnapshot, snapshotKey, writeSnapshot } from "../../../../lib/snapshot-store";
 import { loadTripPackages } from "../../../../lib/trip-packages";
 import { getProviderCache, setProviderCache } from "../../../../lib/provider-cache";
+import { parseDemandKey, topDemand } from "../../../../lib/freshness";
+import { resolveIranianCity } from "../../../../lib/iran-cities";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -155,6 +157,35 @@ export async function POST(request: NextRequest) {
 const MAX_WORK_MS = 22_000;
 
 /**
+ * The searches travellers actually made.
+ *
+ * A fixed list can only warm the routes its author imagined. Every real search
+ * records its own key (see `lib/freshness.ts`), and this turns the hottest ones
+ * back into a warm-up plan — so the route somebody searched ten minutes ago is
+ * warm and still live when the next traveller (or the same one, on the next
+ * screen) asks for it. Nothing user-specific is stored: a key is a route, a
+ * party size and a date.
+ */
+async function demandPlan(): Promise<{ mode: "plane" | "train" | "bus"; origin: string; destination: string; date: string }[]> {
+  const entries = await topDemand("ticket", 14);
+  const plan: { mode: "plane" | "train" | "bus"; origin: string; destination: string; date: string }[] = [];
+  const today = isoDate(0);
+  for (const entry of entries) {
+    const parsed = parseDemandKey(entry.key);
+    if (!parsed) continue;
+    const { mode, origin, destination, date } = parsed.parts as Record<string, string>;
+    if (!mode || !origin || !destination || !date) continue;
+    if (!["plane", "train", "bus"].includes(mode)) continue;
+    // A past date is not worth a crawl: nobody can buy it.
+    if (date < today) continue;
+    if (resolveIranianCity(origin) === null && resolveIranianCity(destination) === null) continue;
+    if (plan.some((job) => job.mode === mode && job.origin === origin && job.destination === destination && job.date === date)) continue;
+    plan.push({ mode: mode as "plane" | "train" | "bus", origin, destination, date });
+  }
+  return plan;
+}
+
+/**
  * `budget*` bounds how much work one call does, so the job always finishes
  * inside the serverless time limit; the next call continues where it stopped.
  */
@@ -199,9 +230,17 @@ async function run(
    * must finish inside the serverless time limit instead of being killed
    * half-way (which is exactly what produced a 500 on the live site).
    */
-  const plan: { mode: "plane" | "train" | "bus"; origin: string; destination: string; date: string }[] = ROUTES.flatMap((route) =>
-    TICKET_DAYS.map((day) => ({ ...route, date: isoDate(day) })),
-  );
+  /**
+   * Demand first, guesses second: the warm-up spends its limited minute on the
+   * searches that really happened, and only then on the standard route list.
+   */
+  const demanded = await demandPlan();
+  const plan: { mode: "plane" | "train" | "bus"; origin: string; destination: string; date: string }[] = [
+    ...demanded,
+    ...ROUTES.flatMap((route) => TICKET_DAYS.map((day) => ({ ...route, date: isoDate(day) }))).filter(
+      (job) => !demanded.some((hot) => hot.mode === job.mode && hot.origin === job.origin && hot.destination === job.destination && hot.date === job.date),
+    ),
+  ];
   const skip = Math.max(0, Math.round(Number(request.nextUrl.searchParams.get("skip")) || budget.skip || 0));
   const transportPlan: Step[] = [];
   let transportCount = 0;
@@ -229,6 +268,7 @@ async function run(
     pass,
     window: { stays: stayWindows, ticketDays: TICKET_DAYS.map(isoDate) },
     nextSkip: skip + transportCount < plan.length ? skip + transportCount : 0,
+    demandWarmed: demanded.length,
     summary: {
       refreshed: steps.filter((step) => step.result === "refreshed").length,
       kept: steps.filter((step) => step.result === "kept").length,

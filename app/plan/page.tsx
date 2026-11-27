@@ -713,7 +713,7 @@ export default function PlanPage() {
       setPlan(createLocalPlan(destination, budget, dayCount, plan.budgetAnalysis.transport, plan.budgetAnalysis.accommodation, enrichedPois, peopleCount, destination));
       setActiveDay(0);
       setNoticeTone("warning");
-      setNotice("اتصال زنده به AI برقرار نشد؛ نسخه آفلاین ساخته شد. روی Netlify ایستا، مسیر API باید به یک سرویس سروری خارجی متصل شود.");
+      setNotice("اتصال زنده به هوش مصنوعی برقرار نشد؛ برنامه با همان دادهٔ واقعی سفر و بدون هوش مصنوعی ساخته شد. همهٔ قیمت‌ها و ساعت‌ها همان‌هایی است که در مراحل قبل انتخاب کردی.");
     } finally {
       setLoading(false);
     }

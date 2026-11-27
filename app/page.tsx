@@ -598,7 +598,10 @@ export default function HomePage() {
               <ul className="mt-3.5 space-y-2">
                 {column.items.map((item) => (
                   <li key={item.label}>
-                    <a className="text-[10.5px] text-slate-500 transition hover:text-cyan-300" href={item.href}>
+                    <a
+                      className="flex min-h-[28px] items-center text-[11px] text-slate-400 transition hover:text-cyan-300"
+                      href={item.href}
+                    >
                       {item.label}
                     </a>
                   </li>
@@ -608,9 +611,16 @@ export default function HomePage() {
           ))}
         </div>
 
-        <div className="border-t border-white/5 px-5 py-4">
+        <div className="border-t border-white/5 px-5 py-4" aria-label="پانوشت سفرینو" role="contentinfo">
           <p className="mx-auto max-w-7xl text-center text-[10px] leading-6 text-slate-600">
             © سفرینو — قیمت‌ها و موجودی‌ها از منابع رسمی ارائه‌دهندگان خوانده می‌شوند و رزرو در سایت همان ارائه‌دهنده انجام می‌شود.
+            {" · "}
+            <a
+              href="/status"
+              className="inline-flex min-h-[24px] items-center align-middle font-bold text-slate-400 underline decoration-dotted underline-offset-4 transition hover:text-cyan-300"
+            >
+              وضعیت و تازگی داده‌ها
+            </a>
           </p>
         </div>
       </footer>

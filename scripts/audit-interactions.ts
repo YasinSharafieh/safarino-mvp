@@ -215,7 +215,10 @@ const unusedRoutes = apiRoutes.filter((route) => {
   return !Array.from(calledApis.keys()).some((url) => url === route || url.startsWith(`${route}/`) || url.split("/").slice(0, size).join("/") === route);
 });
 const unusedServerOnly = unusedRoutes.filter((route) =>
-  /^\/api\/(cron|provider-assets|providers|health|ai\/usage|route\/neshan-check)/.test(route),
+  // Server-only or public-status endpoints. `/api/status` is read by the status
+  // page on the server (it imports the same functions), so no browser calls it
+  // directly — the same reason the cron and health routes are listed here.
+  /^\/api\/(cron|provider-assets|providers|health|status|ai\/usage|route\/neshan-check)/.test(route),
 );
 const unusedReal = unusedRoutes.filter((route) => !unusedServerOnly.includes(route));
 check("no user-facing API route is orphaned", unusedReal.length === 0, unusedReal.join(" · ") || "none");
