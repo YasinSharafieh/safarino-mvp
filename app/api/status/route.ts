@@ -40,7 +40,8 @@ export async function GET() {
       freshness: {
         ticketMinutes: Math.round(TRANSPORT_FRESH_SECONDS / 60),
         roomMinutes: 30,
-        warmUp: "هر ۶ ساعت، به‌علاوهٔ گرم‌کردن تقاضامحور برای مسیرهایی که واقعاً جست‌وجو شده‌اند",
+        warmUp:
+          "روزی یک‌بار در ساعت خلوت ایران، به‌علاوهٔ گرم‌کردن تقاضامحور برای مسیرهایی که واقعاً جست‌وجو شده‌اند؛ هر جست‌وجوی تازه هم خودش داده را می‌خواند",
         lastWarmAt: lastWarm || null,
         lastWarmLabel: warmFreshness.label,
       },

@@ -57,7 +57,8 @@ async function loadStatus(): Promise<StatusPayload | null> {
       freshness: {
         ticketMinutes: Math.round(TRANSPORT_FRESH_SECONDS / 60),
         roomMinutes: 30,
-        warmUp: "هر ۶ ساعت، به‌علاوهٔ گرم‌کردن تقاضامحور برای مسیرهایی که واقعاً جست‌وجو شده‌اند",
+        warmUp:
+          "روزی یک‌بار در ساعت خلوت ایران، به‌علاوهٔ گرم‌کردن تقاضامحور برای مسیرهایی که واقعاً جست‌وجو شده‌اند؛ هر جست‌وجوی تازه هم خودش داده را می‌خواند",
         lastWarmAt: lastWarm || null,
         lastWarmLabel: warm.label,
       },
@@ -150,7 +151,7 @@ export default async function StatusPage() {
             تازه‌سازی چطور انجام می‌شود
           </b>
           <p className="mt-2 text-[10px] leading-6 text-slate-400">
-            {status?.freshness.warmUp || "هر ۶ ساعت یک کار زمان‌بندی‌شده نسخه‌های پرتقاضا را تازه می‌کند."}
+            {status?.freshness.warmUp || "یک کار زمان‌بندی‌شده روزی یک‌بار نسخه‌های پرتقاضا را تازه می‌کند."}
           </p>
           <p className="mt-2 text-[10px] leading-6 text-slate-400">
             هر جست‌وجوی تازه هم قیمت را زنده می‌خواند؛ اگر پاسخ قدیمی باشد، خودِ کارت می‌نویسد «۱۲ دقیقه پیش» و دکمهٔ تازه‌سازی نشان می‌دهد.
